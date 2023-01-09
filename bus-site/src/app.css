@@ -1,0 +1,15 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,body {
+    height: 100%;
+}
+
+.panel {
+    @apply max-w-2xl h-fit shadow-xl transition-shadow bg-amber-50/75 dark:bg-gray-900/50 backdrop-blur-3xl;
+}
+
+.btn {
+    @apply panel hover:bg-amber-200/75 hover:dark:bg-gray-700/50 hover:shadow-lg;
+}
