@@ -1,6 +1,16 @@
 Bus Boards
 ==
 
+<details>
+  <summary>Screenshots</summary>
+  <p>
+  
+  ![Stop](https://user-images.githubusercontent.com/15062976/211429115-69a7fee1-df25-4ac2-98d7-85025b812981.png)
+  
+  ![Service](https://user-images.githubusercontent.com/15062976/211429125-288e1ef8-c1be-4444-98c8-0b42178bbc61.png)
+  </p>
+</details>
+
 ## What is it?
 
 Bus Boards is an experiment in showing bus departures akin to [train 
