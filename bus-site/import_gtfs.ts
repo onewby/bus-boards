@@ -26,7 +26,7 @@ let addRoutes = db.prepare("REPLACE INTO routes (route_id, agency_id, route_shor
 let addCalendar = db.prepare("REPLACE INTO calendar (service_id, monday, tuesday, wednesday, thursday, friday, saturday, sunday, start_date, end_date) VALUES (:service_id, :monday, :tuesday, :wednesday, :thursday, :friday, :saturday, :sunday, :start_date, :end_date)")
 let addCalendarDates = db.prepare("REPLACE INTO calendar_dates (service_id, date, exception_type) VALUES (:service_id, :date, :exception_type)")
 let addTrips = db.prepare("REPLACE INTO trips (route_id, service_id, trip_id, trip_headsign) VALUES (:route_id, :service_id, :trip_id, :trip_headsign)")
-let addStopTimes = db.prepare("REPLACE INTO stop_times (trip_id, arrival_time, departure_time, stop_id, stop_sequence, timepoint, stop_headsign) VALUES (:trip_id, :arrival_time, :departure_time, :stop_id, :stop_sequence, :timepoint, NULLIF(:stop_headsign, ''))")
+let addStopTimes = db.prepare("REPLACE INTO stop_times (trip_id, arrival_time, departure_time, stop_id, stop_sequence, timepoint, stop_headsign, pickup_type, drop_off_type) VALUES (:trip_id, :arrival_time, :departure_time, :stop_id, :stop_sequence, :timepoint, NULLIF(:stop_headsign, ''), :pickup_type, :drop_off_type)")
 let dropAllSource = db.transaction(() => {
     sources.forEach(table => db.prepare(`DELETE FROM ${table}`).run())
 })
@@ -47,6 +47,7 @@ async function import_zips() {
     })
     let itemsBar = progressBar.create(files.length, 0, {file: "All sources"})
     itemsBar.start(files.length, 0, {file: "All sources"})
+    console.log("Dropping previous data")
     dropAllSource()
     await PromisePool
         .withConcurrency(4)
@@ -176,6 +177,7 @@ function clean_arrivals() {
 
 function clean_stops() {
     console.log("Removing stops with no departures")
+    db.pragma("foreign_keys = OFF")
     db.exec("DELETE FROM stops WHERE stops.id NOT IN (SELECT DISTINCT stances.stop FROM stop_times INNER JOIN stances ON stances.code=stop_id);")
 }
 
