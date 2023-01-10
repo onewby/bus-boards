@@ -35,6 +35,11 @@ def main():
     # Connect to stops database
     db = sqlite3.connect("bus-site/stops.sqlite")
 
+    # Initialise database if it does not exist
+    with open("bus-site/gtfs/model.sql") as file:
+        script = " ".join(file.readlines())
+        db.executescript(script)
+
     # Import NPTG locality data and parse XML
     tree: ElementTree = parse("NPTG.xml")
     root = tree.getroot()
@@ -45,7 +50,7 @@ def main():
 
     # Add localities to the database
     db.executemany("REPLACE INTO localities (code, name, qualifier, parent, lat, long) VALUES (?, ?, ?, ?, ?, ?)", data)
-    db.execute("DROP TABLE localities_search")
+    db.execute("DROP TABLE IF EXISTS localities_search")
     db.execute("CREATE VIRTUAL TABLE localities_search USING fts5(name, qualifier, code UNINDEXED)")
     db.execute("INSERT INTO localities_search(name, qualifier, code) SELECT name, qualifier, code FROM localities")
 
@@ -86,7 +91,7 @@ def main():
     """)
 
     # Reset and populate the stop search database
-    db.execute("DROP TABLE stops_search")
+    db.execute("DROP TABLE IF EXISTS stops_search")
     db.execute("CREATE VIRTUAL TABLE stops_search USING fts5(name, parent, qualifier, id UNINDEXED)")
     db.execute("INSERT INTO stops_search(name, parent, qualifier, id) SELECT stops.name, stops.locality_name, qualifier, stops.id FROM stops INNER JOIN localities l on l.code = stops.locality")
 

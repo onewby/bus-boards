@@ -1,3 +1,46 @@
+create table if not exists localities
+(
+    code      TEXT
+        constraint localities_pk
+            primary key,
+    name      TEXT,
+    qualifier TEXT,
+    parent    TEXT
+        constraint localities_localities_code_fk
+            references localities,
+    lat       REAL,
+    long      REAL
+);
+
+create table if not exists stops
+(
+    id            integer
+        constraint stops_pk
+            primary key autoincrement,
+    name          text,
+    locality      text
+        constraint stops_localities_code_fk
+            references localities,
+    locality_name TEXT
+);
+
+create table if not exists stances
+(
+    code      TEXT
+        constraint stances_pk
+            primary key,
+    street    TEXT,
+    indicator TEXT,
+    lat       REAL,
+    long      REAL,
+    stop      TEXT
+        constraint stances_stops_id_fk
+            references stops
+);
+
+create index if not exists stances_stop_index
+    on stances (stop);
+
 create table if not exists shapes
 (
     shape_id          TEXT,

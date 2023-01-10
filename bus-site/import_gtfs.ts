@@ -176,7 +176,7 @@ function clean_arrivals() {
 
 function clean_stops() {
     console.log("Removing stops with no departures")
-    db.exec("DELETE FROM stops WHERE stops.id NOT IN (SELECT stances.stop FROM stop_times INNER JOIN stances ON stances.code=stop_id);")
+    db.exec("DELETE FROM stops WHERE stops.id NOT IN (SELECT DISTINCT stances.stop FROM stop_times INNER JOIN stances ON stances.code=stop_id);")
 }
 
 await import_zips()
