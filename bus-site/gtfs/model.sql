@@ -33,7 +33,7 @@ create table if not exists stances
     indicator TEXT,
     lat       REAL,
     long      REAL,
-    stop      TEXT
+    stop      INTEGER
         constraint stances_stops_id_fk
             references stops
 );
@@ -126,6 +126,8 @@ create table if not exists stop_times
     stop_headsign  TEXT,
     stop_sequence  integer,
     timepoint      integer,
+    drop_off_type  integer,
+    pickup_type    integer,
     constraint stop_times_pk
         primary key (trip_id, stop_sequence),
     constraint stop_times_trips_source_trip_id_fk
