@@ -33,11 +33,6 @@ let dropAllSource = db.transaction(() => {
 let getSignature = db.prepare("SELECT hash FROM file_hashes WHERE source=?")
 let setSignature = db.prepare("REPLACE INTO file_hashes (source, hash) VALUES (?, ?)")
 
-const download_urls = {
-    "txc": [],
-    "gtfs": []
-}
-
 async function import_zips() {
     let files = readdirSync("gtfs").filter(f => f.endsWith(".zip"))
     let progressBar = new MultiBar({hideCursor: true, linewrap: true}, {
@@ -178,7 +173,11 @@ function clean_arrivals() {
 function clean_stops() {
     console.log("Removing stops with no departures")
     db.pragma("foreign_keys = OFF")
-    db.exec("DELETE FROM stops WHERE stops.id NOT IN (SELECT DISTINCT stances.stop FROM stop_times INNER JOIN stances ON stances.code=stop_id);")
+    db.exec("DELETE FROM stops WHERE stops.id NOT IN (SELECT DISTINCT stances.stop FROM stop_times INNER JOIN stances ON stances.code=stop_id);");
+    // Rebuild stops_search table
+    db.exec("DROP TABLE IF EXISTS stops_search;");
+    db.exec("CREATE VIRTUAL TABLE stops_search USING fts5(name, parent, qualifier, id UNINDEXED);");
+    db.exec("INSERT INTO stops_search(name, parent, qualifier, id) SELECT stops.name, stops.locality_name, qualifier, stops.id FROM stops INNER JOIN localities l on l.code = stops.locality;");
 }
 
 await import_zips()
