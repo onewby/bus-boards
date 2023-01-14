@@ -37,17 +37,7 @@ def get_crs_codes() -> dict[str, str]:
     return df.to_dict()
 
 
-def main():
-    # Connect to stops database
-    db = sqlite3.connect("bus-site/stops.sqlite")
-
-    print("Initialise database")
-
-    # Initialise database if it does not exist
-    with open("bus-site/gtfs/model.sql") as file:
-        script = " ".join(file.readlines())
-        db.executescript(script)
-
+def insert_localities(db: sqlite3.Connection):
     print("Insert localities into database")
 
     # Import NPTG locality data and parse XML
@@ -64,6 +54,8 @@ def main():
     db.execute("CREATE VIRTUAL TABLE localities_search USING fts5(name, qualifier, code UNINDEXED)")
     db.execute("INSERT INTO localities_search(name, qualifier, code) SELECT name, qualifier, code FROM localities")
 
+
+def insert_stops(db: sqlite3.Connection):
     print("Load CSV codes")
     crs_codes = get_crs_codes()
 
@@ -115,8 +107,21 @@ def main():
     db.execute("CREATE VIRTUAL TABLE stops_search USING fts5(name, parent, qualifier, id UNINDEXED)")
     db.execute("INSERT INTO stops_search(name, parent, qualifier, id) SELECT stops.name, stops.locality_name, qualifier, stops.id FROM stops INNER JOIN localities l on l.code = stops.locality")
 
-    print("Committing to database")
 
+def main():
+    # Connect to stops database
+    db = sqlite3.connect("bus-site/stops.sqlite")
+
+    print("Initialise database")
+    # Initialise database if it does not exist
+    with open("bus-site/gtfs/model.sql") as file:
+        script = " ".join(file.readlines())
+        db.executescript(script)
+
+    insert_localities(db)
+    insert_stops(db)
+
+    print("Committing to database")
     # Commit to the database
     db.commit()
     db.close()
