@@ -1,7 +1,7 @@
 # Populate location database tables - run stance_grouping.py first to generate localities.json
 
 import json
-import typing
+from typing import TypedDict, Dict
 from xml.etree.ElementTree import *
 
 import pandas as pd
@@ -9,7 +9,7 @@ from defusedxml.ElementTree import parse
 import sqlite3
 
 
-class StopData(typing.TypedDict):
+class StopData(TypedDict):
     ATCOCode: str
     Lat: float
     Long: float
@@ -32,7 +32,7 @@ def convert_locality(locality):
     return code, name, qualifier, parent, long, lat
 
 
-def get_crs_codes() -> dict[str, str]:
+def get_crs_codes() -> Dict[str, str]:
     df: pd.Series = pd.read_csv("crs.csv", index_col="ATCOCode")["CrsRef"]
     return df.to_dict()
 
