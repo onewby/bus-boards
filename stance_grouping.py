@@ -4,7 +4,7 @@ import json
 import re
 import numpy as np
 import pandas as pd
-from typing import TypedDict, List
+from typing import TypedDict, List, Dict, Tuple
 import pyproj
 
 
@@ -69,13 +69,13 @@ class Stance(TypedDict):
 
 LocalityName = str
 StopName = str
-StopGroupings = dict[LocalityName, dict[StopName, List[Stance]]]
+StopGroupings = Dict[LocalityName, Dict[StopName, List[Stance]]]
 LocalityCode = str
 StopName = str
 
 
 # (locality, from name, to name)
-manual_renames: List[tuple[LocalityCode, StopName, StopName]] = [
+manual_renames: List[Tuple[LocalityCode, StopName, StopName]] = [
     ("N0078622", "Edinburgh Airport (Edinburgh Trams)", "Airport"),
     ("ES001737", "Haymarket (Edinburgh Trams)", "Haymarket Station"),
     ("E0049583", "Stand 4", "Bus Station")
