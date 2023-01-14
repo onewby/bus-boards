@@ -6,7 +6,9 @@ export type StopDeparture = {
     route_short_name: string,
     colour: string,
     operator_id: string,
-    operator_name: string
+    operator_name: string,
+    type: "bus" | "train",
+    status?: string
 }
 
 export type StopData = {
@@ -25,15 +27,33 @@ export type StopData = {
 export type ServiceStopData = {
     id: string,
     name: string,
-    loc: string,
-    ind: string,
+    loc?: string,
+    ind?: string,
     arr: string,
     dep: string,
     puo: boolean,
     doo: boolean,
     major: boolean,
     long: number,
-    lat: number
+    lat: number,
+    status?: string
+}
+
+export type ServiceBranch = {
+    dest: string,
+    stops: ServiceStopData[],
+    realtime?: {
+        stop: number,
+        pos?: {
+            latitude: number,
+            longitude: number,
+            bearing: number,
+            odometer: number,
+            speed: number
+        },
+        pct?: number
+    },
+    route: [number, number][]
 }
 
 export type ServiceData = {
@@ -45,19 +65,7 @@ export type ServiceData = {
         name: string,
         url: string
     },
-    stops: ServiceStopData[],
-    realtime?: {
-        stop: number,
-        pos: {
-            latitude: number,
-            longitude: number,
-            bearing: number,
-            odometer: number,
-            speed: number
-        },
-        pct: number
-    },
-    route: [number, number][]
+    branches: ServiceBranch[]
 }
 
 export type SearchResult = {

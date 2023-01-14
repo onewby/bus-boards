@@ -3,6 +3,9 @@ import {error, json} from "@sveltejs/kit";
 import {db} from "../../../db";
 import {operatorRegex, operatorMatches, routeOverrides} from "./operators";
 import {DateTime} from "luxon";
+import type {ServiceBoard} from "../../../darwin/darwin";
+import type {StopDeparture} from "../../../api.type";
+import {darwin} from "../darwin";
 
 // Number of hours to get bus services for
 const HOURS_TO_SHOW = 2
@@ -31,11 +34,29 @@ export const GET: RequestHandler = async ({url}) => {
 
     if(stop_info == undefined) throw error(404, "Stop not found.")
 
+    let offset = Math.round(startTime.diffNow("minutes").minutes)
+
     let stance_info = db.prepare(
-        "SELECT code, indicator FROM stances WHERE stop=?"
+        "SELECT code, indicator, crs FROM stances WHERE stop=?"
     ).all(stop_info['id'])
-    stance_info.forEach(stance => {if(!stance.indicator) stance.indicator = ""})
+    const stationPromises = Math.abs(offset) <= 120 ? stance_info.filter(stance => 'crs' in stance)
+        .map(stance => darwin.getDepartureBoard({crs: stance.crs, numRows: 150, timeOffset: offset})
+        .catch((_) => {
+            let board: ServiceBoard = {
+                generatedAt: "",
+                crs: stance.crs,
+                locationName: stop_info.name,
+                platformAvailable: false
+            }
+            return board
+        })) : []
+
+    stance_info.forEach(stance => {
+        if(!stance.indicator) stance.indicator = ""
+        delete stance.crs
+    })
     stance_info.sort((a, b) => a.indicator.localeCompare(b.indicator))
+
     let stances = stance_info.map(s => s['code'])
 
     // To select stop_times for all stances within a stop as part of 'WHERE stop_id IN (${params})'
@@ -43,27 +64,45 @@ export const GET: RequestHandler = async ({url}) => {
 
     let dayStmt = db.prepare(stopTimesStmt(dayName, prevDayName, params))
     let nextDayStmt = db.prepare(stopTimesStmt(endDayName, dayName, params, 1))
-    let stop_times
+    let stop_times: StopDeparture[]
     // If we go past midnight, we need to handle this in SQL
     if(startTime.hour > endTime.hour) {
         // Get yesterday's buses after midnight going into the morning
         stop_times = dayStmt.all(stances, {date: fmtDate(startTime.minus({day: 1})), start: naiveAdd24Start, end: naiveAdd24End})
-        stop_times.forEach(time => time['departure_time'] = modTime(time['departure_time']))
         // and add them to today's buses - first everything going from the day into potentially the next morning
         stop_times = stop_times.concat(dayStmt.all(stances, {date: fmtDate(startTime), start: startTime.toSQLTime(), end: naiveEndTime}))
         // and anything in the morning registered on the next day
         stop_times = stop_times.concat(nextDayStmt.all(stances, {date: fmtDate(endTime), start: "00:00:00", end: endTime.toSQLTime()}))
-        stop_times.sort((a, b) => a['departure_time'].localeCompare(b['departure_time']))
         stop_times.forEach(time => time['departure_time'] = modTime(time['departure_time']))
     } else {
         // Get yesterday's buses after midnight going into the morning
         stop_times = dayStmt.all(stances, {date: fmtDate(startTime.minus({day: 1})), start: naiveAdd24Start, end: naiveAdd24End})
-        stop_times.forEach(time => time['departure_time'] = modTime(time['departure_time']))
         // and add them to today's buses
         stop_times = stop_times.concat(dayStmt.all(stances, {date: fmtDate(startTime), start: startTime.toSQLTime(), end: endTime.toSQLTime()}))
-        stop_times.sort((a, b) => a['departure_time'].localeCompare(b['departure_time']))
         stop_times.forEach(time => time['departure_time'] = modTime(time['departure_time']))
     }
+    stop_times.forEach(time => time.type = "bus")
+
+    const stations = await Promise.all(stationPromises)
+    const services = stations.filter(board => board.trainServices).flatMap(board => board.trainServices!.service)
+    const trainTimes: StopDeparture[] = services.map(service => ({
+        trip_id: service.serviceID,
+        trip_headsign: service.destination.location.map(loc => loc.locationName).join(" & "),
+        route_short_name: "",
+        departure_time: service.std ?? service.sta!,
+        indicator: service.platform ? `Platform ${service.platform}` : service.platform,
+        operator_name: service.operator,
+        operator_id: service.operatorCode,
+        colour: "",
+        type: "train",
+        status: service.etd !== undefined && isNum(service.etd[0]) ? "Exp. " + service.etd : service.etd
+    }))
+
+    stop_times = stop_times.concat(trainTimes)
+    let afterMidnight = stop_times.filter(stop => stop.departure_time !== "" && stop.departure_time[0] === "0")
+    afterMidnight.forEach(stop => stop.departure_time = "9" + stop.departure_time)
+    stop_times.sort((a, b) => a['departure_time'].localeCompare(b['departure_time']))
+    afterMidnight.forEach(stop => stop.departure_time = stop.departure_time.slice(1, stop.departure_time.length))
 
     // Determine operator colours
     const agencies: Set<string> = new Set(stop_times.map(time => time.operator_name))
@@ -109,3 +148,5 @@ const stopTimesStmt = (dayName: string, prevDayName: string, params: string, add
                     AND departure_time >= :start AND departure_time <= :end
                     AND pickup_type <> 1
                 ORDER BY departure_time`
+
+const isNum = (c: string) => c >= '0' && c <= '9'

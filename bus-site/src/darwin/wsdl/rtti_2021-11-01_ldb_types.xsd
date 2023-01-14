@@ -1,0 +1,517 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema targetNamespace="http://thalesgroup.com/RTTI/2021-11-01/ldb/types" elementFormDefault="qualified" attributeFormDefault="unqualified" id="RTTI_2021-11-01_ldb_types" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:ct20071010="http://thalesgroup.com/RTTI/2007-10-10/ldb/commontypes" xmlns:ct20151127="http://thalesgroup.com/RTTI/2015-11-27/ldb/commontypes" xmlns:ct20160216="http://thalesgroup.com/RTTI/2016-02-16/ldb/commontypes" xmlns:ct20170202="http://thalesgroup.com/RTTI/2017-02-02/ldb/commontypes" xmlns:ct20171001="http://thalesgroup.com/RTTI/2017-10-01/ldb/commontypes" xmlns:ldbt20120113="http://thalesgroup.com/RTTI/2012-01-13/ldb/types" xmlns:ldbt20151127="http://thalesgroup.com/RTTI/2015-11-27/ldb/types" xmlns:ldbt20160216="http://thalesgroup.com/RTTI/2016-02-16/ldb/types" xmlns:ldbt20171001="http://thalesgroup.com/RTTI/2017-10-01/ldb/types" xmlns:ldbt20211101="http://thalesgroup.com/RTTI/2021-11-01/ldb/types">
+  <xs:import namespace="http://thalesgroup.com/RTTI/2007-10-10/ldb/commontypes" schemaLocation="rtti_2007-10-10_ldb_common_types.xsd"/>
+  <xs:import namespace="http://thalesgroup.com/RTTI/2015-11-27/ldb/commontypes" schemaLocation="rtti_2015-11-27_ldb_common_types.xsd"/>
+  <xs:import namespace="http://thalesgroup.com/RTTI/2016-02-16/ldb/commontypes" schemaLocation="rtti_2016-02-16_ldb_common_types.xsd"/>
+  <xs:import namespace="http://thalesgroup.com/RTTI/2017-02-02/ldb/commontypes" schemaLocation="rtti_2017-02-02_ldb_common_types.xsd"/>
+  <xs:import namespace="http://thalesgroup.com/RTTI/2017-10-01/ldb/commontypes" schemaLocation="rtti_2017-10-01_ldb_common_types.xsd"/>
+  <xs:import namespace="http://thalesgroup.com/RTTI/2012-01-13/ldb/types" schemaLocation="rtti_2012-01-13_ldb_types.xsd"/>
+  <xs:import namespace="http://thalesgroup.com/RTTI/2015-11-27/ldb/types" schemaLocation="rtti_2015-11-27_ldb_types.xsd"/>
+  <xs:import namespace="http://thalesgroup.com/RTTI/2016-02-16/ldb/types" schemaLocation="rtti_2016-02-16_ldb_types.xsd"/>
+  <xs:import namespace="http://thalesgroup.com/RTTI/2017-10-01/ldb/types" schemaLocation="rtti_2017-10-01_ldb_types.xsd"/>
+  <!--Simple types-->
+  <xs:simpleType name="UncertaintyStatus">
+    <xs:annotation>
+      <xs:documentation>An enumeration indication whether uncertainty is expected to cause delay, cancellation or other alteration.</xs:documentation>
+    </xs:annotation>
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="Delay"/>
+      <xs:enumeration value="Cancellation"/>
+      <xs:enumeration value="Other"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <!--Complex types-->
+  <xs:complexType name="StationBoard">
+    <xs:annotation>
+      <xs:documentation>A structure containing details of a basic departure board for a specific location.</xs:documentation>
+    </xs:annotation>
+    <xs:complexContent>
+      <xs:extension base="ldbt20151127:BaseStationBoard">
+        <xs:sequence>
+          <xs:element name="trainServices" type="ldbt20211101:ArrayOfServiceItems" minOccurs="0">
+            <xs:annotation>
+              <xs:documentation>A list of train services for this departure board.</xs:documentation>
+            </xs:annotation>
+          </xs:element>
+          <xs:element name="busServices" type="ldbt20211101:ArrayOfServiceItems" minOccurs="0">
+            <xs:annotation>
+              <xs:documentation>A list of scheduled or replacement rail bus services for this departure board.</xs:documentation>
+            </xs:annotation>
+          </xs:element>
+          <xs:element name="ferryServices" type="ldbt20211101:ArrayOfServiceItems" minOccurs="0">
+            <xs:annotation>
+              <xs:documentation>A list of ferry services for this departure board.</xs:documentation>
+            </xs:annotation>
+          </xs:element>
+        </xs:sequence>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:complexType name="StationBoardWithDetails">
+    <xs:annotation>
+      <xs:documentation>A structure containing details of a "WithDetails" departure board for a specific location.</xs:documentation>
+    </xs:annotation>
+    <xs:complexContent>
+      <xs:extension base="ldbt20151127:BaseStationBoard">
+        <xs:sequence>
+          <xs:element name="trainServices" type="ldbt20211101:ArrayOfServiceItemsWithCallingPoints" minOccurs="0">
+            <xs:annotation>
+              <xs:documentation>A list of train services for this departure board.</xs:documentation>
+            </xs:annotation>
+          </xs:element>
+          <xs:element name="busServices" type="ldbt20211101:ArrayOfServiceItemsWithCallingPoints" minOccurs="0">
+            <xs:annotation>
+              <xs:documentation>A list of scheduled or replacement rail bus services for this departure board.</xs:documentation>
+            </xs:annotation>
+          </xs:element>
+          <xs:element name="ferryServices" type="ldbt20211101:ArrayOfServiceItemsWithCallingPoints" minOccurs="0">
+            <xs:annotation>
+              <xs:documentation>A list of ferry services for this departure board.</xs:documentation>
+            </xs:annotation>
+          </xs:element>
+        </xs:sequence>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:complexType name="ServiceDetails">
+    <xs:annotation>
+      <xs:documentation>A structure containing details of an individual service obtained from a departure board.</xs:documentation>
+    </xs:annotation>
+    <xs:complexContent>
+      <xs:extension base="ldbt20211101:BaseServiceDetails">
+        <xs:sequence>
+          <xs:element name="adhocAlerts" type="ldbt20120113:ArrayOfAdhocAlert" minOccurs="0">
+            <xs:annotation>
+              <xs:documentation>A list of active Adhoc Alert texts for this location.</xs:documentation>
+            </xs:annotation>
+          </xs:element>
+          <xs:element name="formation" type="ldbt20211101:FormationData" minOccurs="0">
+            <xs:annotation>
+              <xs:documentation>The formation data of the train at this location (if known).</xs:documentation>
+            </xs:annotation>
+          </xs:element>
+          <xs:group ref="ldbt20211101:CallingListProperties"/>
+        </xs:sequence>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:complexType name="DeparturesBoard">
+    <xs:annotation>
+      <xs:documentation>A structure containing details of a basic next/fastest departures board for a specific location.</xs:documentation>
+    </xs:annotation>
+    <xs:complexContent>
+      <xs:extension base="ldbt20151127:BaseStationBoard">
+        <xs:sequence>
+          <xs:element name="departures" type="ldbt20211101:ArrayOfDepartureItems">
+            <xs:annotation>
+              <xs:documentation>A list of next/fastest services for this departures board.</xs:documentation>
+            </xs:annotation>
+          </xs:element>
+        </xs:sequence>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:complexType name="DeparturesBoardWithDetails">
+    <xs:annotation>
+      <xs:documentation>A structure containing details of a "WithDetails" next/fastest departures board for a specific location.</xs:documentation>
+    </xs:annotation>
+    <xs:complexContent>
+      <xs:extension base="ldbt20151127:BaseStationBoard">
+        <xs:sequence>
+          <xs:element name="departures" type="ldbt20211101:ArrayOfDepartureItemsWithCallingPoints">
+            <xs:annotation>
+              <xs:documentation>A list of next/fastest services for this departures board.</xs:documentation>
+            </xs:annotation>
+          </xs:element>
+        </xs:sequence>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:complexType name="BaseServiceDetails">
+    <xs:annotation>
+      <xs:documentation>A structure containing base details of an individual service obtained from a departure board.</xs:documentation>
+    </xs:annotation>
+    <xs:complexContent>
+      <xs:extension base="ldbt20171001:BaseServiceDetails">
+        <xs:sequence>
+          <xs:element name="divertedVia" type="xs:string" minOccurs="0">
+            <xs:annotation>
+              <xs:documentation>Identifies the name of the station via which the diversion is made. If the diversion does not identify a station location then the name will be blank. Note that the location may not be in the schedule.</xs:documentation>
+            </xs:annotation>
+          </xs:element>
+          <xs:element name="diversionReason" type="xs:string" minOccurs="0">
+            <xs:annotation>
+              <xs:documentation>The reason for the diversion (if any).</xs:documentation>
+            </xs:annotation>
+          </xs:element>
+        </xs:sequence>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:complexType name="ServiceItem">
+    <xs:annotation>
+      <xs:documentation>An individual service's summary details for display on a basic departure board.</xs:documentation>
+    </xs:annotation>
+    <xs:complexContent>
+      <xs:extension base="ldbt20160216:ServiceItem">
+        <xs:sequence>
+          <xs:element name="formation" type="ldbt20211101:FormationData" minOccurs="0">
+            <xs:annotation>
+              <xs:documentation>The formation data of the train at this location (if known).</xs:documentation>
+            </xs:annotation>
+          </xs:element>
+          <xs:element name="futureCancellation" type="xs:boolean" default="false" minOccurs="0">
+            <xs:annotation>
+              <xs:documentation>True if there is a cancellation for this service at a calling pont that follows the requested departure board station.</xs:documentation>
+            </xs:annotation>
+          </xs:element>
+          <xs:element name="futureDelay" type="xs:boolean" default="false" minOccurs="0">
+            <xs:annotation>
+              <xs:documentation>True if there is a known or unknown delay set for this service at a calling pont that follows the requested departure board station.</xs:documentation>
+            </xs:annotation>
+          </xs:element>
+          <xs:element name="diversion" minOccurs="0">
+            <xs:annotation>
+              <xs:documentation>If the service has been diverted, identifies the locations affected by the diversion.</xs:documentation>
+            </xs:annotation>
+            <xs:complexType>
+              <xs:sequence>
+                <xs:element name="reason" type="xs:string" minOccurs="0">
+                  <xs:annotation>
+                    <xs:documentation>The reason for the diversion (if any).</xs:documentation>
+                  </xs:annotation>
+                </xs:element>
+                <xs:element name="divertedVia" type="ct20071010:LocationNameType">
+                  <xs:annotation>
+                    <xs:documentation>Identifies the name of the station via which the diversion is made. If the diversion does not identify a station location then the name will be blank. Note that the location may not be in the schedule.</xs:documentation>
+                  </xs:annotation>
+                </xs:element>
+                <xs:element name="between">
+                  <xs:annotation>
+                    <xs:documentation>The station locations between which the diversion happens.</xs:documentation>
+                  </xs:annotation>
+                  <xs:complexType>
+                    <xs:sequence>
+                      <xs:element name="start">
+                        <xs:complexType>
+                          <xs:simpleContent>
+                            <xs:extension base="ct20071010:LocationNameType">
+                              <xs:attribute name="crs" type="ct20071010:CRSType"/>
+                            </xs:extension>
+                          </xs:simpleContent>
+                        </xs:complexType>
+                      </xs:element>
+                      <xs:element name="end">
+                        <xs:complexType>
+                          <xs:simpleContent>
+                            <xs:extension base="ct20071010:LocationNameType">
+                              <xs:attribute name="crs" type="ct20071010:CRSType"/>
+                            </xs:extension>
+                          </xs:simpleContent>
+                        </xs:complexType>
+                      </xs:element>
+                    </xs:sequence>
+                  </xs:complexType>
+                </xs:element>
+                <xs:element name="rerouteDelay" type="xs:int" default="0" minOccurs="0">
+                  <xs:annotation>
+                    <xs:documentation>The delay incurred by the service in taking the diversion.</xs:documentation>
+                  </xs:annotation>
+                </xs:element>
+              </xs:sequence>
+            </xs:complexType>
+          </xs:element>
+          <xs:element name="uncertainty" type="ldbt20211101:UncertaintyType" minOccurs="0">
+            <xs:annotation>
+              <xs:documentation>Indication that there is some uncertainty that this service at this location will run as currently expected. Services may be marked as uncertain when there is a risk of delay or cancellation, but before any firm information is known.</xs:documentation>
+            </xs:annotation>
+          </xs:element>
+          <xs:element name="affectedBy" minOccurs="0">
+            <xs:annotation>
+              <xs:documentation>A free-text field that is expected to contain an NRE incident number to allow trains that are affected by the same incident to be grouped together.</xs:documentation>
+            </xs:annotation>
+            <xs:simpleType>
+              <xs:restriction base="xs:string">
+                <xs:maxLength value="16"/>
+              </xs:restriction>
+            </xs:simpleType>
+          </xs:element>
+        </xs:sequence>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:complexType name="ServiceItemWithCallingPoints">
+    <xs:annotation>
+      <xs:documentation>An individual service's summary details with calling points for display on a "WithDetails" departure board.</xs:documentation>
+    </xs:annotation>
+    <xs:complexContent>
+      <xs:extension base="ldbt20211101:ServiceItem">
+        <xs:group ref="ldbt20211101:CallingListProperties"/>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:complexType name="DepartureItem">
+    <xs:annotation>
+      <xs:documentation>An individual service's summary details for display on a basic next/fastest departures board.</xs:documentation>
+    </xs:annotation>
+    <xs:sequence>
+      <xs:element name="service" type="ldbt20211101:ServiceItem" nillable="true" minOccurs="1" maxOccurs="1">
+        <xs:annotation>
+          <xs:documentation>The details of the next/fastest service.</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+    </xs:sequence>
+    <xs:attribute name="crs" type="ct20071010:CRSType" use="required">
+      <xs:annotation>
+        <xs:documentation>The CRS code from the requested filterList for which this service is the next/fastest departure.</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+  </xs:complexType>
+  <xs:complexType name="DepartureItemWithCallingPoints">
+    <xs:annotation>
+      <xs:documentation>An individual service's summary details for display on a "WithDetails" next/fastest departures board.</xs:documentation>
+    </xs:annotation>
+    <xs:sequence>
+      <xs:element name="service" type="ldbt20211101:ServiceItemWithCallingPoints" nillable="true" minOccurs="1" maxOccurs="1">
+        <xs:annotation>
+          <xs:documentation>The details of the next/fastest service.</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+    </xs:sequence>
+    <xs:attribute name="crs" type="ct20071010:CRSType" use="required">
+      <xs:annotation>
+        <xs:documentation>The CRS code from the requested filterList for which this service is the next/fastest departure.</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+  </xs:complexType>
+  <xs:complexType name="CallingPoint">
+    <xs:annotation>
+      <xs:documentation>An individual calling point in a service.</xs:documentation>
+    </xs:annotation>
+    <xs:sequence>
+      <xs:element name="locationName" type="ct20071010:LocationNameType">
+        <xs:annotation>
+          <xs:documentation>The display name of this location.</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+      <xs:element name="crs" type="ct20071010:CRSType">
+        <xs:annotation>
+          <xs:documentation>The CRS code of this location.</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+      <xs:element name="st" type="ct20151127:TimeType" minOccurs="0">
+        <xs:annotation>
+          <xs:documentation>The scheduled time of the service at this location. The time will be either an arrival or departure time, depending on whether it is in the subsequent or previous calling point list.</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+      <xs:element name="et" type="ct20151127:TimeType" minOccurs="0">
+        <xs:annotation>
+          <xs:documentation>The estimated time of the service at this location. The time will be either an arrival or departure time, depending on whether it is in the subsequent or previous calling point list. Will only be present if an actual time (at) is not present.</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+      <xs:element name="at" type="ct20151127:TimeType" minOccurs="0">
+        <xs:annotation>
+          <xs:documentation>The actual time of the service at this location. The time will be either an arrival or departure time, depending on whether it is in the subsequent or previous calling point list. Will only be present if an estimated time (et) is not present.</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+      <xs:element name="isCancelled" type="xs:boolean" default="false" minOccurs="0">
+        <xs:annotation>
+          <xs:documentation>A flag to indicate that this service is cancelled at this location.</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+      <xs:element name="length" type="ct20151127:TrainLength" default="0" minOccurs="0">
+        <xs:annotation>
+          <xs:documentation>The train length (number of units) at this location. If not supplied, or zero, the length is unknown.</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+      <xs:element name="detachFront" type="xs:boolean" default="false" minOccurs="0">
+        <xs:annotation>
+          <xs:documentation>True if the service detaches units from the front at this location.</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+      <xs:element name="formation" type="ldbt20211101:FormationData" minOccurs="0">
+        <xs:annotation>
+          <xs:documentation>The formation data of the train at this location (if known).</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+      <xs:element name="adhocAlerts" type="ldbt20120113:ArrayOfAdhocAlert" minOccurs="0">
+        <xs:annotation>
+          <xs:documentation>A list of active Adhoc Alert texts  for to this location.</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+      <xs:element name="cancelReason" type="xs:string" minOccurs="0">
+        <xs:annotation>
+          <xs:documentation>The cancellation reason for this service at this location (if any).</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+      <xs:element name="delayReason" type="xs:string" minOccurs="0">
+        <xs:annotation>
+          <xs:documentation>The delay reason for this service at this location (if any).</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+      <xs:element name="affectedByDiversion" type="xs:boolean" default="false" minOccurs="0">
+        <xs:annotation>
+          <xs:documentation>True if this location has been affected by a diversion.</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+      <xs:element name="rerouteDelay" type="xs:int" default="0" minOccurs="0">
+        <xs:annotation>
+          <xs:documentation>The delay incurred by the service in taking the diversion.</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+      <xs:element name="uncertainty" type="ldbt20211101:UncertaintyType" minOccurs="0">
+        <xs:annotation>
+          <xs:documentation>Indication that there is some uncertainty that this service at this location will run as currently expected. Services may be marked as uncertain when there is a risk of delay or cancellation, but before any firm information is known.</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+      <xs:element name="affectedBy" minOccurs="0">
+        <xs:annotation>
+          <xs:documentation>A free-text field that is expected to contain an NRE incident number to allow trains that are affected by the same incident to be grouped together.</xs:documentation>
+        </xs:annotation>
+        <xs:simpleType>
+          <xs:restriction base="xs:string">
+            <xs:maxLength value="16"/>
+          </xs:restriction>
+        </xs:simpleType>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:group name="CallingListProperties">
+    <xs:annotation>
+      <xs:documentation>Common list properties of previous and subsequent calling points.</xs:documentation>
+    </xs:annotation>
+    <xs:sequence>
+      <xs:element name="previousCallingPoints" type="ldbt20211101:ArrayOfArrayOfCallingPoints" minOccurs="0">
+        <xs:annotation>
+          <xs:documentation>A list of lists of the previous calling points in the journey. A separate calling point list will be present for each origin of the service, relative to the current location. Refer to the documentation for how these lists should be handled.</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+      <xs:element name="subsequentCallingPoints" type="ldbt20211101:ArrayOfArrayOfCallingPoints" minOccurs="0">
+        <xs:annotation>
+          <xs:documentation>A list of lists of the subsequent calling points in the journey. A separate calling point list will be present for each destination of the service, relative to the current location. Refer to the documentation for how these lists should be handled.</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+    </xs:sequence>
+  </xs:group>
+  <xs:complexType name="LoadingCategory">
+    <xs:annotation>
+      <xs:documentation>A train loading category.</xs:documentation>
+    </xs:annotation>
+    <xs:simpleContent>
+      <xs:extension base="xs:string">
+        <xs:attribute name="code">
+          <xs:annotation>
+            <xs:documentation>The category code</xs:documentation>
+          </xs:annotation>
+        </xs:attribute>
+        <xs:attribute name="colour">
+          <xs:annotation>
+            <xs:documentation>A hex RGB or RGBA colour value associated with this category (e.g. #FF8800 or #FF8800CC).</xs:documentation>
+          </xs:annotation>
+        </xs:attribute>
+        <xs:attribute name="image">
+          <xs:annotation>
+            <xs:documentation>A link to an image resource for this category.</xs:documentation>
+          </xs:annotation>
+        </xs:attribute>
+      </xs:extension>
+    </xs:simpleContent>
+  </xs:complexType>
+  <xs:complexType name="FormationData">
+    <xs:annotation>
+      <xs:documentation>Formation data at a calling point.</xs:documentation>
+    </xs:annotation>
+    <xs:sequence>
+      <xs:element name="loadingCategory" type="ldbt20211101:LoadingCategory" minOccurs="0">
+        <xs:annotation>
+          <xs:documentation>The service-level loading category at a location.</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+      <xs:element name="coaches" type="ldbt20171001:ArrayOfCoaches" minOccurs="0">
+        <xs:annotation>
+          <xs:documentation>A list of coaches that comprise the train formation at this calling point. Will be absent if the formation is unknown.</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="UncertaintyType">
+    <xs:annotation>
+      <xs:documentation>Indication that there is some uncertainty that a service at a location will run as currently expected. Services may be marked as uncertain when there is a risk of delay or cancellation, but before any firm information is known.</xs:documentation>
+    </xs:annotation>
+    <xs:sequence>
+      <xs:element name="reason" type="xs:string" minOccurs="0">
+        <xs:annotation>
+          <xs:documentation>Reason for the uncertainty of this service at this location. Note that different reasons may be set at different locations and reasons may be different to reasons for lateness.</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+    </xs:sequence>
+    <xs:attribute name="status" type="ldbt20211101:UncertaintyStatus" use="required">
+      <xs:annotation>
+        <xs:documentation>The expected effect of the uncertainty, i.e. whether the uncertainty may cause delay, cancellation or other alteration.</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+  </xs:complexType>
+  <xs:complexType name="ArrayOfServiceItems">
+    <xs:annotation>
+      <xs:documentation>A list of services on a departure board.</xs:documentation>
+    </xs:annotation>
+    <xs:sequence>
+      <xs:element name="service" type="ldbt20211101:ServiceItem" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="ArrayOfServiceItemsWithCallingPoints">
+    <xs:annotation>
+      <xs:documentation>A list of services on a departure board with details of their calling points.</xs:documentation>
+    </xs:annotation>
+    <xs:sequence>
+      <xs:element name="service" type="ldbt20211101:ServiceItemWithCallingPoints" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="ArrayOfDepartureItems">
+    <xs:annotation>
+      <xs:documentation>A list of next/fastest services on a departures board.</xs:documentation>
+    </xs:annotation>
+    <xs:sequence>
+      <xs:element name="destination" type="ldbt20211101:DepartureItem" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="ArrayOfDepartureItemsWithCallingPoints">
+    <xs:annotation>
+      <xs:documentation>A list of next/fastest services with calling points on a departures board.</xs:documentation>
+    </xs:annotation>
+    <xs:sequence>
+      <xs:element name="destination" type="ldbt20211101:DepartureItemWithCallingPoints" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="ArrayOfArrayOfCallingPoints">
+    <xs:annotation>
+      <xs:documentation>A list of calling point lists representing multiple journey segments. Refer to the documentation for how these lists should be handled.</xs:documentation>
+    </xs:annotation>
+    <xs:sequence>
+      <xs:element name="callingPointList" type="ldbt20211101:ArrayOfCallingPoints" nillable="true" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="ArrayOfCallingPoints">
+    <xs:annotation>
+      <xs:documentation>A list of calling points in a single journey segment.</xs:documentation>
+    </xs:annotation>
+    <xs:sequence>
+      <xs:element name="callingPoint" type="ldbt20211101:CallingPoint" nillable="true" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+    <xs:attribute name="serviceType" type="ct20071010:ServiceType" use="optional" default="train">
+      <xs:annotation>
+        <xs:documentation>The type of service (train, bus, ferry) of this list of calling points.</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="serviceChangeRequired" type="xs:boolean" use="optional" default="false">
+      <xs:annotation>
+        <xs:documentation>A boolean to indicate that passenger required to change the service or not.</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+    <xs:attribute name="assocIsCancelled" type="xs:boolean" use="optional" default="false">
+      <xs:annotation>
+        <xs:documentation>A boolean to indicate that this route from the origin or to the destination can no longer be reached because the association has been cancelled.</xs:documentation>
+      </xs:annotation>
+    </xs:attribute>
+  </xs:complexType>
+</xs:schema>

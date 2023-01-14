@@ -27,7 +27,7 @@ class Stop(TypedDict):
     IndicatorLang: str
     Bearing: str
     NptgLocalityCode: str
-    LocalityName: bool
+    LocalityName: str
     ParentLocalityName: str
     GrandParentLocalityName: str
     Town: str
@@ -85,6 +85,11 @@ manual_renames: list[tuple[LocalityCode, StopName, StopName]] = [
 def group_data(df: pd.DataFrame) -> StopGroupings:
     print("Dropping unwanted entries")
     df["NaptanCode"].replace("", np.nan, inplace=True)
+
+    crs = pd.read_csv("crs.csv", index_col="ATCOCode")
+    df = df.merge(crs, on="ATCOCode", how='left')
+    df.loc[df["CrsRef"].notna(), "NaptanCode"] = ""
+
     df.dropna(subset=["NaptanCode"], inplace=True)
 
     print("Converting easting/northing to lat/long")
@@ -98,7 +103,7 @@ def group_data(df: pd.DataFrame) -> StopGroupings:
     standardise_synonyms(df)
 
     print("Grouping data")
-    return {localityCode: {stopName: stances[["ATCOCode", "Indicator", "Street", "Lat", "Long", "Arrival"]].to_dict(orient="records") for stopName, stances in stops.groupby("CommonName")} for localityCode, stops in df.groupby("NptgLocalityCode")}
+    return {localityCode: {stopName: stances[["ATCOCode", "Indicator", "Street", "Lat", "Long", "Arrival", "CrsRef"]].to_dict(orient="records") for stopName, stances in stops.groupby("CommonName")} for localityCode, stops in df.groupby("NptgLocalityCode")}
 
 
 def standardise_synonyms(df: pd.DataFrame):
@@ -126,6 +131,13 @@ def standardise_synonyms(df: pd.DataFrame):
     df["CommonName"] = df["CommonName"].str.replace("The Busway ", "", regex=True)
     # Integrate Edinburgh Trams at Ingliston Park & Ride, Edinburgh Airport and St Andrew Square
     df["CommonName"] = df["CommonName"].str.replace(" (Edinburgh Trams)", "", regex=False)
+    # Attempt to integrate stations
+    # Standardise naming
+    df["CommonName"] = df["CommonName"].str.replace("(?i)Railway ", "Rail ", regex=True)
+    df["CommonName"] = df["CommonName"].str.replace("(?i) Stn", " Station", regex=True)
+    # If only instance of name in locality, attempt to remove locality name
+    stn_filter = df["CrsRef"].notna() & ~df[["NptgLocalityCode", "CommonName"]].duplicated(keep=False)
+    df.loc[stn_filter, "CommonName"] = df[stn_filter].apply(lambda x: simplify_station_name(df, x), axis=1)
 
 
 # Patterns to group stances into stops using
@@ -133,6 +145,14 @@ stances_regex = re.compile(r'(?P<stop>.*[^-]) *[-/ ] *(?P<stance>(?:Stance |Stan
 interchange_regex = re.compile(r'(?P<stop>.*[^-])/(?P<stance>[a-zA-Z]?\d{0,2})')
 leeds_regex = re.compile(r'(?P<stop>[a-zA-Z]+) (?P<stance>[a-zA-Z]?\d{0,2})')
 station_regex = re.compile(r'(?P<stop>[a-zA-Z]+) (?P<stance>[a-zA-Z]\d{1,2})')
+
+
+def simplify_station_name(df: pd.DataFrame, x: Stop):
+    new_name = re.sub("^" + re.escape(x["LocalityName"] + " "), "", x["CommonName"])
+    if (df["CommonName"] == new_name).any():
+        return new_name
+    else:
+        return x["CommonName"]
 
 
 # Split a stop name into a stop location and stance

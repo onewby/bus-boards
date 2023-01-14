@@ -500,5 +500,6 @@ bus-site/tmp/
 bus-site/*.sqlite*
 Stops.csv
 NPTG.xml
+NaPTAN.xml
 localities.json
 bus-site/dev-dist/

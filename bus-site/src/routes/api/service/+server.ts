@@ -83,9 +83,12 @@ export const GET: RequestHandler = async ({url}) => {
     return json({
         "service": service,
         "operator": operator,
-        "stops": stops,
-        "realtime": realtime,
-        "route": route
+        "branches": [{
+            "dest": service.dest,
+            "stops": stops,
+            "realtime": realtime,
+            "route": route
+        }]
     })
 }
 

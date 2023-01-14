@@ -117,7 +117,9 @@ Setup is currently quite lengthy and may be more automated soon.
 6. Insert stop data into the database by running `localities.py`.
 7. In the `bus-site` directory, run `npm run gtfs`, which will run 
   `import_gtfs.ts`.
-8. Run the site from the `bus-site` directory using `npm run dev` or `npm 
+8. [Register for OpenLDBWS](http://realtime.nationalrail.co.uk/OpenLDBWSRegistration/)
+   and store the API token in an environment variable named `DARWIN_API_KEY`.
+9. Run the site from the `bus-site` directory using `npm run dev` or `npm 
    run preview`.
 
 
@@ -132,16 +134,19 @@ Setup is currently quite lengthy and may be more automated soon.
 - [ ] Use data from other sources where possible (e.g. TfWM, TfGM)
 - [ ] Explore the use of using TransXChange and the Traveline National 
   Dataset directly (and not GTFS conversions) for improved accuracy 
-- [ ] Use National Rail Darwin API for integrated bus/train departures
+- [x] Use National Rail Darwin API for integrated bus/train departures
   - [ ] Expand integration to include trams etc.
+  - [ ] Improve location finding by finding stops in the same locality 
+    within very close range
 - [ ] View arrivals
 - [ ] Locality pages (view all stops in a locality)
-- [ ] Host online
+- [x] Host online
 - [ ] Filter boards by destination or calling points
 - [ ] Show maps of all the stances grouped within a stop
 - [ ] Simplify and automate more of setup
   - [ ] Explore downloading individual region files and inserting rows into the 
     database in parallel to speed up initialisation
+  - [ ] Write database migrations
 
 
 ## Data sources
