@@ -35,7 +35,8 @@ create table if not exists stances
     long      REAL,
     stop      INTEGER
         constraint stances_stops_id_fk
-            references stops
+            references stops,
+    crs       TEXT
 );
 
 create index if not exists stances_stop_index

@@ -1,8 +1,4 @@
 import soap from "soap"
-import {parse as parsePath} from "node:path";
-import {fileURLToPath} from "node:url";
-
-const __file = parsePath(fileURLToPath(import.meta.url))
 
 export class DarwinAPI {
 
@@ -23,7 +19,7 @@ export class DarwinAPI {
                 return this.clientPromise
             }
             this.client = await soap.createClientAsync(
-                __file.dir + "/wsdl/wsdl_1.wsdl"
+                "https://lite.realtime.nationalrail.co.uk/OpenLDBWS/wsdl.aspx?ver=2021-11-01"
             )
             this.client.addSoapHeader({"AccessToken": {"TokenValue": this._token}}, undefined, "typ", "http://thalesgroup.com/RTTI/2013-11-28/Token/types")
         }

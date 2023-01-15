@@ -6,6 +6,8 @@ import localities
 # Connect to stops database
 db = sqlite3.connect("bus-site/stops.sqlite")
 
+localities.init_db(db)
+
 # Regenerate localities.json (TODO create an actual method)
 stance_grouping.main()
 

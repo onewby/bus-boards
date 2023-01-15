@@ -37,6 +37,14 @@ def get_crs_codes() -> Dict[str, str]:
     return df.to_dict()
 
 
+def init_db(db: sqlite3.Connection):
+    print("Initialise database")
+    # Initialise database if it does not exist
+    with open("bus-site/gtfs/model.sql") as file:
+        script = " ".join(file.readlines())
+        db.executescript(script)
+
+
 def insert_localities(db: sqlite3.Connection):
     print("Insert localities into database")
 
