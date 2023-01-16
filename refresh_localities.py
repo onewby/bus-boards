@@ -23,3 +23,7 @@ print("Rebuilding stops_search table")
 db.execute("DROP TABLE IF EXISTS stops_search;")
 db.execute("CREATE VIRTUAL TABLE stops_search USING fts5(name, parent, qualifier, id UNINDEXED);")
 db.execute("INSERT INTO stops_search(name, parent, qualifier, id) SELECT stops.name, stops.locality_name, qualifier, stops.id FROM stops INNER JOIN localities l on l.code = stops.locality;")
+
+# Write to database
+db.commit()
+db.close()
