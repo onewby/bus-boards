@@ -16,7 +16,7 @@ localities.insert_stops(db)
 
 # Remove unused stops
 print("Removing unused stops")
-db.execute("SELECT DISTINCT stances.stop FROM stop_times INNER JOIN stances ON stances.code=stop_id UNION SELECT stances.stop FROM stances WHERE crs IS NOT NULL;")
+db.execute("DELETE FROM stops WHERE stops.id NOT IN (SELECT DISTINCT stances.stop FROM stop_times INNER JOIN stances ON stances.code=stop_id UNION SELECT stances.stop FROM stances WHERE crs IS NOT NULL);")
 
 # Rebuild stops_search table
 print("Rebuilding stops_search table")
