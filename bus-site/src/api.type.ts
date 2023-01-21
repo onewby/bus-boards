@@ -1,3 +1,5 @@
+import type {DateTime} from "luxon";
+
 export type StopDeparture = {
     trip_id: string,
     trip_headsign: string,
@@ -8,7 +10,8 @@ export type StopDeparture = {
     operator_id: string,
     operator_name: string,
     type: "bus" | "train",
-    status?: string
+    status?: string,
+    _timestamp?: DateTime
 }
 
 export type StopData = {

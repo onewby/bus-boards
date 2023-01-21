@@ -69,22 +69,27 @@ export const GET: RequestHandler = async ({url}) => {
     if(startTime.hour > endTime.hour) {
         // Get yesterday's buses after midnight going into the morning
         stop_times = dayStmt.all(stances, {date: fmtDate(startTime.minus({day: 1})), start: naiveAdd24Start, end: naiveAdd24End})
+            .map(mapWithTimestamp(-1))
         // and add them to today's buses - first everything going from the day into potentially the next morning
-        stop_times = stop_times.concat(dayStmt.all(stances, {date: fmtDate(startTime), start: startTime.toSQLTime(), end: naiveEndTime}))
+        stop_times = stop_times.concat(dayStmt.all(stances, {date: fmtDate(startTime), start: startTime.toSQLTime(), end: naiveEndTime})
+            .map(mapWithTimestamp()))
         // and anything in the morning registered on the next day
-        stop_times = stop_times.concat(nextDayStmt.all(stances, {date: fmtDate(endTime), start: "00:00:00", end: endTime.toSQLTime()}))
-        stop_times.forEach(time => time['departure_time'] = modTime(time['departure_time']))
+        stop_times = stop_times.concat(nextDayStmt.all(stances, {date: fmtDate(endTime), start: "00:00:00", end: endTime.toSQLTime()})
+            .map(mapWithTimestamp()))
     } else {
         // Get yesterday's buses after midnight going into the morning
         stop_times = dayStmt.all(stances, {date: fmtDate(startTime.minus({day: 1})), start: naiveAdd24Start, end: naiveAdd24End})
+            .map(mapWithTimestamp(-1))
         // and add them to today's buses
         stop_times = stop_times.concat(dayStmt.all(stances, {date: fmtDate(startTime), start: startTime.toSQLTime(), end: endTime.toSQLTime()}))
-        stop_times.forEach(time => time['departure_time'] = modTime(time['departure_time']))
+            .map(mapWithTimestamp())
     }
+    stop_times.forEach(time => time['departure_time'] = modTime(time['departure_time']))
     stop_times.forEach(time => time.type = "bus")
 
     const stations = await Promise.all(stationPromises)
     const services = stations.filter(board => board.trainServices).flatMap(board => board.trainServices!.service)
+    const fromAfternoon = services.length > 0 && (services[0].std ?? services[0].sta!)[0] === "1"
     const trainTimes: StopDeparture[] = services.map(service => ({
         trip_id: service.serviceID,
         trip_headsign: service.destination.location.map(loc => loc.locationName).join(" & "),
@@ -95,14 +100,16 @@ export const GET: RequestHandler = async ({url}) => {
         operator_id: service.operatorCode,
         colour: "",
         type: "train",
-        status: service.etd !== undefined && isNum(service.etd[0]) ? "Exp. " + service.etd : service.etd
+        status: service.etd !== undefined && isNum(service.etd[0]) ? "Exp. " + service.etd : service.etd,
+        _timestamp: toLuxon(service.std ?? service.sta!)
+                    .plus({day: fromAfternoon && (service.std ?? service.sta!)[0] === "0" ? 1 : 0})
     }))
 
     stop_times = stop_times.concat(trainTimes)
-    let afterMidnight = stop_times.filter(stop => stop.departure_time !== "" && stop.departure_time[0] === "0")
-    afterMidnight.forEach(stop => stop.departure_time = "9" + stop.departure_time)
-    stop_times.sort((a, b) => a['departure_time'].localeCompare(b['departure_time']))
-    afterMidnight.forEach(stop => stop.departure_time = stop.departure_time.slice(1, stop.departure_time.length))
+    stop_times.sort((a, b) => {
+        let diff = a._timestamp!.diff(b._timestamp!, "millisecond")
+        return diff.milliseconds > 0 ? 1 : diff.milliseconds < 0 ? -1 : 0
+    })
 
     // Determine operator colours
     const agencies: Set<string> = new Set(stop_times.map(time => time.operator_name))
@@ -126,6 +133,20 @@ export const GET: RequestHandler = async ({url}) => {
 const fmtDate = (date: DateTime) => Number(date.toFormat("yyyyMMdd"))
 const addTimeNaive = (time: string, add: number) => (Number(time.substring(0, 2)) + add).toString().padStart(2, "0") + time.substring(2, time.length)
 const modTime = (time: string) => (Number(time.substring(0, 2)) % 24).toString().padStart(2, "0") + time.substring(2, 5)
+
+// Not really a use for map, but it is helpful for concise syntax
+const mapWithTimestamp = (addDays = 0) => {
+    return (dep: StopDeparture) => {
+        dep._timestamp = toLuxon(dep.departure_time, addDays)
+        return dep
+    }
+}
+
+const toLuxon = (time: string, addDays = 0) => {
+    let hrs = Number(time.substring(0, 2))
+    addDays += Math.floor(hrs / 24)
+    return DateTime.fromSQL(modTime(time)).plus({day: addDays})
+}
 
 const stopTimesStmt = (dayName: string, prevDayName: string, params: string, addDay: (-1|0|1) = 0) =>
     `SELECT stop_times.trip_id,coalesce(stop_headsign,t.trip_headsign) as trip_headsign,
