@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 from typing import TypedDict, List, Dict, Tuple
 import pyproj
+from numba import jit
 
 
 class Stop(TypedDict):
@@ -78,7 +79,13 @@ StopName = str
 manual_renames: List[Tuple[LocalityCode, StopName, StopName]] = [
     ("N0078622", "Edinburgh Airport (Edinburgh Trams)", "Airport"),
     ("ES001737", "Haymarket (Edinburgh Trams)", "Haymarket Station"),
-    ("E0049583", "Stand 4", "Bus Station")
+    ("E0049583", "Stand 4", "Bus Station"),  # Tadcaster
+    ("ES000536", "Bus Station", "Seagate Bus Station")  # Dundee
+]
+
+# ATCOCodes for stances that should be marked as arrivals that are not
+manual_arrivals: List[str] = [
+    "6400L00040"
 ]
 
 
@@ -118,6 +125,7 @@ def standardise_synonyms(df: pd.DataFrame):
     for rename in manual_renames:
         loc_filter = df["NptgLocalityCode"] == rename[0]
         df.loc[loc_filter, "CommonName"] = df.loc[loc_filter, "CommonName"].replace(rename[1], rename[2])
+    df.loc[df["ATCOCode"].isin(manual_arrivals), "Arrival"] = True
     # Fix Harrogate having an odd mix of Bus Stn and Hgte Bus Stn
     df["CommonName"] = df["CommonName"].str.replace("Hgte ", "")
     # Standardise the phrase "Bus Station" - fixes inconsistencies e.g. in Beverley
@@ -137,7 +145,27 @@ def standardise_synonyms(df: pd.DataFrame):
     df["CommonName"] = df["CommonName"].str.replace("(?i) Stn", " Station", regex=True)
     # If only instance of name in locality, attempt to remove locality name
     stn_filter = df["CrsRef"].notna() & ~df[["NptgLocalityCode", "CommonName"]].duplicated(keep=False)
+    df["OriginalCommonName"] = df["CommonName"]
     df.loc[stn_filter, "CommonName"] = df[stn_filter].apply(lambda x: simplify_station_name(df, x), axis=1)
+
+    # Check if a child locality would be more suitable for a station
+
+    # if station still without partner
+    stn_filter = df["CrsRef"].notna() & ~df[["NptgLocalityCode", "CommonName"]].duplicated(keep=False)
+    # Get stops attached to a [station] stop with a CrsRef
+    df["IsRail"] = df["CrsRef"].notna()
+    g = df.groupby(["NptgLocalityCode", "CommonName"])
+    df = df.join(g["IsRail"].any().rename("HasRail"), on=["NptgLocalityCode", "CommonName"])
+    overlap = df[stn_filter].merge(df[df["BusStopType"].notna()], left_on="LocalityName", right_on="ParentLocalityName")
+    # Still not perfect - uses shortened CommonNames, so fails when e.g. can't discern between Invergowrie and Dundee
+    candidates = overlap[((overlap["CommonName_x"] == overlap["CommonName_y"]) | (overlap["OriginalCommonName_x"] == overlap["OriginalCommonName_y"])) & (overlap["HasRail_y"] == False)][["NptgLocalityCode_x", "CommonName_x", "OriginalCommonName_x", "LocalityName_x", "CrsRef_x", "NptgLocalityCode_y", "CommonName_y", "OriginalCommonName_y", "NptgLocalityCode_y", "LocalityName_y", "ParentLocalityName_y"]]
+    # Filter out candidates where locality y already has a station
+    candidates = candidates[~candidates["LocalityName_y"].isin(df[df["IsRail"]]["LocalityName"])]
+    # There's not many of these to set, so do this the simple way
+    for index, candidate in candidates.iterrows():
+        row = df.iloc[index]
+        row["CommonName"] = candidate["CommonName_y"]
+        row["NptgLocalityCode"] = candidate["NptgLocalityCode_y"]
 
 
 # Patterns to group stances into stops using
