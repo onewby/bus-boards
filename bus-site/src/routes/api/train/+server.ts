@@ -22,7 +22,9 @@ export const GET: RequestHandler = async ({url}) => {
 
     const service = {
         code: details.std ?? details.sta,
-        dest: subsequentCalls.map(list => list.callingPoint[list.callingPoint.length - 1].locationName).join(' & ')
+        dest: subsequentCalls.map(list => list.callingPoint[list.callingPoint.length - 1].locationName).join(' & '),
+        cancelled: details.isCancelled || details.etd === "Cancelled",
+        message: details.isCancelled ? (details.cancelReason ?? details.delayReason) : (details.delayReason ?? details.cancelReason)
     }
     const operator = {
         name: details.operator,

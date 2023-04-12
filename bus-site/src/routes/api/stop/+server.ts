@@ -17,7 +17,7 @@ export const GET: RequestHandler = async ({url}) => {
     let date = url.searchParams.get("date")
     if(date == null || date == "") date = new Date(Date.now()).toISOString()
 
-    let startTime = DateTime.fromISO(date)
+    let startTime = DateTime.fromISO(date, {zone: "Europe/London"})
     if(!startTime.isValid) throw error(400, `Invalid date.`)
     let dayName = startTime.weekdayLong.toLowerCase()
 
@@ -39,12 +39,14 @@ export const GET: RequestHandler = async ({url}) => {
     let stance_info = db.prepare(
         "SELECT code, indicator, crs FROM stances WHERE stop=?"
     ).all(stop_info['id'])
-    const stationPromises = Math.abs(offset) <= 120 ? stance_info.filter(stance => 'crs' in stance)
-        .map(stance => darwin.getDepartureBoard({crs: stance.crs, numRows: 150, timeOffset: offset})
+
+    const stationPromises = Math.abs(offset) <= 120 ?
+        [...new Set(stance_info.filter(stance => 'crs' in stance).map(stance => stance.crs))]
+        .map(crs => darwin.getDepartureBoard({crs: crs, numRows: 150, timeOffset: offset})
         .catch((_) => {
             let board: ServiceBoard = {
                 generatedAt: "",
-                crs: stance.crs,
+                crs: crs,
                 locationName: stop_info.name,
                 platformAvailable: false
             }
@@ -95,7 +97,7 @@ export const GET: RequestHandler = async ({url}) => {
         trip_headsign: service.destination.location.map(loc => loc.locationName).join(" & "),
         route_short_name: "",
         departure_time: service.std ?? service.sta!,
-        indicator: service.platform ? `Platform ${service.platform}` : service.platform,
+        indicator: service.platform ? `Platform ${service.platform}` : "Platform TBC",
         operator_name: service.operator,
         operator_id: service.operatorCode,
         colour: "",

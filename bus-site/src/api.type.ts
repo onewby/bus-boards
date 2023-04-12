@@ -62,7 +62,9 @@ export type ServiceBranch = {
 export type ServiceData = {
     service: {
         code: string,
-        dest: string
+        dest: string,
+        cancelled: boolean,
+        message: string
     }
     operator: {
         name: string,

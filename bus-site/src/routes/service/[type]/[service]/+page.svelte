@@ -1,10 +1,10 @@
 <script lang="ts">
     import Header from "../../../header.svelte";
     import Stop from "./stop.svelte";
-    import type {ServiceData} from "../../../../api.type"
+    import type {PageData} from "./$types"
 
     import Fa from "svelte-fa";
-    import {faBus, faChevronRight} from "@fortawesome/free-solid-svg-icons";
+    import {faBus, faChevronRight, faExclamationCircle, faExclamationTriangle} from "@fortawesome/free-solid-svg-icons";
 
     import Map from "@svelte-parts/map/Map.svelte";
     import Tiles from "@svelte-parts/map/tiles/Tiles.svelte";
@@ -17,7 +17,7 @@
     import HTMLMarker from "./HTMLMarker.svelte";
     import {DateTime} from "luxon";
 
-    export let data: ServiceData
+    export let data: PageData
     let expand = false
     let zoom = 15
     
@@ -124,6 +124,13 @@
             <span class="font-bold">{data.service.code}</span> to <span class="font-semibold">{data.service.dest}</span>
         </div>
     </Header>
+
+    {#if data.service.message}
+        <div class="panel w-full pl-8 pr-8 pt-4 pb-4 flex flex-row items-center">
+            <Fa icon={data.service.cancelled ? faExclamationCircle : faExclamationTriangle} size="lg" class="mr-4" />
+            <div class="flex-grow">{data.service.message}</div>
+        </div>
+    {/if}
 
     <a href={data.operator.url} class="w-full mt-2 max-w-2xl hover:bg-amber-700/5 dark:hover:bg-gray-500/20">
         <div class="panel w-full pl-8 pr-8 pt-4 pb-4 flex flex-row items-center">
