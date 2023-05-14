@@ -24,8 +24,8 @@ export const operatorMatches: Record<string, string> = {
     "Edinburgh Trams": "#8c1713",
     "Lothian Country Buses": "#2C5234",
     "East Coast Buses": "#2C5234",
-    "Eastern Scottish": "#134a2c",
-    "Midland Bluebird": "#273d90",
+    "Eastern Scottish": "#457c2c",
+    "Midland Bluebird": "#004887",
     "Bluestar": "#0077bf",
     "Brighton & Hove Bus and Coach Company": "#bf2a1f",
     "The Big Lemon": "#fffc00",
@@ -67,6 +67,13 @@ export const operatorMatches: Record<string, string> = {
     "Carousel Buses": "#f6a500",
     "Redline": "#DF2005",
     "Xelabus": "#039a58",
+    "Connexions Buses": "#009E2D",
+    "Bay Travel": "#0025aa",
+    "Nu-Venture": "#57ce43",
+    "Mackie's Coaches": "#cc0100",
+    "Hunters Executive Coaches": "#ffffff",
+    "John Ferguson Minibus Hirer": "#3792c2",
+    "SS Suncruisers": "#ffffff",
     "Avanti West Coast": "#1f4555",
     "c2c": "#bc0087",
     "Caledonian Sleeper": "#003941",
@@ -192,6 +199,10 @@ export const routeOverrides: Record<string, Record<string, string>> = {
         "TWO": "#eec72d",
         "V1": "#ffd400",
         "X38": "#0091b0"
+    },
+    "Tyne and Wear Metro" : {
+        "YEL": "#f2bc4a",
+        "GRN": "#5eb05f"
     }
 }
 

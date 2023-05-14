@@ -2,12 +2,12 @@ import Database from "better-sqlite3";
 import type {Statement} from "better-sqlite3";
 import {parse as parsePath} from "node:path";
 import {fileURLToPath} from "node:url";
-import {readdirSync, readFileSync} from "fs";
+import {readFileSync, writeFileSync, createWriteStream} from "fs";
+import { Readable } from 'stream';
+import { finished } from 'stream/promises';
 import {Open} from "unzipper";
 import type {CentralDirectory, File} from "unzipper";
 import {parse} from "csv-parse";
-import {PromisePool} from "@supercharge/promise-pool";
-import {MultiBar, Presets, SingleBar} from "cli-progress";
 import hasha from "hasha";
 import JSON5 from "json5";
 
@@ -28,54 +28,53 @@ let addCalendarDates = db.prepare("REPLACE INTO calendar_dates (service_id, date
 let addTrips = db.prepare("REPLACE INTO trips (route_id, service_id, trip_id, trip_headsign) VALUES (:route_id, :service_id, :trip_id, :trip_headsign)")
 let addStopTimes = db.prepare("REPLACE INTO stop_times (trip_id, arrival_time, departure_time, stop_id, stop_sequence, timepoint, stop_headsign, pickup_type, drop_off_type) VALUES (:trip_id, :arrival_time, :departure_time, :stop_id, :stop_sequence, :timepoint, NULLIF(:stop_headsign, ''), :pickup_type, :drop_off_type)")
 let dropAllSource = db.transaction(() => {
+    db.pragma('foreign_keys = OFF')
     sources.forEach(table => db.prepare(`DELETE FROM ${table}`).run())
+    db.exec(tableCreateScript)
+    db.pragma('foreign_keys = ON')
 })
 let getSignature = db.prepare("SELECT hash FROM file_hashes WHERE source=?")
 let setSignature = db.prepare("REPLACE INTO file_hashes (source, hash) VALUES (?, ?)")
 
 async function import_zips() {
-    let files = readdirSync("gtfs").filter(f => f.endsWith(".zip"))
-    let progressBar = new MultiBar({hideCursor: true, linewrap: true}, {
-        format: Presets.shades_classic.format + " | {file}",
-        barCompleteChar: Presets.shades_classic.barCompleteChar,
-        barIncompleteChar: Presets.shades_classic.barIncompleteChar
-    })
-    let itemsBar = progressBar.create(files.length, 0, {file: "All sources"})
-    itemsBar.start(files.length, 0, {file: "All sources"})
-    console.log("Dropping previous data")
-    dropAllSource()
-    await PromisePool
-        .withConcurrency(4)
-        .for(files)
-        .handleError(e => console.error(e))
-        .process(async f => {
-            const path = `gtfs/${f}`
-            const source = f.substring(0, f.length - 4)
+    const path = "gtfs/itm_all_gtfs.zip"
 
-            let bar = progressBar.create(sources.length + 1, 0, {file: f}, {clearOnComplete: true})
-            bar.start(sources.length + 1, 0, {file: f})
+    console.log("Downloading GTFS data (usually ~550MB)")
+    let resp = await fetch("https://data.bus-data.dft.gov.uk/timetable/download/gtfs-file/all/")
+    if(!resp.ok || !resp.body) {
+        console.error("Cannot download GTFS data")
+        return
+    }
+    let fileStream = createWriteStream(path)
+    // @ts-ignore
+    await finished(Readable.fromWeb(resp.body).pipe(fileStream))
+    fileStream.close()
 
-            const hash = await hasha.fromFile(path, {algorithm: "sha256"})
-            const currentHash = getSignature.get(source)
-            if(currentHash === undefined || currentHash['hash'] !== hash) {
-                const zip = await Open.file(path)
-                try {
-                    await import_zip(zip, source, bar)
-                    setSignature.run(source, hash)
-                } catch (e) {
-                    console.log(e)
-                    progressBar.log(e instanceof Error ? e.toString() : `An error has occurred processing ${f}.`)
-                }
-            }
+    const hash = await hasha.fromFile(path, {algorithm: "sha256"})
+    let currentHash = undefined
+    try {
+        currentHash = readFileSync("gtfs/hash.txt", "utf-8")
+    } catch (e) {}
+    if(currentHash === undefined || currentHash !== hash) {
+        console.log("Dropping previous data")
+        dropAllSource()
+        console.log("Inserting new data")
 
-            bar.stop()
-            itemsBar.increment()
-        })
-    itemsBar.stop()
-    progressBar.stop()
+        let startTime = Date.now()
+
+        const zip = await Open.file(path)
+        try {
+            await import_zip(zip)
+            writeFileSync("gtfs/hash.txt", hash)
+        } catch (e) {
+            console.log(e)
+        }
+
+        console.log(`Insertions completed in ${(Date.now() - startTime) / 1000} seconds`)
+    }
 }
 
-async function import_zip(zip: CentralDirectory, source: string, bar: SingleBar) {
+async function import_zip(zip: CentralDirectory) {
     let files: [string, Statement, Object][] = [
         ["agency.txt", addAgency, {}],
         ["routes.txt", addRoutes, {}],
@@ -85,29 +84,45 @@ async function import_zip(zip: CentralDirectory, source: string, bar: SingleBar)
         ["stop_times.txt", addStopTimes, {}]
     ]
     for(const tuple of files) {
-        await import_txt_file(zip, source, tuple[0], tuple[1], tuple[2])
-        bar.increment()
+        await import_txt_file(zip, tuple[0], tuple[1], tuple[2])
     }
+    console.log("Updating max stop sequence numbers")
     db.exec("UPDATE trips SET max_stop_seq=(SELECT max(stop_sequence) FROM stop_times WHERE stop_times.trip_id=trips.trip_id)")
-    bar.increment()
 }
 
-async function import_txt_file(zip: CentralDirectory, source: string, file_name: string, sql: Statement, defaults: Object = {}) {
+async function import_txt_file(zip: CentralDirectory, file_name: string, sql: Statement, defaults: Object = {}) {
     let file = zip.files.find(f => f.path == file_name)
     if(file) {
-        await insertSource(file, source, sql, defaults)
-    } else throw Error(`Could not find ${file_name} in ${source}`)
+        await insertSource(file, sql, defaults)
+    } else throw Error(`Could not find ${file_name}`)
 }
 
-async function insertSource(file: File, source: string, sql: Statement, defaults: Object = {}) {
+async function insertSource(file: File, sql: Statement, defaults: Object = {}) {
+    let buffer = []
+    let batchInsert = db.transaction((records) => {
+        for(const record of records) {
+            sql.run(record)
+        }
+    })
     for await (const record of stream_csv(file)) {
         Object.entries(defaults).forEach(([k, v]) => {
             if(!(k in record)) record[k] = v
         })
+        buffer.push(record)
+        if(buffer.length >= 100000) {
+            try {
+                batchInsert(buffer)
+            } catch (e) {
+                throw Error(`Insertion error: ${file.path} using ${sql.source}. ${e instanceof Error ? e.toString() : ""}`)
+            }
+            buffer = []
+        }
+    }
+    if(buffer.length > 0) {
         try {
-            sql.run(record)
+            batchInsert(buffer)
         } catch (e) {
-            throw Error(`Insertion error: ${file.path} for ${source} using ${sql.source}: ${JSON.stringify(record)}. ${e instanceof Error ? e.toString() : ""}`)
+            throw Error(`Insertion error: ${file.path} using ${sql.source}. ${e instanceof Error ? e.toString() : ""}`)
         }
     }
 }
@@ -150,24 +165,18 @@ const select_all = db.prepare(`
 const copy_one = db.prepare(`UPDATE stop_times SET arrival_time=? WHERE rowid=?`)
 const del_one = db.prepare(`DELETE FROM stop_times WHERE rowid=?`)
 
-const copy_del_transaction = db.transaction((arr_time, dep_id, arr_id) => {
-    copy_one.run(arr_time, dep_id)
-    del_one.run(arr_id)
-})
-
 function clean_arrivals() {
     console.log("Cleaning arrivals")
-    const times = select_all.all()
+    let times = select_all.all()
     const times_length = times.length
-    times.forEach((val, i) => {
-        console.log(`Fixing ${i + 1}/${times_length}`)
-        console.log(val['arrival_time'], val['dep_id'], val['arr_id'])
-        if(!val['arrival_time'] || !val['dep_id'] || !val['arr_id']) {
-            console.log("Won't fix!")
-            return
+    times = times.filter(val => !(!val['arrival_time'] || !val['dep_id'] || !val['arr_id']))
+    console.log(`Fixing ${times.length} arrivals (could not fix ${times_length - times.length})`)
+    db.transaction((values) => {
+        for(const val of values) {
+            copy_one.run(val['arrival_time'], val['dep_id'])
+            del_one.run(val['arr_id'])
         }
-        copy_del_transaction(val['arrival_time'], val['dep_id'], val['arr_id'])
-    })
+    })(times)
 }
 
 function clean_stops() {

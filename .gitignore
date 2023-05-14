@@ -498,6 +498,7 @@ $RECYCLE.BIN/
 tmp/
 bus-site/tmp/
 bus-site/*.sqlite*
+bus-site/gtfs/hash.txt
 Stops.csv
 NPTG.xml
 NaPTAN.xml
