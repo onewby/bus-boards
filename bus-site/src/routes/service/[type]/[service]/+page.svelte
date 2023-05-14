@@ -16,6 +16,7 @@
     import L from "leaflet";
     import HTMLMarker from "./HTMLMarker.svelte";
     import {DateTime} from "luxon";
+    import {browser} from "$app/environment";
 
     export let data: PageData
     let expand = false
@@ -168,19 +169,21 @@
     </div>
 
     <div class="panel w-full mt-2 flex flex-col items-center">
-        <Map width="100%" height="300px" lon={lon} lat={lat} bind:zoom>
-            <Tiles />
-            <GeoJSON data={geoData} options={geoOptions} />
-            {#each data.branches.flatMap(br => br.stops) as stop}
-                <HTMLMarker lon={stop.long} lat={stop.lat} popup="{timeFmt(stop.dep)}<br><b>{stop.name}{stop.ind ? ` (${stop.ind})` : ''}</b><br>{stop.loc ? stop.loc : ''}"
-                            divIcon={{ className: "bg-amber-400 rounded border border-black" }} zIndex={-1000}/>
-            {/each}
-            {#if branch.realtime?.pos}
-                <HTMLMarker lon={lon} lat={lat} divIcon={{
-                        html: `<div class='bg-white border border-black h-full w-full rounded-tr-full' style='transform: rotate(${rotation}deg) ${flip}'></div>`,
-                        className: "", iconSize: [20, 12] }} />
-            {/if}
-        </Map>
+        {#if browser}
+            <Map width="100%" height="300px" lon={lon} lat={lat} bind:zoom>
+                <Tiles />
+                <GeoJSON data={geoData} options={geoOptions} />
+                {#each data.branches.flatMap(br => br.stops) as stop}
+                    <HTMLMarker lon={stop.long} lat={stop.lat} popup="{timeFmt(stop.dep)}<br><b>{stop.name}{stop.ind ? ` (${stop.ind})` : ''}</b><br>{stop.loc ? stop.loc : ''}"
+                                divIcon={{ className: "bg-amber-400 rounded border border-black" }} zIndex={-1000}/>
+                {/each}
+                {#if branch.realtime?.pos}
+                    <HTMLMarker lon={lon} lat={lat} divIcon={{
+                            html: `<div class='bg-white border border-black h-full w-full rounded-tr-full' style='transform: rotate(${rotation}deg) ${flip}'></div>`,
+                            className: "", iconSize: [20, 12] }} />
+                {/if}
+            </Map>
+        {/if}
     </div>
 </div>
 
