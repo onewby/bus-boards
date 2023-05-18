@@ -7,11 +7,11 @@
     import {faMap} from "@fortawesome/free-solid-svg-icons";
     import {slide} from "svelte/transition";
     import GeoJSON from "../../service/[type]/[service]/GeoJSON.svelte";
-    import HTMLMarker from "../../service/[type]/[service]/HTMLMarker.svelte";
     import Map from "@svelte-parts/map/Map.svelte";
     import Tiles from "@svelte-parts/map/tiles/Tiles.svelte";
     import 'leaflet/dist/leaflet.css';
     import L, {GeoJSONOptions} from "leaflet";
+    import {browser} from "$app/environment";
 
     // let departures = true
     export let data: StopData;
@@ -94,7 +94,7 @@
         </slot>
     </Header>
 
-    {#if showMap && data}
+    {#if browser && showMap && data}
         {@const avgLon = data.stances.map(s => s.long).reduce((a, b) => a + b) / data.stances.length}
         {@const avgLat = data.stances.map(s => s.lat).reduce((a, b) => a + b) / data.stances.length}
         <div class="panel w-full mt-2 flex flex-row flex-wrap items-center justify-evenly gap-x-2 gap-y-2" transition:slide>
