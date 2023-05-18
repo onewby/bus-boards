@@ -2,6 +2,8 @@ import type {PageServerLoad} from "./$types"
 import {error} from "@sveltejs/kit";
 import type {StopData} from "../../../api.type";
 
+export const ssr = false;
+
 export const load: PageServerLoad<StopData> = async ({params, fetch, url}) => {
     let date = url.searchParams.get("date")
     let resp = await fetch(`/api/stop?id=${params.stop}${date ? "&date=" + date : ""}`)

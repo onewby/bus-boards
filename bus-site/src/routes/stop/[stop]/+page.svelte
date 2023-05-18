@@ -2,15 +2,18 @@
     import Header from "../../header.svelte";
     import Service from "./service.svelte";
     import { page } from '$app/stores';
+
     import Fa from "svelte-fa";
     import type {StopData} from "../../../api.type";
     import {faMap} from "@fortawesome/free-solid-svg-icons";
     import {slide} from "svelte/transition";
-    import GeoJSON from "../../service/[type]/[service]/GeoJSON.svelte";
+
     import Map from "@svelte-parts/map/Map.svelte";
     import Tiles from "@svelte-parts/map/tiles/Tiles.svelte";
     import 'leaflet/dist/leaflet.css';
-    import L, {GeoJSONOptions} from "leaflet";
+    import type {GeoJSONOptions} from "leaflet";
+    import GeoJSON from "../../service/[type]/[service]/GeoJSON.svelte";
+    import L from "leaflet";
     import {browser} from "$app/environment";
 
     // let departures = true
