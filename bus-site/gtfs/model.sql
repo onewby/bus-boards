@@ -129,8 +129,8 @@ create table if not exists stop_times
     timepoint      integer,
     drop_off_type  integer,
     pickup_type    integer,
-    constraint stop_times_pk
-        primary key (trip_id, stop_sequence),
+    /*constraint stop_times_pk
+        primary key (trip_id, stop_sequence),*/
     constraint stop_times_trips_source_trip_id_fk
         foreign key (trip_id) references trips
 );

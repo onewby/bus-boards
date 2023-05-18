@@ -2,11 +2,10 @@
 
 import json
 import re
-import numpy as np
 import pandas as pd
 from typing import TypedDict, List, Dict, Tuple
 import pyproj
-from numba import jit
+import numpy as np
 
 
 class Stop(TypedDict):
@@ -74,13 +73,39 @@ StopGroupings = Dict[LocalityName, Dict[StopName, List[Stance]]]
 LocalityCode = str
 StopName = str
 
+locality_changes: List[Tuple[LocalityCode, LocalityName, LocalityCode, LocalityCode]] = [
+    ("N0077860", "Park Lane (Tyne and Wear Metro Station)", "E0057917", np.nan),
+    ("E0057948", "Bradford Interchange Rail Station", "N0077005", "Bradford"),
+    ("E0057974", "Leeds Rail Station", "N0077039", "Leeds"),
+    ("ES003919", "Dundee Rail Station", "ES000536", "Dundee")
+]
 
 # (locality, from name, to name)
 manual_renames: List[Tuple[LocalityCode, StopName, StopName]] = [
     ("N0078622", "Edinburgh Airport (Edinburgh Trams)", "Airport"),
     ("ES001737", "Haymarket (Edinburgh Trams)", "Haymarket Station"),
+    ("ES001737", "Haymarket Station", "Rail Station"),
     ("E0049583", "Stand 4", "Bus Station"),  # Tadcaster
-    ("ES000536", "Bus Station", "Seagate Bus Station")  # Dundee
+    ("ES000536", "Bus Station", "Seagate Bus Station"),  # Dundee
+    ("N0078275", "Edinburgh Park Station", "Edinburgh Park Rail Station"),
+    ("N0078275", "Edinburgh Park Station (Edinburgh Trams)", "Edinburgh Park Rail Station"),
+    ("E0057900", "Newcastle Rail Station", "Newcastle Central Rail Station"),
+    ("E0057900", "Central Station", "Newcastle Central Rail Station"),
+    ("E0057900", "Central Station (Tyne and Wear Metro Station)", "Newcastle Central Rail Station"),
+    ("E0057900", "Central Station Bewick Street", "Newcastle Central Rail Station"),
+    ("E0057900", "Central Station Clayton St", "Newcastle Central Rail Station"),
+    ("E0057900", "Central Station Neville St", "Newcastle Central Rail Station"),
+    ("E0057900", "Central Station Westgate Rd", "Newcastle Central Rail Station"),
+    ("E0057900", "Central Station Westgate Road", "Newcastle Central Rail Station"),
+    ("N0078208", "Ponteland Road - Newcastle Airport", "Newcastle Airport Ponteland Road"),
+    ("N0078208", "Newcastle Airport Metro Station", "Newcastle Airport (Tyne and Wear Metro Station)"),
+    ("E0055009", "Hull Rail Station", "Hull Paragon Interchange (Rail Station)"),
+    ("E0055009", "Hull Interchange", "Hull Paragon Interchange (Rail Station)"),
+    ("N0077005", "Bradford Interchange Rail Station", "Interchange"),
+    ("E0057917", "Sunderland Interchange", "Park Lane Interchange"),
+    ("E0057917", "Park Lane (Tyne and Wear Metro Station)", "Park Lane Interchange"),
+    ("E0057917", "Sunderland (Tyne and Wear Metro Station)", "Rail Station"),
+    ("ES000536", "Station", "Rail Station")
 ]
 
 # ATCOCodes for stances that should be marked as arrivals that are not
@@ -90,14 +115,14 @@ manual_arrivals: List[str] = [
 
 
 def group_data(df: pd.DataFrame) -> StopGroupings:
-    print("Dropping unwanted entries")
-    df["NaptanCode"].replace("", np.nan, inplace=True)
+    # print("Dropping unwanted entries")
+    # df["NaptanCode"].replace("", np.nan, inplace=True)
 
     crs = pd.read_csv("crs.csv", index_col="ATCOCode")
     df = df.merge(crs, on="ATCOCode", how='left')
-    df.loc[df["CrsRef"].notna(), "NaptanCode"] = ""
-
-    df.dropna(subset=["NaptanCode"], inplace=True)
+    # df.loc[df["CrsRef"].notna(), "NaptanCode"] = ""
+    #
+    # df.dropna(subset=["NaptanCode"], inplace=True)
 
     print("Converting easting/northing to lat/long")
     # https://gist.github.com/amercader/927079/caa63f49d1ff36f0489f2e11cb695deb06d5b6c2
@@ -122,6 +147,10 @@ def standardise_synonyms(df: pd.DataFrame):
     df["CommonName"] = df["CommonName"].str.replace(" Arrival Bay", "")
     df["CommonName"] = df["CommonName"].str.replace("(?i) Arrivals?", "", regex=True)
     # Integrate manual fixes specified
+    for change in locality_changes:
+        loc_filter = (df["NptgLocalityCode"] == change[0]) & (df["CommonName"] == change[1])
+        df.loc[loc_filter, "NptgLocalityCode"] = change[2]
+        df.loc[loc_filter, "ParentLocalityName"] = change[3]
     for rename in manual_renames:
         loc_filter = df["NptgLocalityCode"] == rename[0]
         df.loc[loc_filter, "CommonName"] = df.loc[loc_filter, "CommonName"].replace(rename[1], rename[2])
@@ -146,7 +175,7 @@ def standardise_synonyms(df: pd.DataFrame):
     # If only instance of name in locality, attempt to remove locality name
     stn_filter = df["CrsRef"].notna() & ~df[["NptgLocalityCode", "CommonName"]].duplicated(keep=False)
     df["OriginalCommonName"] = df["CommonName"]
-    df.loc[stn_filter, "CommonName"] = df[stn_filter].apply(lambda x: simplify_station_name(df, x), axis=1)
+    df["CommonName"] = df.apply(lambda x: simplify_station_name(df, x), axis=1)
 
     # Check if a child locality would be more suitable for a station
 
@@ -163,22 +192,21 @@ def standardise_synonyms(df: pd.DataFrame):
     candidates = candidates[~candidates["LocalityName_y"].isin(df[df["IsRail"]]["LocalityName"])]
     # There's not many of these to set, so do this the simple way
     for index, candidate in candidates.iterrows():
-        row = df.iloc[index]
-        row["CommonName"] = candidate["CommonName_y"]
-        row["NptgLocalityCode"] = candidate["NptgLocalityCode_y"]
+        df.iat[index, df.columns.get_loc("CommonName")] = candidate["CommonName_y"]
+        df.iat[index, df.columns.get_loc("NptgLocalityCode")] = candidate["NptgLocalityCode_y"]
 
 
 # Patterns to group stances into stops using
 stances_regex = re.compile(r'(?P<stop>.*[^-]) *[-/ ] *(?P<stance>(?:Stance |Stand |Stop ) *[a-zA-Z]?\d{0,2})', re.IGNORECASE)
 interchange_regex = re.compile(r'(?P<stop>.*[^-])/(?P<stance>[a-zA-Z]?\d{0,2})')
-leeds_regex = re.compile(r'(?P<stop>[a-zA-Z]+) (?P<stance>[a-zA-Z]?\d{0,2})')
+leeds_regex = re.compile(r'(?P<stop>[a-zA-Z ]+) (?P<stance>[a-zA-Z]?\d{0,2})')
 station_regex = re.compile(r'(?P<stop>[a-zA-Z]+) (?P<stance>[a-zA-Z]\d{1,2})')
 
 
 def simplify_station_name(df: pd.DataFrame, x: Stop):
-    new_name = re.sub("^" + re.escape(x["LocalityName"] + " "), "", x["CommonName"])
-    if (df["CommonName"] == new_name).any():
-        return new_name
+    if x["CommonName"].endswith("Rail Station"):
+        new_name = x["CommonName"].removeprefix(x["LocalityName"] + " ")
+        return new_name if (df["CommonName"] == new_name).any() else x["CommonName"]
     else:
         return x["CommonName"]
 

@@ -20,8 +20,8 @@
 </script>
 
 <a href="/stop/{stop.id}?date={apiTime}" class="w-full relative">
-    {#if realtime !== undefined}<div class="bg-blue-400 h-[0.8rem] w-[0.8rem] absolute left-[2.6rem] rounded-full z-10 outline outline-2 outline-white shadow-md" style="top: calc(50% - 0.4rem - {((1-realtime) * 100).toFixed(0)}%)"></div>{/if}
-    <div class="flex flex-row w-full items-center pl-8 pr-8 hover:bg-amber-700/5 dark:hover:bg-gray-500/10 items-stretch">
+    {#if realtime !== undefined}<div class="bg-blue-400 h-[0.8rem] w-[0.8rem] absolute left-[2.6rem] rounded-full z-10 ring ring-2 ring-white shadow-md" style="top: calc(50% - 0.4rem - {((1-realtime) * 100).toFixed(0)}%)"></div>{/if}
+    <div class="flex flex-row w-full pl-8 pr-8 hover:bg-amber-700/5 dark:hover:bg-gray-500/10 items-stretch">
         <div class="flex flex-col">
             <div class="flex-auto mr-4 flex justify-center" class:invisible={type === "origin"}><div class="h-full w-1 bg-black dark:bg-white"></div></div>
             <div class="h-8 w-8 max-h-8 max-w-8 flex-shrink-0 flex-grow bg-cover mr-4 bg-black dark:bg-white" style="mask-image: url('/stop/{type}.svg'); -webkit-mask-image: url('/stop/{type}.svg');"></div>
@@ -35,7 +35,7 @@
             </div>
         </div>
         <div class="flex-grow" class:divider></div>
-        <div class="text-right flex flex-col text-right items-end justify-around flex-shrink-0" class:py-1={stop.status} class:divider>
+        <div class="flex flex-col text-right items-end justify-around flex-shrink-0" class:py-1={stop.status} class:divider>
             <div>
                 {#if stop.arr && fmtArr !== fmtDep}
                     arr. {fmtArr}<br>dep. {fmtDep}

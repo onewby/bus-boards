@@ -33,44 +33,47 @@ let dropAllSource = db.transaction(() => {
     db.exec(tableCreateScript)
     db.pragma('foreign_keys = ON')
 })
-let getSignature = db.prepare("SELECT hash FROM file_hashes WHERE source=?")
-let setSignature = db.prepare("REPLACE INTO file_hashes (source, hash) VALUES (?, ?)")
 
 async function import_zips() {
     const path = "gtfs/itm_all_gtfs.zip"
 
-    console.log("Downloading GTFS data (usually ~550MB)")
-    let resp = await fetch("https://data.bus-data.dft.gov.uk/timetable/download/gtfs-file/all/")
-    if(!resp.ok || !resp.body) {
-        console.error("Cannot download GTFS data")
-        return
-    }
-    let fileStream = createWriteStream(path)
-    // @ts-ignore
-    await finished(Readable.fromWeb(resp.body).pipe(fileStream))
-    fileStream.close()
-
-    const hash = await hasha.fromFile(path, {algorithm: "sha256"})
-    let currentHash = undefined
-    try {
-        currentHash = readFileSync("gtfs/hash.txt", "utf-8")
-    } catch (e) {}
-    if(currentHash === undefined || currentHash !== hash) {
-        console.log("Dropping previous data")
-        dropAllSource()
-        console.log("Inserting new data")
-
-        let startTime = Date.now()
-
-        const zip = await Open.file(path)
-        try {
-            await import_zip(zip)
-            writeFileSync("gtfs/hash.txt", hash)
-        } catch (e) {
-            console.log(e)
+    if(process.argv.length < 3 || process.argv[2].toLowerCase() != "-s") {
+        console.log("Downloading GTFS data (usually ~550MB)")
+        let resp = await fetch("https://data.bus-data.dft.gov.uk/timetable/download/gtfs-file/all/")
+        if(!resp.ok || !resp.body) {
+            console.error("Cannot download GTFS data")
+            return
         }
+        let fileStream = createWriteStream(path)
+        // @ts-ignore
+        await finished(Readable.fromWeb(resp.body).pipe(fileStream))
+        fileStream.close()
 
-        console.log(`Insertions completed in ${(Date.now() - startTime) / 1000} seconds`)
+        if(process.argv.length < 3 || process.argv[2].toLowerCase() != "-h") {
+            const hash = await hasha.fromFile(path, {algorithm: "sha256"})
+            let currentHash = undefined
+            try {
+                currentHash = readFileSync("gtfs/hash.txt", "utf-8")
+            } catch (e) {}
+
+            if(currentHash !== undefined && currentHash === hash) {
+                console.log("GTFS up to date - run ts-node-esm import_gtfs.ts -h to ignore hash")
+            }
+        }
+    }
+
+    console.log("Dropping previous data")
+    dropAllSource()
+    console.log("Inserting new data")
+
+    const zip = await Open.file(path)
+    try {
+        await import_zip(zip)
+
+        const hash = await hasha.fromFile(path, {algorithm: "sha256"})
+        writeFileSync("gtfs/hash.txt", hash)
+    } catch (e) {
+        console.log(e)
     }
 }
 
@@ -83,11 +86,15 @@ async function import_zip(zip: CentralDirectory) {
         ["trips.txt", addTrips, {"trip_headsign": null}],
         ["stop_times.txt", addStopTimes, {}]
     ]
+    let startTime = Date.now()
     for(const tuple of files) {
         await import_txt_file(zip, tuple[0], tuple[1], tuple[2])
     }
+    console.log(`Insertions completed in ${(Date.now() - startTime) / 1000} seconds`)
+    startTime = Date.now()
     console.log("Updating max stop sequence numbers")
     db.exec("UPDATE trips SET max_stop_seq=(SELECT max(stop_sequence) FROM stop_times WHERE stop_times.trip_id=trips.trip_id)")
+    console.log(`Max stop sequence number updates finished in ${(Date.now() - startTime) / 1000} seconds`)
 }
 
 async function import_txt_file(zip: CentralDirectory, file_name: string, sql: Statement, defaults: Object = {}) {
@@ -182,7 +189,8 @@ function clean_arrivals() {
 function clean_stops() {
     console.log("Removing stops with no departures")
     db.pragma("foreign_keys = OFF")
-    db.exec("DELETE FROM stops WHERE stops.id NOT IN (SELECT DISTINCT stances.stop FROM stop_times INNER JOIN stances ON stances.code=stop_id);");
+    db.exec("DELETE FROM stops WHERE stops.id NOT IN (SELECT DISTINCT stances.stop FROM stop_times INNER JOIN stances ON stances.code=stop_id) AND (NOT EXISTS(SELECT 1 FROM stances WHERE stances.stop=stops.id AND crs IS NOT NULL));");
+    console.log("Rebuilding stop search table")
     // Rebuild stops_search table
     db.exec("DROP TABLE IF EXISTS stops_search;");
     db.exec("CREATE VIRTUAL TABLE stops_search USING fts5(name, parent, qualifier, id UNINDEXED);");

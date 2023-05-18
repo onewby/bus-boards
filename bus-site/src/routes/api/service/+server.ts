@@ -11,7 +11,7 @@ proj4.defs("EPSG:27700","+proj=tmerc +lat_0=49 +lon_0=-2 +k=0.9996012717 +x_0=40
 export const GET: RequestHandler = async ({url}) => {
     const id = url.searchParams.get("id")
     if(id === null) throw error(400, "ID not provided.")
-    const service = db.prepare(`SELECT route_short_name as code, trip_headsign as dest FROM trips
+    const service = db.prepare(`SELECT route_short_name as code, trip_headsign as dest, max_stop_seq as mss FROM trips
                                             INNER JOIN main.routes r on r.route_id = trips.route_id
                                             WHERE trip_id=?`).get(id)
     if(service === undefined) throw error(404, "Service not found.")
@@ -34,6 +34,7 @@ export const GET: RequestHandler = async ({url}) => {
     // Simplify tram listings - show more akin to trains
     switch(operator.name) {
         case "Edinburgh Trams":
+        case "Tyne and Wear Metro":
         case "Metrolink":
             stops.forEach(stop => stop.ind = "")
         // Fallthrough
@@ -79,6 +80,7 @@ export const GET: RequestHandler = async ({url}) => {
         stop.puo = stop.puo === 1
         delete stop.seq
     })
+    delete service.mss
     
     return json({
         "service": service,
@@ -96,7 +98,8 @@ const suffixes: Record<string, string|RegExp> = {
     "Edinburgh Trams": "",
     "Metrolink": " (Manchester Metrolink)",
     "West Midlands Metro": /\(.*\)/,
-    "Nottingham Express Transit (Tram)": " Tram Stop"
+    "Nottingham Express Transit (Tram)": " Tram Stop",
+    "Tyne and Wear Metro": " (Tyne and Wear Metro Station)"
 }
 
 /*

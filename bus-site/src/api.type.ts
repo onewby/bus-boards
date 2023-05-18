@@ -22,7 +22,10 @@ export type StopData = {
     },
     stances: {
         code: string,
-        indicator: string
+        street: string,
+        indicator: string,
+        lat: number,
+        long: number
     }[],
     times: StopDeparture[]
 }

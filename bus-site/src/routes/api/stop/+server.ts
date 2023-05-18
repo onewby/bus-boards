@@ -37,7 +37,7 @@ export const GET: RequestHandler = async ({url}) => {
     let offset = Math.round(startTime.diffNow("minutes").minutes)
 
     let stance_info = db.prepare(
-        "SELECT code, indicator, crs FROM stances WHERE stop=?"
+        "SELECT code, indicator, street, crs, lat, long FROM stances WHERE stop=?"
     ).all(stop_info['id'])
 
     const stationPromises = Math.abs(offset) <= 120 ?
@@ -92,7 +92,7 @@ export const GET: RequestHandler = async ({url}) => {
     const stations = await Promise.all(stationPromises)
     const services = stations.filter(board => board.trainServices).flatMap(board => board.trainServices!.service)
     const fromAfternoon = services.length > 0 && (services[0].std ?? services[0].sta!)[0] === "1"
-    const trainTimes: StopDeparture[] = services.map(service => ({
+    const trainTimes: StopDeparture[] = services.filter(service => service.operatorCode !== "TW").map(service => ({
         trip_id: service.serviceID,
         trip_headsign: service.destination.location.map(loc => loc.locationName).join(" & "),
         route_short_name: "",

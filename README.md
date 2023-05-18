@@ -78,20 +78,20 @@ by Google. Presumably due to the complexity of TransXChange (or possibly due
 to overlap between first-party BODS data and the Traveline National Dataset), 
 the datasets don't convert perfectly over to GTFS, so there are some
 inaccuracies in the timetable:
-- Bus duplication - at Leeds Bus Station, most Flyer services are also 
-  registered as Coastliner services.
-- Wrong start/end times - the East Yorkshire Scarborough-Helmsley route 
-  shows services on the X28, which no longer exists in the new timetable.
+- Bus duplication - in the past, at Leeds Bus Station, most Flyer services have 
+  also been registered as Coastliner services.
+- Wrong start/end times - the East Yorkshire 128 Scarborough-Helmsley route 
+  used to show services on the X28, which no longer existed in a new timetable.
 
 bustimes.org uses TransXChange files directly, so contains a more accurate 
 view of services. For the most accurate data, this project would likely have 
 to do the same.
 
 ### There are a lot of buses
-Why don't buses do things like trains? The most basic reason... there are 
-more buses than trains! The [Stagecoach 143 from Manchester - West Didsbury](https://bustimes.org/services/143-manchester-west-didsbury-2) 
-alone will operate up to every 5 minutes during the day on a bus corridor so 
-busy it has [its own Wikipedia page](https://en.wikipedia.org/wiki/Wilmslow_Road_bus_corridor).
+Why don't buses do things like trains? The main reason... there are 
+more buses than trains! The [Stagecoach 143 from Manchester to West Didsbury](https://bustimes.org/services/143-manchester-west-didsbury-2) 
+alone will operate up to every 5 minutes during the day. It's on a bus 
+corridor so busy it has [its own Wikipedia page](https://en.wikipedia.org/wiki/Wilmslow_Road_bus_corridor).
 This can often lead to a very crowded departures list. The stance and 
 operator filters help in part to address this.
 
@@ -101,33 +101,24 @@ operator filters help in part to address this.
 The repository is set up with a root directory and bus-site directory to 
 accommodate for a Python module with a JavaScript submodule in IntelliJ. 
 There are better/clearer ways to organise this, so this may change.
-Setup is currently quite lengthy and may be more automated soon.
 
-1. Download the archive of [all bus timetables data in GTFS format](https://data.bus-data.dft.gov.uk/timetable/download/gtfs-file/all/)
-   from the Bus Open Data Service and place it in bus-site/gtfs. You may 
-   need a free account to access this.
-2. Place the [NaPTAN in CSV format](https://naptan.api.dft.gov.uk/v1/access-nodes?dataFormat=csv)
-   into the root directory as `Stops.csv`, and the [NPTG in XML format](https://naptan.api.dft.gov.uk/v1/nptg)
-   into the root directory as `NPTG.xml`.
-3. Install Python dependencies in the root directory using `pip3 install -r 
+1. Install Python dependencies in the root directory using `pip3 install -r 
    requirements.txt`. If there are conflicts, look into using a `virtualenv`.
-4. Install JavaScript dependencies in `bus-site` using `npm install` in the 
+2. Install JavaScript dependencies in `bus-site` using `npm install` in the 
    `bus-site` directory.
-5. Generate stop data by running `stance_grouping.py`.
-6. Insert stop data into the database by running `localities.py`.
-7. In the `bus-site` directory, run `npm run gtfs`, which will run 
-  `import_gtfs.ts`.
-8. [Register for OpenLDBWS](http://realtime.nationalrail.co.uk/OpenLDBWSRegistration/)
-   and store the API token in an environment variable named `DARWIN_API_KEY`.
-9. Run the site from the `bus-site` directory using `npm run dev` or `npm 
-   run preview`.
+3. To regenerate the crs.csv ATCO code to CRS mappings, place the [NaPTAN in 
+   XML format](https://naptan.api.dft.gov.uk/v1/access-nodes?dataFormat=xml) 
+   in the root directory as NaPTAN.xml and run `python3 stations.py`. The 
+   NaPTAN in XML format is ~500MB, so only do this if you really need to.
+4. Run `./buildDB.sh` to build the database for the first time. You can 
+   re-run this to regenerate locality and stance data at any point, or you 
+   can use `./rebuildDB.sh` in subsequent rebuilds to only update timetable 
+   data.
 
 
 ## Next steps
 
 - [ ] Fix unmerged stances (e.g. for Seacroft and Wakefield Bus Stations)
-- [ ] Manual route fixes (e.g. remove Flyer/Coastliner duplicates, change 888 
-  destination from "Vauxhall" to "Luton Airport Parkway")
 - [ ] Delay prediction
   - [ ] Show on departures board 
 - [ ] Use route shape data for improved locating
@@ -142,11 +133,7 @@ Setup is currently quite lengthy and may be more automated soon.
 - [ ] Locality pages (view all stops in a locality)
 - [x] Host online
 - [ ] Filter boards by destination or calling points
-- [ ] Show maps of all the stances grouped within a stop
-- [ ] Simplify and automate more of setup
-  - [ ] Explore downloading individual region files and inserting rows into the 
-    database in parallel to speed up initialisation
-  - [ ] Write database migrations
+- [x] Show maps of all the stances grouped within a stop
 
 
 ## Data sources

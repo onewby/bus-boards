@@ -6,6 +6,9 @@ import type {ServiceBranch, ServiceStopData} from "../../../api.type";
 import {DateTime} from "luxon";
 import {db} from "../../../db";
 
+const UK_CTR_LONG = -2.547855
+const UK_CTR_LAT = 54.00366
+
 export const GET: RequestHandler = async ({url}) => {
     let id = url.searchParams.get("id")
     if(id === null) throw error(404, "ID not provided.")
@@ -51,7 +54,7 @@ export const GET: RequestHandler = async ({url}) => {
 
         const stops: ServiceStopData[] =
             cps.map(cp => ({
-                id: coords[cp.crs]['stop'],
+                id: coords[cp.crs]?.['stop'] ?? -1,
                 name: cp.locationName,
                 loc: undefined,
                 ind: cp.crs === details.crs && details.platform ? "Platform " + details.platform : undefined,
@@ -60,8 +63,8 @@ export const GET: RequestHandler = async ({url}) => {
                 puo: false,
                 doo: false,
                 major: true,
-                long: coords[cp.crs]?.['long'] ?? 54.00366,
-                lat: coords[cp.crs]?.['lat'] ?? -2.547855,
+                long: coords[cp.crs]?.['long'] ?? UK_CTR_LONG,
+                lat: coords[cp.crs]?.['lat'] ?? UK_CTR_LAT,
                 status: cp.et ? (isNum(cp.et[0]) ? "Exp. " + cp.et : cp.et)
                     : cp.at ? (isNum(cp.at[0]) ? "Dep. " + cp.at : cp.at) : undefined
             }))
@@ -75,7 +78,7 @@ export const GET: RequestHandler = async ({url}) => {
             pct: currStop == -1 ? undefined : nextStop === cps.length ? 1
                 : Math.min(Math.abs(currTime.diffNow().milliseconds / (currTime.diff(getTime(cps[nextStop]))).milliseconds), 1)
         }
-        const route: [number, number][] = cps.map(cp => [coords[cp.crs]?.["long"] ?? 54.00366, coords[cp.crs]?.["lat"] ?? -2.547855])
+        const route: [number, number][] = cps.map(cp => [coords[cp.crs]?.["long"] ?? UK_CTR_LONG, coords[cp.crs]?.["lat"] ?? UK_CTR_LAT])
         branches.push({
             "dest": dest,
             "stops": stops,

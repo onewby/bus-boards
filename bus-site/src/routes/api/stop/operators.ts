@@ -74,6 +74,7 @@ export const operatorMatches: Record<string, string> = {
     "Hunters Executive Coaches": "#ffffff",
     "John Ferguson Minibus Hirer": "#3792c2",
     "SS Suncruisers": "#ffffff",
+    "TM Travel": "#bd323b",
     "Avanti West Coast": "#1f4555",
     "c2c": "#bc0087",
     "Caledonian Sleeper": "#003941",

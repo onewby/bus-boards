@@ -4,6 +4,14 @@
     import { page } from '$app/stores';
     import Fa from "svelte-fa";
     import type {StopData} from "../../../api.type";
+    import {faMap} from "@fortawesome/free-solid-svg-icons";
+    import {slide} from "svelte/transition";
+    import GeoJSON from "../../service/[type]/[service]/GeoJSON.svelte";
+    import HTMLMarker from "../../service/[type]/[service]/HTMLMarker.svelte";
+    import Map from "@svelte-parts/map/Map.svelte";
+    import Tiles from "@svelte-parts/map/tiles/Tiles.svelte";
+    import 'leaflet/dist/leaflet.css';
+    import L, {GeoJSONOptions} from "leaflet";
 
     // let departures = true
     export let data: StopData;
@@ -38,12 +46,64 @@
     $: filteredTimes = data.times.filter(stop =>
         (operatorFilter === "" || (operators[operatorFilter] !== undefined && operators[operatorFilter].has(stop.operator_id)))
         && (stanceFilter === "" || stop.indicator === stanceFilter))
+
+    let showMap = false;
+    let zoom = 20
+
+    $: geoData = {
+        "type": "FeatureCollection",
+        "features": data?.stances.map(stance => ({
+            "type": "Feature",
+            "properties": {
+                "street": stance.street,
+                "indicator": stance.indicator
+            },
+            "geometry": {
+                "coordinates": [stance.long, stance.lat],
+                "type": "Point"
+            }
+        }))
+    }
+
+    const geoOptions: GeoJSONOptions = {
+        style: function(feature) {
+            return {
+                stroke: true,
+                color: "rgb(100, 83, 9)",
+                weight: 4
+            }
+        },
+        pointToLayer: function (feature, latlng) {
+            let divIcon = L.divIcon({
+                className: "bg-amber-500 h-full w-full rounded border-black border"
+            })
+            let marker = L.marker(latlng, {icon: divIcon})
+            marker.bindPopup(`<b>${feature.properties.street ?? data.stop.name}</b><br>${feature.properties.indicator}`)
+            return marker
+        }
+    }
 </script>
 
 <div class="w-full h-fit overflow-scroll flex flex-col justify-start items-center text-center max-w-full pt-4 pb-8 dark:text-white">
     <Header>
         <div>{#if data.stop.locality_name}{data.stop.locality_name} › {/if}<span class="font-semibold">{data.stop.name}</span></div>
+        <slot slot="buttons">
+            <div class="border-l-black border-l cursor-pointer pl-4 pr-4 pt-2 pb-2 hover:bg-amber-700/5 dark:hover:bg-gray-500/20" on:click={() => showMap = !showMap}>
+                <Fa icon={faMap} class="inline-block" />
+            </div>
+        </slot>
     </Header>
+
+    {#if showMap && data}
+        {@const avgLon = data.stances.map(s => s.long).reduce((a, b) => a + b) / data.stances.length}
+        {@const avgLat = data.stances.map(s => s.lat).reduce((a, b) => a + b) / data.stances.length}
+        <div class="panel w-full mt-2 flex flex-row flex-wrap items-center justify-evenly gap-x-2 gap-y-2" transition:slide>
+            <Map width="100%" height="300px" lon={avgLon} lat={avgLat} bind:zoom>
+                <Tiles />
+                <GeoJSON data={geoData} options={geoOptions} />
+            </Map>
+        </div>
+    {/if}
 
     <div class="panel w-full mt-2 pl-4 pr-4 pt-4 pb-4 flex flex-row flex-wrap items-center justify-evenly gap-x-2 gap-y-2">
         <!--<div class="flex flex-row items-center">

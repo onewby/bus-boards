@@ -17,6 +17,7 @@
         <a href="/" class="pl-4 pr-4 pt-2 pb-2 flex-shrink-0 w-fit whitespace-nowrap hover:bg-amber-700/5 dark:hover:bg-gray-500/20">
             <Fa icon={faBus} class="inline-block mr-2" /> Bus Boards
         </a>
+        <slot name="buttons" />
     </div>
     <slot />
 </div>
