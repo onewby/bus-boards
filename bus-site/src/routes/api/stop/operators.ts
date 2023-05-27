@@ -83,13 +83,32 @@ export const operatorMatches: Record<string, string> = {
     "Metroline Travel": "#E1251B",
     "Red Rose Travel": "#BE0A16",
     "Red Eagle": "#7f221a",
+    "Lynx": "#fb0c1a",
+    "Konectbus": "#123274",
+    "Sanders Coaches": "#f8b91f",
+    "Hedingham": "#e40612",
+    "Chambers": "#6e1c2a",
+    "Stephensons of Essex": "#005026",
+    "Mulleys Motorways": "#FF6600",
+    "Coach Services": "#FFFFFF",
+    "Ipswich Buses": "#8bc540",
+    "Vision Bus": "#00499e",
+    "Lloyds Coaches": "#CECECE",
+    "Mid Wales Travel": "#FFFFFF",
+    "Celtic Travel": "#00d685",
+    "Tanat Valley Coaches": "#1f2537",
+    "Richards Bros": "#0b3c5d",
+    "Newport Bus": "#005f35",
+    "M & H Coaches": "#EBCB00",
+    "Llew Jones Coaches": "#ffbe00",
+    "Phil Anslow Travel": "#56308C",
     "Avanti West Coast": "#1f4555",
     "c2c": "#bc0087",
     "Caledonian Sleeper": "#003941",
     "Chiltern Railways": "#41b6e6",
     "CrossCountry": "#c30045",
     "East Midlands Railway": "#4c2f48",
-    "Elizabeth line": "#773dbd",
+    "Elizabeth Line": "#773dbd",
     "Eurostar": "#ffe600",
     "Gatwick Express": "#DC0A1E",
     "Grand Central": "#333132",
@@ -113,7 +132,7 @@ export const operatorMatches: Record<string, string> = {
     "Stansted Express": "#da1a35",
     "Thameslink": "#ea3b8b",
     "TransPennine Express": "#009DDB",
-    "Transport for Wales": "#af1e0e",
+    "Transport for Wales": "#FF0000",
     "West Midlands Railway": "#ff8200",
     "West Midlands Trains": "#ff8200"
 }
@@ -132,6 +151,7 @@ export const routeOverrides: Record<string, Record<string, string>> = {
     },
     "First York": {
         "2": "#008000",
+        "2A": "#008000",
         "3": "#FFF",
         "7": "#F00",
         "8": "#FF0",
@@ -212,6 +232,47 @@ export const routeOverrides: Record<string, Record<string, string>> = {
     "Tyne and Wear Metro" : {
         "YEL": "#f2bc4a",
         "GRN": "#5eb05f"
+    },
+    "First South & West Wales": {
+        "T1": "#55ae38",
+        "T1A": "#55ae38",
+        "T1S": "#55ae38",
+        "T1X": "#55ae38"
+    },
+    "Mid Wales Travel": {
+        "T1C": "#55ae38"
+    },
+    "Lloyds Coaches": {
+        "T2": "#55ae38",
+        "T3": "#55ae38",
+        "T12": "#55ae38"
+    },
+    "Stagecoach South Wales": {
+        "T4": "#55ae38",
+        "T14": "#55ae38"
+    },
+    "Tanat Valley Coaches": {
+        "T12": "#55ae38"
+    },
+    "Richards Bros": {
+        "T5": "#55ae38",
+        "T11": "#55ae38",
+        "460": "#55ae38"
+    },
+    "Adventure Travel": {
+        "T6": "#55ae38"
+    },
+    "Newport Bus": {
+        "T7": "#55ae38"
+    },
+    "M & H Coaches": {
+        "T8": "#55ae38"
+    },
+    "K&P Coaches": {
+        "T10": "#55ae38"
+    },
+    "Llew Jones Coaches": {
+        "T10": "#55ae38"
     }
 }
 

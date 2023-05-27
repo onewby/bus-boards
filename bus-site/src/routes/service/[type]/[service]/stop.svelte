@@ -19,8 +19,8 @@
     let apiTime = `${ct.getFullYear()}-${dateNum(ct.getMonth() + 1)}-${dateNum(ct.getDate())}T${sub1hr(stop.dep)}`
 </script>
 
-<a href="/stop/{stop.id}?date={apiTime}" class="w-full relative">
-    {#if realtime !== undefined}<div class="bg-blue-400 h-[0.8rem] w-[0.8rem] absolute left-[2.6rem] rounded-full z-10 ring ring-2 ring-white shadow-md" style="top: calc(50% - 0.4rem - {((1-realtime) * 100).toFixed(0)}%)"></div>{/if}
+<a href={stop.id ? `/stop/${stop.id}?date=${apiTime}` : undefined} class="w-full relative">
+    {#if realtime !== undefined}<div class="bg-blue-400 h-[0.8rem] w-[0.8rem] absolute left-[2.6rem] rounded-full z-10 ring ring-white shadow-md" style="top: calc(50% - 0.4rem - {((1-realtime) * 100).toFixed(0)}%)"></div>{/if}
     <div class="flex flex-row w-full pl-8 pr-8 hover:bg-amber-700/5 dark:hover:bg-gray-500/10 items-stretch">
         <div class="flex flex-col">
             <div class="flex-auto mr-4 flex justify-center" class:invisible={type === "origin"}><div class="h-full w-1 bg-black dark:bg-white"></div></div>

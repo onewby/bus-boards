@@ -54,7 +54,7 @@ export const GET: RequestHandler = async ({url}) => {
 
         const stops: ServiceStopData[] =
             cps.map(cp => ({
-                id: coords[cp.crs]?.['stop'] ?? -1,
+                id: coords[cp.crs]?.['stop'] ?? "",
                 name: cp.locationName,
                 loc: undefined,
                 ind: cp.crs === details.crs && details.platform ? "Platform " + details.platform : undefined,
@@ -78,7 +78,7 @@ export const GET: RequestHandler = async ({url}) => {
             pct: currStop == -1 ? undefined : nextStop === cps.length ? 1
                 : Math.min(Math.abs(currTime.diffNow().milliseconds / (currTime.diff(getTime(cps[nextStop]))).milliseconds), 1)
         }
-        const route: [number, number][] = cps.map(cp => [coords[cp.crs]?.["long"] ?? UK_CTR_LONG, coords[cp.crs]?.["lat"] ?? UK_CTR_LAT])
+        const route: [number, number][] = cps.filter(cp => coords[cp.crs]?.['stop']).map(cp => [coords[cp.crs]?.["long"] ?? UK_CTR_LONG, coords[cp.crs]?.["lat"] ?? UK_CTR_LAT])
         branches.push({
             "dest": dest,
             "stops": stops,

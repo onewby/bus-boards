@@ -172,8 +172,6 @@ def standardise_synonyms(df: pd.DataFrame):
     # Standardise naming
     df["CommonName"] = df["CommonName"].str.replace("(?i)Railway ", "Rail ", regex=True)
     df["CommonName"] = df["CommonName"].str.replace("(?i) Stn", " Station", regex=True)
-    # If only instance of name in locality, attempt to remove locality name
-    stn_filter = df["CrsRef"].notna() & ~df[["NptgLocalityCode", "CommonName"]].duplicated(keep=False)
     df["OriginalCommonName"] = df["CommonName"]
     df["CommonName"] = df.apply(lambda x: simplify_station_name(df, x), axis=1)
 
