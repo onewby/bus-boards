@@ -18,7 +18,8 @@ export type StopData = {
     stop: {
         id: number,
         name: string,
-        locality_name: string
+        locality_name: string,
+        locality_code: string
     },
     stances: {
         code: string,

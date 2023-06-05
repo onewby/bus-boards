@@ -130,7 +130,7 @@ There are better/clearer ways to organise this, so this may change.
   - [ ] Improve location finding by finding stops in the same locality 
     within very close range
 - [ ] View arrivals
-- [ ] Locality pages (view all stops in a locality)
+- [x] Locality pages (view all stops in a locality)
 - [x] Host online
 - [ ] Filter boards by destination or calling points
 - [x] Show maps of all the stances grouped within a stop

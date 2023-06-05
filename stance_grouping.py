@@ -77,7 +77,11 @@ locality_changes: List[Tuple[LocalityCode, LocalityName, LocalityCode, LocalityC
     ("N0077860", "Park Lane (Tyne and Wear Metro Station)", "E0057917", np.nan),
     ("E0057948", "Bradford Interchange Rail Station", "N0077005", "Bradford"),
     ("E0057974", "Leeds Rail Station", "N0077039", "Leeds"),
-    ("ES003919", "Dundee Rail Station", "ES000536", "Dundee")
+    ("ES003919", "Dundee Rail Station", "ES000536", "Dundee"),
+    ("E0034956", "London Victoria Coach Station", "E0034917", "Victoria"),
+    ("E0057190", "Luton Rail Station", "N0071638", "Luton"),
+    ("N0078022", "Bus Station", "ES002978", "Glasgow"),
+    ("E0039083", "Rail Station Entrance", "N0071638", "Luton")
 ]
 
 # (locality, from name, to name)
@@ -105,12 +109,40 @@ manual_renames: List[Tuple[LocalityCode, StopName, StopName]] = [
     ("E0057917", "Sunderland Interchange", "Park Lane Interchange"),
     ("E0057917", "Park Lane (Tyne and Wear Metro Station)", "Park Lane Interchange"),
     ("E0057917", "Sunderland (Tyne and Wear Metro Station)", "Rail Station"),
-    ("ES000536", "Station", "Rail Station")
+    ("ES000536", "Station", "Rail Station"),
+    ("E0050224", "East Midlands Parkway Station", "East Midlands Parkway Rail Station"),
+    ("E0030375", "Meadowhall Rail Station", "Meadowhall Interchange"),
+    ("E0030375", "Meadowhall Interchange (S Yorks Supertram)", "Meadowhall Interchange"),
+    ("N0077854", "Metrocentre Rail Station", "Metrocentre Interchange"),
+    ("N0077039", "Leeds BS Ent Real Time Tracking", "Bus Station"),
+    ("N0077039", "Station A", "Rail Station A"),
+    ("N0077039", "Station B", "Rail Station B"),
+    ("N0077039", "Station C", "Rail Station C"),
+    ("N0077039", "Station D", "Rail Station D"),
+    ("N0077039", "Station E", "Rail Station E"),
+    ("N0077039", "Station F", "Rail Station F"),
+    ("N0077039", "Leeds Station Interchange", "Rail Station"),
+    ("E0039258", "Bus Station Express Lounge", "Bus Station"),
+    ("E0033527", "Bus Station stand D", "Seacroft Bus Station"),
+    ("N0075057", "Rail Station", "Manchester Airport Rail Station"),
+    ("N0075057", "Manchester Airport The Station", "Manchester Airport Rail Station"),
+    ("N0075057", "Manchester Airport (Manchester Metrolink)", "Manchester Airport Rail Station"),
+    ("E0034917", "London Victoria Coach Station", "Victoria Coach Station"),
+    ("N0073334", "Broxden Park+Ride", "Park and Ride"),
+    ("N0071638", "Luton Rail Station", "Rail Station Interchange"),
+    ("N0071638", "Luton Station Interchange", "Rail Station Interchange"),
+    ("N0071638", "Rail Station Entrance", "Rail Station Interchange"),
+    ("E0056332", "Bus Station Arrive", "Bus Station"),
+    ("E0015874", "Arrival Stand", "Bus Station"),
+    ("ES002978", "Bus Station", "Partick Station Interchange"),
+    ("ES002978", "Partick Rail Station", "Partick Station Interchange"),
+    ("ES002978", "Partick SPT Subway Station", "Partick Station Interchange")
 ]
 
 # ATCOCodes for stances that should be marked as arrivals that are not
 manual_arrivals: List[str] = [
-    "6400L00040"
+    "6400L00040",
+    "6090117"
 ]
 
 
@@ -168,6 +200,8 @@ def standardise_synonyms(df: pd.DataFrame):
     df["CommonName"] = df["CommonName"].str.replace("The Busway ", "", regex=True)
     # Integrate Edinburgh Trams at Ingliston Park & Ride, Edinburgh Airport and St Andrew Square
     df["CommonName"] = df["CommonName"].str.replace(" (Edinburgh Trams)", "", regex=False)
+    # Manchester Metrolink
+    df["CommonName"] = df["CommonName"].str.replace("(Manchester Metrolink)", "Metrolink Stop", regex=False)
     # Attempt to integrate stations
     # Standardise naming
     df["CommonName"] = df["CommonName"].str.replace("(?i)Railway ", "Rail ", regex=True)

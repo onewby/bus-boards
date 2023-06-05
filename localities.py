@@ -57,7 +57,7 @@ def insert_localities(db: sqlite3.Connection):
     data = [convert_locality(locality) for locality in localities]
 
     # Add localities to the database
-    db.executemany("REPLACE INTO localities (code, name, qualifier, parent, lat, long) VALUES (?, ?, ?, ?, ?, ?)", data)
+    db.executemany("REPLACE INTO localities (code, name, qualifier, parent, long, lat) VALUES (?, ?, ?, ?, ?, ?)", data)
     db.execute("DROP TABLE IF EXISTS localities_search")
     db.execute("CREATE VIRTUAL TABLE localities_search USING fts5(name, qualifier, code UNINDEXED)")
     db.execute("INSERT INTO localities_search(name, qualifier, code) SELECT name, qualifier, code FROM localities")
@@ -93,6 +93,7 @@ def insert_stops(db: sqlite3.Connection):
     print("Generating locality names")
 
     # Generate locality names based on locality hierarchy
+
     db.execute("""UPDATE stops SET locality_name =
                      (SELECT GROUP_CONCAT(name, ' › ') FROM (
                         WITH RECURSIVE

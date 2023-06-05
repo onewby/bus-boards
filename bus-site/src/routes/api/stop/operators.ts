@@ -102,6 +102,7 @@ export const operatorMatches: Record<string, string> = {
     "M & H Coaches": "#EBCB00",
     "Llew Jones Coaches": "#ffbe00",
     "Phil Anslow Travel": "#56308C",
+    "Nottingham City Transport": "#00857a",
     "Avanti West Coast": "#1f4555",
     "c2c": "#bc0087",
     "Caledonian Sleeper": "#003941",
@@ -134,7 +135,12 @@ export const operatorMatches: Record<string, string> = {
     "TransPennine Express": "#009DDB",
     "Transport for Wales": "#FF0000",
     "West Midlands Railway": "#ff8200",
-    "West Midlands Trains": "#ff8200"
+    "West Midlands Trains": "#ff8200",
+    "London Docklands Light Railway - TfL": "#00afaa",
+    "MBNA THAMES CLIPPERS": "#000000",
+    "Woolwich Free Ferry": "#00a0df",
+    "London Tramlink": "#76bc21",
+    "SPT Subway": "#ff6200"
 }
 
 export const routeOverrides: Record<string, Record<string, string>> = {
@@ -229,9 +235,41 @@ export const routeOverrides: Record<string, Record<string, string>> = {
         "V1": "#ffd400",
         "X38": "#0091b0"
     },
+    "Nottingham City Transport": {
+        "4": "#002663",
+        "5": "#007A4D",
+        "6": "#007A4D",
+        "15": "#935E3A",
+        "17": "#935E3A",
+        "24": "#C1AFE5",
+        "27": "#C1AFE5",
+        "28": "#DA487E",
+        "30": "#DA487E",
+        "39": "#00A1DE",
+        "41": "#00A1DE",
+        "42": "#00A1DE",
+        "44": "#CD202C",
+        "45": "#6AADE4",
+        "46": "#6AADE4",
+        "47": "#6AADE4",
+        "50": "#CD202C",
+        "59": "#92D400",
+        "78": "#3FCFD5",
+        "87": "#522398",
+        "88": "#522398",
+        "N4": "#002663",
+        "N26": "#C1AFE5",
+        "N34": "#E37222"
+    },
     "Tyne and Wear Metro" : {
         "YEL": "#f2bc4a",
         "GRN": "#5eb05f"
+    },
+    "Stagecoach Supertram": {
+        "YELL": "#ECB739",
+        "TT": "#000000",
+        "BLUE": "#0277c1",
+        "PURP": "#772b90"
     },
     "First South & West Wales": {
         "T1": "#55ae38",
@@ -273,6 +311,54 @@ export const routeOverrides: Record<string, Record<string, string>> = {
     },
     "Llew Jones Coaches": {
         "T10": "#55ae38"
+    },
+    "London Underground (TfL)": {
+        "Bakerloo": "#a65a2a",
+        "Central": "#e1251b",
+        "Circle": "#ffcd00",
+        "District": "#007934",
+        "Hammersmith & City": "#ec9bad",
+        "Jubilee": "#7b868c",
+        "Metropolitan": "#870f54",
+        "Northern": "#000000",
+        "Piccadilly": "#000f9f",
+        "Victoria": "#00a0df",
+        "Waterloo & City": "#6bcdb2"
+    }
+}
+
+export const routeOverridesPrefixes: Record<string, Record<string, string>> = {
+    "First South & West Wales": {
+        "T1": "#55ae38",
+    },
+    "Nottingham City Transport": {
+        "1": "#002663",
+        "3": "#002663",
+        "7": "#007A4D",
+        "8": "#007A4D",
+        "9": "#007A4D",
+        "10": "#007A4D",
+        "11": "#007A4D",
+        "16": "#935E3A",
+        "25": "#C1AFE5",
+        "26": "#C1AFE5",
+        "34": "#E37222",
+        "35": "#E37222",
+        "36": "#E37222",
+        "40": "#00A1DE",
+        "44": "#CD202C",
+        "48": "#002663",
+        "49": "#002663",
+        "56": "#92D400",
+        "57": "#92D400",
+        "58": "#92D400",
+        "68": "#FED100",
+        "69": "#FED100",
+        "70": "#FED100",
+        "71": "#FED100",
+        "77": "#3FCFD5",
+        "79": "#3FCFD5",
+        "89": "#522398"
     }
 }
 
@@ -286,3 +372,9 @@ export const operatorRegex: Record<string, string> = {
     "Diamond.*": "#014790",
     "METROLINE.*": "#E1251B"
 }
+
+export const intercityOperators: string[] = [
+    "National Express",
+    "Megabus",
+    "Flixbus"
+]

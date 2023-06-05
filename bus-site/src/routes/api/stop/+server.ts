@@ -1,7 +1,7 @@
 import type {RequestHandler} from "./$types";
 import {error, json} from "@sveltejs/kit";
 import {db} from "../../../db";
-import {operatorRegex, operatorMatches, routeOverrides} from "./operators";
+import {operatorRegex, operatorMatches, routeOverrides, routeOverridesPrefixes} from "./operators";
 import {DateTime} from "luxon";
 import type {ServiceBoard} from "../../../darwin/darwin";
 import type {StopDeparture} from "../../../api.type";
@@ -29,7 +29,7 @@ export const GET: RequestHandler = async ({url}) => {
     let naiveAdd24End = addTimeNaive(startTime.toSQLTime(), 24 + HOURS_TO_SHOW)
 
     let stop_info = db.prepare(
-        "SELECT id, name, locality_name FROM stops WHERE id=?"
+        "SELECT id, name, locality_name, locality as locality_code FROM stops WHERE id=?"
     ).get(id)
 
     if(stop_info == undefined) throw error(404, "Stop not found.")
@@ -89,6 +89,22 @@ export const GET: RequestHandler = async ({url}) => {
     stop_times.forEach(time => time['departure_time'] = modTime(time['departure_time']))
     stop_times.forEach(time => time.type = "bus")
 
+    // Coastliner/Flyer workaround (duplicate services under Coastliner + Flyer names, only Coastliner ones track)
+    let replaced: StopDeparture[] = []
+    stop_times.filter((time) => (
+        time.operator_name === "Coastliner"
+        && time.route_short_name.startsWith("A")))
+    .forEach((time) => {
+        let toReplace = stop_times.find((s2) => s2.operator_name === "Flyer" && s2.route_short_name === time.route_short_name && s2.departure_time === time.departure_time)
+        if(toReplace) {
+            time.operator_name = "Flyer"
+            replaced.push(toReplace)
+        }
+    })
+    stop_times = stop_times.filter((stop) => !replaced.includes(stop))
+    // SPT Subway workaround
+    stop_times = stop_times.filter((stop) => stop.operator_name !== "SPT Subway" || stop.indicator)
+
     const stations = await Promise.all(stationPromises)
     const services = stations.filter(board => board.trainServices).flatMap(board => board.trainServices!.service)
     const fromAfternoon = services.length > 0 && (services[0].std ?? services[0].sta!)[0] === "1"
@@ -123,7 +139,7 @@ export const GET: RequestHandler = async ({url}) => {
         }
         return colours[a] = "#777"
     })
-    stop_times.forEach(time => time.colour = routeOverrides[time.operator_name]?.[time.route_short_name] ?? colours[time.operator_name])
+    stop_times.forEach(time => time.colour = routeOverrides[time.operator_name]?.[time.route_short_name] ?? routeOverridesPrefixes[time.operator_name]?.[time.route_short_name.match("(.*)[A-Z]")?.[1] ?? time.route_short_name] ?? colours[time.operator_name])
 
     return json({
         "stop": stop_info,

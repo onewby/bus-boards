@@ -89,7 +89,7 @@
 
 <div class="w-full h-fit overflow-scroll flex flex-col justify-start items-center text-center max-w-full pt-4 pb-8 dark:text-white">
     <Header>
-        <div>{#if data.stop.locality_name}{data.stop.locality_name} › {/if}<span class="font-semibold">{data.stop.name}</span></div>
+        <div>{#if data.stop.locality_name}<a href="/locality/{data.stop.locality_code}" class="hover:underline">{data.stop.locality_name}</a> › {/if}<span class="font-semibold">{data.stop.name}</span></div>
         <slot slot="buttons">
             <div class="border-l-black border-l cursor-pointer pl-4 pr-4 pt-2 pb-2 hover:bg-amber-700/5 dark:hover:bg-gray-500/20" on:click={() => showMap = !showMap}>
                 <Fa icon={faMap} class="inline-block" />

@@ -5,6 +5,7 @@ import {DateTime} from "luxon";
 import {FeedMessage} from "./gtfs-realtime";
 import {Uint8ArrayWriter, ZipReader} from "@zip.js/zip.js";
 import proj4 from "proj4";
+import {intercityOperators} from "../stop/operators";
 
 proj4.defs("EPSG:27700","+proj=tmerc +lat_0=49 +lon_0=-2 +k=0.9996012717 +x_0=400000 +y_0=-100000 +ellps=airy +datum=OSGB36 +units=m +no_defs");
 
@@ -17,7 +18,7 @@ export const GET: RequestHandler = async ({url}) => {
     if(service === undefined) throw error(404, "Service not found.")
     const stops = db.prepare(`SELECT stops.id, stops.name, indicator as ind, arrival_time as arr,departure_time as dep, l.name as loc,
                                             timepoint as major, drop_off_type as doo, pickup_type as puo, stances.lat as lat, stances.long as long,
-                                            stop_sequence as seq
+                                            stop_sequence as seq, stops.locality_name AS full_loc
                                         FROM stop_times
                                             INNER JOIN stances on stances.code = stop_times.stop_id
                                             INNER JOIN stops on stops.id = stances.stop
@@ -31,15 +32,31 @@ export const GET: RequestHandler = async ({url}) => {
                                         FROM shapes INNER JOIN trips t on shapes.shape_id = t.shape_id
                                         WHERE trip_id=? ORDER BY shape_pt_sequence`).all(id)
 
+    // Better coach listings - show root locality name
+    if(intercityOperators.includes(operator.name)) {
+        stops.forEach((stop) => {
+            let existingLoc = stop.loc
+            stop.loc = stop.full_loc.split(" › ")[0];
+            if(stop.name == "Park and Ride" && existingLoc != stop.loc) {
+                stop.name = existingLoc + " " + stop.name
+            }
+        })
+    }
+    stops.forEach((stop) => delete stop.full_loc)
+
     // Simplify tram listings - show more akin to trains
     switch(operator.name) {
         case "Edinburgh Trams":
         case "Tyne and Wear Metro":
         case "Metrolink":
+        case "SPT Subway":
+        case "London Underground (TfL)":
             stops.forEach(stop => stop.ind = "")
         // Fallthrough
         case "West Midlands Metro":
         case "Nottingham Express Transit (Tram)":
+        case "London Docklands Light Railway - TfL":
+        case "London Tramlink":
             stops.forEach(stop => stop.name = stop.name.replace(suffixes[operator.name], ""))
         // Fallthrough
         case "Stagecoach Supertram":
@@ -99,7 +116,12 @@ const suffixes: Record<string, string|RegExp> = {
     "Metrolink": " (Manchester Metrolink)",
     "West Midlands Metro": /\(.*\)/,
     "Nottingham Express Transit (Tram)": " Tram Stop",
-    "Tyne and Wear Metro": " (Tyne and Wear Metro Station)"
+    "Tyne and Wear Metro": " (Tyne and Wear Metro Station)",
+    "Stagecoach Supertram": / \(S Yorks Supertram\)| \(South Yorkshire Supertram\)/,
+    "London Docklands Light Railway - TfL": " DLR Station",
+    "London Tramlink": " Tram Stop",
+    "SPT Subway": " SPT Subway Station",
+    "London Underground (TfL)": " Underground Station"
 }
 
 /*

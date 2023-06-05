@@ -24,10 +24,10 @@
         </div>
         <div class="flex-grow pt-2 pb-2 flex flex-col justify-center">{service.trip_headsign}</div>
         <div class="mr-4 flex flex-col justify-center text-right">
-            {#if service.indicator}{service.indicator}{/if}
+            {#if service.indicator && service.status !== 'Cancelled'}{service.indicator}{/if}
             {#if service.status}
-                {#if service.indicator}<br>{/if}
-                <span class="text-sm text-gray-700 dark:text-gray-300 {service.status === 'Cancelled' ? 'text-red-600 dark:text-red-400' : ''}">
+                {#if service.indicator && service.status !== 'Cancelled'}<br>{/if}
+                <span class="text-sm text-gray-700 dark:text-gray-300 {service.status === 'Cancelled' ? 'text-base text-red-600 dark:text-red-400' : ''}">
                     {service.status}
                 </span>
             {/if}
