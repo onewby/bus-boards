@@ -252,7 +252,7 @@ def split_stop_name(stop: str):
             pattern = leeds_regex.fullmatch(stop)
             if pattern is None:
                 pattern = station_regex.fullmatch(stop)
-    if pattern is None or pattern.group("stop") == "Number" or "H&R" in pattern.group("stop") or "H & R" in pattern.group("stop") or pattern.group("stop").endswith("No") or pattern.group("stop").endswith("No.") or pattern.group("stop").endswith("Unit"):
+    if pattern is None or pattern.group("stop") == "Number" or "H&R" in pattern.group("stop") or "H & R" in pattern.group("stop") or pattern.group("stop").endswith("No") or pattern.group("stop").endswith("No.") or pattern.group("stop").endswith("Unit") or pattern.group("stop") == "Heathrow Terminal":
         return None
     return {"original": stop, "stop": pattern.group("stop"), "stance": pattern.group("stance")}
 

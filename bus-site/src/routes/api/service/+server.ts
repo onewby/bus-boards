@@ -35,6 +35,7 @@ export const GET: RequestHandler = async ({url}) => {
     // Better coach listings - show root locality name
     if(intercityOperators.includes(operator.name)) {
         stops.forEach((stop) => {
+            if(stop.loc.includes("University") || stop.loc.includes("Airport")) return
             let existingLoc = stop.loc
             stop.loc = stop.full_loc.split(" › ")[0];
             if(stop.name == "Park and Ride" && existingLoc != stop.loc) {
@@ -60,7 +61,9 @@ export const GET: RequestHandler = async ({url}) => {
             stops.forEach(stop => stop.name = stop.name.replace(suffixes[operator.name], ""))
         // Fallthrough
         case "Stagecoach Supertram":
-            stops.forEach(stop => stop.loc = "")
+            stops.forEach(stop => {
+                if(stop.name !== "Rail Station") stop.loc = "";
+            })
     }
 
     let route
@@ -113,7 +116,7 @@ export const GET: RequestHandler = async ({url}) => {
 
 const suffixes: Record<string, string|RegExp> = {
     "Edinburgh Trams": "",
-    "Metrolink": " (Manchester Metrolink)",
+    "Metrolink": " Metrolink Stop",
     "West Midlands Metro": /\(.*\)/,
     "Nottingham Express Transit (Tram)": " Tram Stop",
     "Tyne and Wear Metro": " (Tyne and Wear Metro Station)",

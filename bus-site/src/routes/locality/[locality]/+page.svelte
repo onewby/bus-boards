@@ -37,6 +37,11 @@
             data.results.map(child => childToGeoJSON(child, "stop")))
     }
 
+    const popupOptions = {
+        maxWidth: 108,
+        className: "mapPopup"
+    }
+
     const geoOptions = {
         style: function(feature) {
             return {
@@ -50,7 +55,7 @@
                 className: "h-full w-full border-black border " + (feature.properties.type === "stop" ? "bg-amber-500 rounded": "bg-slate-800 rounded-full")
             })
             let marker = L.marker(latlng, {icon: divIcon})
-            marker.bindPopup(`${feature.properties.type === "stop" ? "Stop" : "Locality"}<br><b><a href="/${feature.properties.type}/${feature.properties.id}">${feature.properties.name}</a></b>`)
+            marker.bindPopup(`${feature.properties.type === "stop" ? "Stop" : "Locality"}<br><b><a href="/${feature.properties.type}/${feature.properties.id}">${feature.properties.name}</a></b>`, popupOptions)
             return marker
         }
     }

@@ -28,3 +28,9 @@
         <Copyright />
     </div>
 </div>
+
+<style>
+    :global(.mapPopup) {
+        @apply font-sans;
+    }
+</style>

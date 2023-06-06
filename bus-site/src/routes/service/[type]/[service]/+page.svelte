@@ -66,6 +66,11 @@
         }))
     }
 
+    const popupOptions = {
+        maxWidth: 108,
+        className: "mapPopup"
+    }
+
     const geoOptions: GeoJSONOptions = {
         style: function(feature) {
             return {
@@ -79,7 +84,7 @@
                 className: "bg-amber-500 h-full w-full rounded border-black border"
             })
             let marker = L.marker(latlng, {icon: divIcon})
-            marker.bindPopup(`<b>${feature.properties.name} (${feature.properties.ind})</b><br>${feature.properties.loc}`)
+            marker.bindPopup(`<b>${feature.properties.name} (${feature.properties.ind})</b><br>${feature.properties.loc}`, popupOptions)
             return marker
         }
     }
