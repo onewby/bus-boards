@@ -11,10 +11,14 @@
 
     const { getMap } = getContext('leaflet_map')
     const map = getMap()
+    const popupOptions = {
+        maxWidth: 108,
+        className: "mapPopup"
+    }
 
     const icon = L.divIcon(divIcon)
     const d = L.marker([lat, lon], {icon: icon, zIndexOffset: zIndex})
-    if (popup) { d.bindPopup(popup) }
+    if (popup) { d.bindPopup(popup, popupOptions) }
     if (map) { d.addTo(map) }
 
     $: lat, lon, d.setLatLng({lat: lat, lng: lon})
