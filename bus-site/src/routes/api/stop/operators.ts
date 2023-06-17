@@ -312,6 +312,11 @@ export const routeOverrides: Record<string, Record<string, string>> = {
     "Llew Jones Coaches": {
         "T10": "#55ae38"
     },
+    "Coastliner": {
+        "A1": "#e1a600",
+        "A2": "#e1a600",
+        "A3": "#e1a600"
+    },
     "London Underground (TfL)": {
         "Bakerloo": "#a65a2a",
         "Central": "#e1251b",
