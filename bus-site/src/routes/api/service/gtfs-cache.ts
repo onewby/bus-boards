@@ -8,8 +8,9 @@ import type {ServiceData} from "../../../api.type";
  */
 
 let gtfsCache: FeedMessage = {header: undefined, entity: []}
-let serviceCache: Record<string, ServiceData> = {}
 let lastCacheTime = DateTime.now().minus({minute: 10})
+// Caches /api/service outputs for tracking services to prevent latency from recalculating delay (cleared on GTFS update)
+let serviceCache: Record<string, ServiceData> = {}
 
 let currentFetch: Promise<FeedMessage> | null = null
 
@@ -26,7 +27,7 @@ async function getGTFS() {
 async function _getGTFS() {
     if(lastCacheTime.diffNow().toMillis() <= -30000) {
         const gtfsResp = await fetch("https://data.bus-data.dft.gov.uk/avl/download/gtfsrt")
-        if(!gtfsResp.ok || !gtfsResp.body) return gtfsCache
+        if(!gtfsResp.ok || !gtfsResp.body) return gtfsCache // Fail nicely - provide previous cache
 
         const zipReader = new ZipReader(gtfsResp.body)
         let file = (await zipReader.getEntries()).shift()
@@ -39,15 +40,18 @@ async function _getGTFS() {
     return gtfsCache
 }
 
+// Locate trip in GTFS cache
 export async function findRealtimeTrip(tripID: string) {
     let gtfs = await getGTFS()
     return gtfs.entity.find(entity => entity.vehicle?.trip?.tripId === tripID)
 }
 
+// Return a service in the /api/service cache
 export function getRTServiceData(tripID: string): ServiceData {
     return serviceCache[tripID]
 }
 
+// Insert a service into the /api/service cache
 export function cacheService(tripID: string, data: ServiceData) {
     serviceCache[tripID] = data
 }

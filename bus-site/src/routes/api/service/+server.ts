@@ -67,6 +67,7 @@ export const GET: RequestHandler = async ({url}) => {
             })
     }
 
+    // Route line shape for map
     let route: [number, number][]
     if(shape && shape.length > 0) {
         route = shape.map(s => [s.long, s.lat])
@@ -83,29 +84,31 @@ export const GET: RequestHandler = async ({url}) => {
             let currentStopIndex = stops.findIndex(stop => stop.seq === currentStop)
             let pos = getStopPositions.all({seq: currentStop, id: id})
             if(pos.length == 2) {
+                // Positioning
                 const prevBNG = bngToWGS84.inverse({x: pos[0]["long"], y: pos[0]["lat"]})
                 const currBNG = bngToWGS84.inverse({x: pos[1]["long"], y: pos[1]["lat"]})
                 const posBNG = bngToWGS84.inverse({x: currentPos.longitude, y: currentPos.latitude})
                 const pct = findPctBetween(prevBNG, currBNG, posBNG)
 
-                // expected stop = stop closest to current time
-                const currentTime = DateTime.now()
-                // Calculate delay
+                // Calculate bus delay per stop
                 let prevStop: ServiceStopData = stops[currentStopIndex - 1]
                 let currStop: ServiceStopData = stops[currentStopIndex]
 
                 let prevDep = DateTime.fromSQL(prevStop.dep)
                 let currArr = DateTime.fromSQL(currStop.arr)
+                // Get the time that the bus should have been at this position at
                 let expectedTime = prevDep.plus(currArr.diff(prevDep).mapUnits(u => isNaN(pct) ? u : u * pct))
 
-                let delay = currentTime.diff(expectedTime)
+                // Delay = current time - expected time
+                let delay = DateTime.now().diff(expectedTime)
 
+                // Apply delay to all stops past the current stop
                 let delays = stops.slice(currentStopIndex, stops.length)
                 for(let stop of delays) {
                     if(delay.toMillis() >= 1000 * 120) {
                         stop.status = "Exp. " + DateTime.fromSQL(stop.arr ?? stop.dep).plus(delay).toFormat("HH:mm")
 
-                        // Absorb delay in different arr/dep times
+                        // Absorb delay in longer layovers
                         if(stop.arr && stop.dep) {
                             delay = delay.minus(DateTime.fromSQL(stop.dep).diff(DateTime.fromSQL(stop.arr)))
                             if(delay.toMillis() < 0) delay = Duration.fromMillis(0)
@@ -114,6 +117,7 @@ export const GET: RequestHandler = async ({url}) => {
                         stop.status = "On time"
                     }
                 }
+                // Show current delayed stop in major stops list for context (since previous stops don't show delay, can look on time when delayed)
                 if(stops[currentStopIndex].status !== "On time") stops[currentStopIndex].major = true
 
                 realtime = {
@@ -125,6 +129,7 @@ export const GET: RequestHandler = async ({url}) => {
         }
     }
 
+    // Convert drop off only and put down only to booleans for "doesn't drop off", "doesn't pick up"
     stops.forEach((stop) => {
         stop.doo = stop.doo === 1
         stop.puo = stop.puo === 1

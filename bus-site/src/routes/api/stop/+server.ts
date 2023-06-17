@@ -12,7 +12,7 @@ import {GET as serviceGet} from "../service/+server"
 // Number of hours to get bus services for
 const HOURS_TO_SHOW = 2
 
-export const GET: RequestHandler = async ({url, fetch}) => {
+export const GET: RequestHandler = async ({url}) => {
     const id = url.searchParams.get("id")
     if(id == null || id == "") throw error(400, "No query provided.")
 
@@ -107,16 +107,19 @@ export const GET: RequestHandler = async ({url, fetch}) => {
     // SPT Subway workaround
     stop_times = stop_times.filter((stop) => stop.operator_name !== "SPT Subway" || stop.indicator)
 
-    // Realtime
+    // Realtime bus info
+    // - Find the buses that are currently tracking
     const trackingStopsBool = (await Promise.all(stop_times.map(async stop => await findRealtimeTrip(stop.trip_id)))).map(stop => !!stop)
     const trackingStops = stop_times.filter((_, i) => trackingStopsBool[i])
     for(let stop of trackingStops) {
+        // - Get their service info if possible
         const url = new URL(`http://localhost/api/service?id=${stop.trip_id}`)
         if(!getRTServiceData(stop.trip_id)) { // @ts-ignore
             await serviceGet({ url: url });
         }
         const serviceData: ServiceData = getRTServiceData(stop.trip_id)
         if(!serviceData || serviceData.branches.length != 1 || !stop.seq) continue;
+        // - Update their status
         stop.status = serviceData.branches[0].stops.find(searchingStop => searchingStop.seq === stop.seq)?.status
     }
 
