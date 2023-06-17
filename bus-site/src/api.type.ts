@@ -11,7 +11,8 @@ export type StopDeparture = {
     operator_name: string,
     type: "bus" | "train",
     status?: string,
-    _timestamp?: DateTime
+    _timestamp?: DateTime,
+    seq?: number
 }
 
 export type StopData = {
@@ -43,7 +44,8 @@ export type ServiceStopData = {
     major: boolean,
     long: number,
     lat: number,
-    status?: string
+    status?: string,
+    seq: number
 }
 
 export type ServiceBranch = {

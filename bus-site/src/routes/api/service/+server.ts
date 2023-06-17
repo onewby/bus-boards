@@ -1,17 +1,18 @@
 import type {RequestHandler} from "./$types";
 import {error, json} from "@sveltejs/kit";
 import {db} from "../../../db";
-import {DateTime} from "luxon";
-import {FeedMessage} from "./gtfs-realtime";
-import {Uint8ArrayWriter, ZipReader} from "@zip.js/zip.js";
+import {DateTime, Duration} from "luxon";
 import proj4 from "proj4";
 import {intercityOperators} from "../stop/operators";
+import type {ServiceData, ServiceStopData} from "../../../api.type";
+import {cacheService, findRealtimeTrip, getRTServiceData} from "./gtfs-cache";
 
 proj4.defs("EPSG:27700","+proj=tmerc +lat_0=49 +lon_0=-2 +k=0.9996012717 +x_0=400000 +y_0=-100000 +ellps=airy +datum=OSGB36 +units=m +no_defs");
 
 export const GET: RequestHandler = async ({url}) => {
     const id = url.searchParams.get("id")
     if(id === null) throw error(400, "ID not provided.")
+    if(getRTServiceData(id)) return json(getRTServiceData(id))
     const service = db.prepare(`SELECT route_short_name as code, trip_headsign as dest, max_stop_seq as mss FROM trips
                                             INNER JOIN main.routes r on r.route_id = trips.route_id
                                             WHERE trip_id=?`).get(id)
@@ -66,7 +67,7 @@ export const GET: RequestHandler = async ({url}) => {
             })
     }
 
-    let route
+    let route: [number, number][]
     if(shape && shape.length > 0) {
         route = shape.map(s => [s.long, s.lat])
     } else {
@@ -82,14 +83,43 @@ export const GET: RequestHandler = async ({url}) => {
             let currentStopIndex = stops.findIndex(stop => stop.seq === currentStop)
             let pos = getStopPositions.all({seq: currentStop, id: id})
             if(pos.length == 2) {
-                const {x: e1, y: n1} = bngToWGS84.inverse({x: pos[0]["long"], y: pos[0]["lat"]})
-                const {x: e2, y: n2} = bngToWGS84.inverse({x: pos[1]["long"], y: pos[1]["lat"]})
-                const {x: eP, y: nP} = bngToWGS84.inverse({x: currentPos.longitude, y: currentPos.latitude})
+                const prevBNG = bngToWGS84.inverse({x: pos[0]["long"], y: pos[0]["lat"]})
+                const currBNG = bngToWGS84.inverse({x: pos[1]["long"], y: pos[1]["lat"]})
+                const posBNG = bngToWGS84.inverse({x: currentPos.longitude, y: currentPos.latitude})
+                const pct = findPctBetween(prevBNG, currBNG, posBNG)
+
+                // expected stop = stop closest to current time
+                const currentTime = DateTime.now()
+                // Calculate delay
+                let prevStop: ServiceStopData = stops[currentStopIndex - 1]
+                let currStop: ServiceStopData = stops[currentStopIndex]
+
+                let prevDep = DateTime.fromSQL(prevStop.dep)
+                let currArr = DateTime.fromSQL(currStop.arr)
+                let expectedTime = prevDep.plus(currArr.diff(prevDep).mapUnits(u => isNaN(pct) ? u : u * pct))
+
+                let delay = currentTime.diff(expectedTime)
+
+                let delays = stops.slice(currentStopIndex, stops.length)
+                for(let stop of delays) {
+                    if(delay.toMillis() >= 1000 * 120) {
+                        stop.status = "Exp. " + DateTime.fromSQL(stop.arr ?? stop.dep).plus(delay).toFormat("HH:mm")
+
+                        // Absorb delay in different arr/dep times
+                        if(stop.arr && stop.dep) {
+                            delay = delay.minus(DateTime.fromSQL(stop.dep).diff(DateTime.fromSQL(stop.arr)))
+                            if(delay.toMillis() < 0) delay = Duration.fromMillis(0)
+                        }
+                    } else {
+                        stop.status = "On time"
+                    }
+                }
+                if(stops[currentStopIndex].status !== "On time") stops[currentStopIndex].major = true
 
                 realtime = {
                     stop: currentStopIndex,
                     pos: currentPos,
-                    pct: findPctBetween({x: e1, y: n1}, {x: e2, y: n2}, {x: eP, y: nP})
+                    pct: pct
                 }
             }
         }
@@ -98,11 +128,10 @@ export const GET: RequestHandler = async ({url}) => {
     stops.forEach((stop) => {
         stop.doo = stop.doo === 1
         stop.puo = stop.puo === 1
-        delete stop.seq
     })
     delete service.mss
-    
-    return json({
+
+    const data: ServiceData = {
         "service": service,
         "operator": operator,
         "branches": [{
@@ -111,7 +140,11 @@ export const GET: RequestHandler = async ({url}) => {
             "realtime": realtime,
             "route": route
         }]
-    })
+    }
+
+    if(realtime) cacheService(id, data)
+
+    return json(data)
 }
 
 const suffixes: Record<string, string|RegExp> = {
@@ -127,36 +160,9 @@ const suffixes: Record<string, string|RegExp> = {
     "London Underground (TfL)": " Underground Station"
 }
 
-/*
- * Realtime data
- */
-
-let gtfsCache: FeedMessage = {header: undefined, entity: []}
-let lastCacheTime = DateTime.now().minus({minute: 10})
-
-async function getGTFS() {
-    if(lastCacheTime.diffNow("seconds").seconds <= -30) {
-        const gtfsResp = await fetch("https://data.bus-data.dft.gov.uk/avl/download/gtfsrt")
-        if(!gtfsResp.ok || !gtfsResp.body) return gtfsCache
-
-        const zipReader = new ZipReader(gtfsResp.body)
-        let file = (await zipReader.getEntries()).shift()
-        if(!file) return gtfsCache
-
-        gtfsCache = FeedMessage.decode(await file.getData(new Uint8ArrayWriter()))
-        lastCacheTime = DateTime.now()
-    }
-    return gtfsCache
-}
-
-async function findRealtimeTrip(tripID: string) {
-    let gtfs = await getGTFS()
-    return gtfs.entity.find(entity => entity.vehicle?.trip?.tripId === tripID)
-}
-
 const getStopPositions = db.prepare(`SELECT stop_sequence,long,lat FROM stop_times
                                                 INNER JOIN stances on stances.code = stop_times.stop_id
-                                                WHERE (stop_sequence=:seq OR stop_sequence=:seq + 1) AND trip_id=:id`)
+                                                WHERE (stop_sequence=:seq - 1 OR stop_sequence=:seq) AND trip_id=:id`)
 
 const getShape = db.prepare(`SELECT shape_pt_lat as lat, shape_pt_lon as lon FROM shapes
                              WHERE shape_pt_sequence >= (SELECT shape_pt_sequence FROM shapes WHERE shape_pt_lat=:min_lat AND shape_pt_lon=:min_lon)

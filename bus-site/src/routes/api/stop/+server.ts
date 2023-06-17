@@ -4,13 +4,15 @@ import {db} from "../../../db";
 import {operatorRegex, operatorMatches, routeOverrides, routeOverridesPrefixes} from "./operators";
 import {DateTime} from "luxon";
 import type {ServiceBoard} from "../../../darwin/darwin";
-import type {StopDeparture} from "../../../api.type";
+import type {ServiceData, StopDeparture} from "../../../api.type";
 import {darwin} from "../darwin";
+import {findRealtimeTrip, getRTServiceData} from "../service/gtfs-cache";
+import {GET as serviceGet} from "../service/+server"
 
 // Number of hours to get bus services for
 const HOURS_TO_SHOW = 2
 
-export const GET: RequestHandler = async ({url}) => {
+export const GET: RequestHandler = async ({url, fetch}) => {
     const id = url.searchParams.get("id")
     if(id == null || id == "") throw error(400, "No query provided.")
 
@@ -105,6 +107,19 @@ export const GET: RequestHandler = async ({url}) => {
     // SPT Subway workaround
     stop_times = stop_times.filter((stop) => stop.operator_name !== "SPT Subway" || stop.indicator)
 
+    // Realtime
+    const trackingStopsBool = (await Promise.all(stop_times.map(async stop => await findRealtimeTrip(stop.trip_id)))).map(stop => !!stop)
+    const trackingStops = stop_times.filter((_, i) => trackingStopsBool[i])
+    for(let stop of trackingStops) {
+        const url = new URL(`http://localhost/api/service?id=${stop.trip_id}`)
+        if(!getRTServiceData(stop.trip_id)) { // @ts-ignore
+            await serviceGet({ url: url });
+        }
+        const serviceData: ServiceData = getRTServiceData(stop.trip_id)
+        if(!serviceData || serviceData.branches.length != 1 || !stop.seq) continue;
+        stop.status = serviceData.branches[0].stops.find(searchingStop => searchingStop.seq === stop.seq)?.status
+    }
+
     const stations = await Promise.all(stationPromises)
     const services = stations.filter(board => board.trainServices).flatMap(board => board.trainServices!.service)
     const fromAfternoon = services.length > 0 && (services[0].std ?? services[0].sta!)[0] === "1"
@@ -171,7 +186,7 @@ const stopTimesStmt = (dayName: string, prevDayName: string, params: string, add
                     ${addDay == 1 ? "(printf('%02d', (substring(departure_time, 0, 3) + 24)) || substring(departure_time, 3)) as departure_time"
                             : addDay == -1 ? "(printf('%02d', (substring(departure_time, 0, 3) - 24)) || substring(departure_time, 3)) as departure_time"
                             : "departure_time"},
-                    s.indicator,r.route_short_name,a.agency_id as operator_id,a.agency_name as operator_name
+                    s.indicator,r.route_short_name,a.agency_id as operator_id,a.agency_name as operator_name,stop_sequence as seq
                 FROM stop_times
                     INNER JOIN trips t on stop_times.trip_id = t.trip_id
                     INNER JOIN stances s ON stop_times.stop_id = s.code

@@ -27,7 +27,7 @@
             {#if service.indicator && service.status !== 'Cancelled'}{service.indicator}{/if}
             {#if service.status}
                 {#if service.indicator && service.status !== 'Cancelled'}<br>{/if}
-                <span class="text-sm text-gray-700 dark:text-gray-300 {service.status === 'Cancelled' ? 'text-base text-red-600 dark:text-red-400' : ''}">
+                <span class="text-sm text-gray-700 dark:text-gray-300 {service.status !== 'On time' ? 'text-red-600 dark:text-red-400' : ''}" class:text-base={service.status === "Cancelled"}>
                     {service.status}
                 </span>
             {/if}
