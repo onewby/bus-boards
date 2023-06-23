@@ -236,7 +236,7 @@ station_regex = re.compile(r'(?P<stop>[a-zA-Z]+) (?P<stance>[a-zA-Z]\d{1,2})')
 
 
 def simplify_station_name(df: pd.DataFrame, x: Stop):
-    if x["CommonName"].endswith("Rail Station"):
+    if x["CommonName"].endswith("Rail Station") or x["CommonName"].endswith("Bus Station"):
         new_name = x["CommonName"].removeprefix(x["LocalityName"] + " ")
         return new_name if (df["CommonName"] == new_name).any() else x["CommonName"]
     else:

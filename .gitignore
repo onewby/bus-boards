@@ -504,3 +504,4 @@ NPTG.xml
 NaPTAN.xml
 localities.json
 bus-site/dev-dist/
+bus-site/import_gtfs.js
