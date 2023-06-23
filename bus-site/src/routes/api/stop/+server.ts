@@ -109,19 +109,14 @@ export const GET: RequestHandler = async ({url}) => {
 
     // Realtime bus info
     // - Find the buses that are currently tracking
-    const trackingStopsBool = (await Promise.all(stop_times.map(async stop => await findRealtimeTrip(stop.trip_id)))).map(stop => !!stop)
-    const trackingStops = stop_times.filter((_, i) => trackingStopsBool[i])
-    for(let stop of trackingStops) {
-        // - Get their service info if possible
-        const url = new URL(`http://localhost/api/service?id=${stop.trip_id}`)
-        if(!getRTServiceData(stop.trip_id)) { // @ts-ignore
-            await serviceGet({ url: url });
-        }
-        const serviceData: ServiceData = getRTServiceData(stop.trip_id)
-        if(!serviceData || serviceData.branches.length != 1 || !stop.seq) continue;
+    const trackingStops: StopDeparture[] = stop_times.filter(stop => findRealtimeTrip(stop.trip_id))
+    await Promise.all(trackingStops.map(async stop => {
+        // @ts-ignore
+        let serviceData = await getRTServiceData(stop.trip_id)
+        if(!serviceData || serviceData.branches.length != 1 || !stop.seq) return;
         // - Update their status
         stop.status = serviceData.branches[0].stops.find(searchingStop => searchingStop.seq === stop.seq)?.status
-    }
+    }))
 
     const stations = await Promise.all(stationPromises)
     const services = stations.filter(board => board.trainServices).flatMap(board => board.trainServices!.service)

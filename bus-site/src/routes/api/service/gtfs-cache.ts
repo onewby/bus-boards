@@ -1,6 +1,7 @@
 import {FeedMessage} from "./gtfs-realtime";
 import {Uint8ArrayWriter, ZipReader} from "@zip.js/zip.js";
 import type {ServiceData} from "../../../api.type";
+import {GET as serviceGet} from "./+server";
 
 /*
  * Realtime data
@@ -37,16 +38,17 @@ async function downloadGTFS() {
 }
 
 // Locate trip in GTFS cache
-export async function findRealtimeTrip(tripID: string) {
+export function findRealtimeTrip(tripID: string) {
     return gtfsCache.entity.find(entity => entity.vehicle?.trip?.tripId === tripID)
 }
 
-// Return a service in the /api/service cache
-export function getRTServiceData(tripID: string): ServiceData {
+// Return a service in the /api/service cache or fetches it
+export async function getRTServiceData(tripID: string): Promise<ServiceData> {
+    if(!serviceCache[tripID]) {
+        // @ts-ignore
+        serviceCache[tripID] = await (await serviceGet({
+            url: new URL(`http://localhost/api/service?id=${tripID}`)
+        })).json()
+    }
     return serviceCache[tripID]
-}
-
-// Insert a service into the /api/service cache
-export function cacheService(tripID: string, data: ServiceData) {
-    serviceCache[tripID] = data
 }

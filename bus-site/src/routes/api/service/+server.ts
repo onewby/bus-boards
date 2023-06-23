@@ -5,14 +5,13 @@ import {DateTime, Duration} from "luxon";
 import proj4 from "proj4";
 import {intercityOperators} from "../stop/operators";
 import type {ServiceData, ServiceStopData} from "../../../api.type";
-import {cacheService, findRealtimeTrip, getRTServiceData} from "./gtfs-cache";
+import {findRealtimeTrip} from "./gtfs-cache";
 
 proj4.defs("EPSG:27700","+proj=tmerc +lat_0=49 +lon_0=-2 +k=0.9996012717 +x_0=400000 +y_0=-100000 +ellps=airy +datum=OSGB36 +units=m +no_defs");
 
 export const GET: RequestHandler = async ({url}) => {
     const id = url.searchParams.get("id")
     if(id === null) throw error(400, "ID not provided.")
-    if(getRTServiceData(id)) return json(getRTServiceData(id))
     const service = db.prepare(`SELECT route_short_name as code, trip_headsign as dest, max_stop_seq as mss FROM trips
                                             INNER JOIN main.routes r on r.route_id = trips.route_id
                                             WHERE trip_id=?`).get(id)
@@ -76,7 +75,7 @@ export const GET: RequestHandler = async ({url}) => {
     }
 
     let realtime = undefined
-    const trip = await findRealtimeTrip(id)
+    const trip = findRealtimeTrip(id)
     if(trip) {
         let currentStop = trip.vehicle?.currentStopSequence
         let currentPos = trip.vehicle?.position
@@ -146,8 +145,6 @@ export const GET: RequestHandler = async ({url}) => {
             "route": route
         }]
     }
-
-    if(realtime) cacheService(id, data)
 
     return json(data)
 }
