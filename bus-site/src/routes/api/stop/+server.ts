@@ -43,7 +43,7 @@ export const GET: RequestHandler = async ({url}) => {
     ).all(stop_info['id'])
 
     const stationPromises = Math.abs(offset) <= 120 ?
-        [...new Set(stance_info.filter(stance => 'crs' in stance).map(stance => stance.crs))]
+        [...new Set(stance_info.filter(stance => stance.crs).map(stance => stance.crs))]
         .map(crs => darwin.getDepartureBoard({crs: crs, numRows: 150, timeOffset: offset})
         .catch((_) => {
             let board: ServiceBoard = {

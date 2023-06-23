@@ -53,7 +53,7 @@ export const GET: RequestHandler = async ({url}) => {
         coordsQuery.forEach(result => coords[result['crs']] = result)
 
         const stops: ServiceStopData[] =
-            cps.map(cp => ({
+            cps.map((cp, i) => ({
                 id: coords[cp.crs]?.['stop'] ?? "",
                 name: cp.locationName,
                 loc: undefined,
@@ -66,7 +66,8 @@ export const GET: RequestHandler = async ({url}) => {
                 long: coords[cp.crs]?.['long'] ?? UK_CTR_LONG,
                 lat: coords[cp.crs]?.['lat'] ?? UK_CTR_LAT,
                 status: cp.et ? (isNum(cp.et[0]) ? "Exp. " + cp.et : cp.et)
-                    : cp.at ? (isNum(cp.at[0]) ? "Dep. " + cp.at : cp.at) : undefined
+                    : cp.at ? (isNum(cp.at[0]) ? "Dep. " + cp.at : cp.at) : undefined,
+                seq: i
             }))
         let currStop = cps.findLastIndex(stop => stop.at != undefined)
         let nextStop = currStop + 1
