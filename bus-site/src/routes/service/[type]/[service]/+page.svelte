@@ -6,13 +6,13 @@
     import Fa from "svelte-fa";
     import {faBus, faChevronRight, faExclamationCircle, faExclamationTriangle} from "@fortawesome/free-solid-svg-icons";
 
-    import Map from "@svelte-parts/map/Map.svelte";
-    import Tiles from "@svelte-parts/map/tiles/Tiles.svelte";
+    import Map from "../../../../map/Map.svelte";
+    import Tiles from "../../../../map/Tiles.svelte";
     import 'leaflet/dist/leaflet.css';
     import {page} from "$app/stores";
     import {onDestroy, onMount} from "svelte";
     import type {GeoJSONOptions} from "leaflet";
-    import GeoJSON from "./GeoJSON.svelte";
+    import GeoJSON from "../../../../map/GeoJSON.svelte";
     import L from "leaflet";
     import HTMLMarker from "./HTMLMarker.svelte";
     import {DateTime} from "luxon";

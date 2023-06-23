@@ -7,7 +7,7 @@
     export let data: GeoJsonObject = {type: "FeatureCollection"}
     export let options: GeoJSONOptions = {}
 
-    const { getMap } = getContext('leaflet_map')
+    const { getMap } = getContext<{ getMap: () => L.Map }>('leaflet_map')
     const map: Map = getMap()
 
     let geoJSON = L.geoJSON(data, options)

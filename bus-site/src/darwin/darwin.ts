@@ -7,7 +7,7 @@ export class DarwinAPI {
     clientPromise: Promise<soap.Client>
 
     constructor(token: string) {
-        if(token == "") throw Error("Invalid token")
+        if(token == "") console.error("Invalid Darwin API token - ensure the DARWIN_API_KEY environment variable is set.")
         this._token = token
         this.client = undefined
         this.clientPromise = this.getClient()

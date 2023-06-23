@@ -8,11 +8,11 @@
     import {faMap} from "@fortawesome/free-solid-svg-icons";
     import {slide} from "svelte/transition";
 
-    import Map from "@svelte-parts/map/Map.svelte";
-    import Tiles from "@svelte-parts/map/tiles/Tiles.svelte";
+    import Map from "../../../map/Map.svelte";
+    import Tiles from "../../../map/Tiles.svelte";
     import 'leaflet/dist/leaflet.css';
     import type {GeoJSONOptions} from "leaflet";
-    import GeoJSON from "../../service/[type]/[service]/GeoJSON.svelte";
+    import GeoJSON from "../../../map/GeoJSON.svelte";
     import L from "leaflet";
     import {browser} from "$app/environment";
 
