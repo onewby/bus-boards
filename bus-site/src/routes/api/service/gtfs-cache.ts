@@ -26,15 +26,20 @@ function gtfsUpdateLoop() {
 
 // Download GTFS data
 async function downloadGTFS() {
-    const gtfsResp = await fetch("https://data.bus-data.dft.gov.uk/avl/download/gtfsrt")
-    if(!gtfsResp.ok || !gtfsResp.body) return gtfsCache // Fail nicely - provide previous cache
+    try {
+        const gtfsResp = await fetch("https://data.bus-data.dft.gov.uk/avl/download/gtfsrt")
+        if(!gtfsResp.ok || !gtfsResp.body) return gtfsCache // Fail nicely - provide previous cache
 
-    const zipReader = new ZipReader(gtfsResp.body)
-    let file = (await zipReader.getEntries()).shift()
-    if(!file) return gtfsCache
+        const zipReader = new ZipReader(gtfsResp.body)
+        let file = (await zipReader.getEntries()).shift()
+        if(!file) return gtfsCache
 
-    gtfsCache = FeedMessage.decode(await file.getData(new Uint8ArrayWriter()))
-    serviceCache = {}
+        gtfsCache = FeedMessage.decode(await file.getData(new Uint8ArrayWriter()))
+        serviceCache = {}
+    } catch (e) {
+        gtfsCache = {header: undefined, entity: []}
+        serviceCache = {}
+    }
 }
 
 // Locate trip in GTFS cache
