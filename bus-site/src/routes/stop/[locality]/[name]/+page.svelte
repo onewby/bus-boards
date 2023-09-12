@@ -43,7 +43,7 @@
         params.set("date", time)
         if(operatorFilter !== "") params.set("operator", operatorFilter)
         if(stanceFilter !== "") params.set("stance", stanceFilter)
-        filterURL = `/stop/${$page.params.stop}?${params.toString()}`
+        filterURL = `/stop/${$page.params.locality}/${$page.params.name}?${params.toString()}`
     }
 
     $: filteredTimes = data.times.filter(stop =>
