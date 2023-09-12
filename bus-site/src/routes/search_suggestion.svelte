@@ -54,7 +54,7 @@
     <td class="align-middle text-right text-xl pr-4">
         <div on:mouseover={() => isHovered = true} on:focus={() => isHovered = true}
              on:mouseout={() => isHovered = false} on:blur={() => isHovered = false}
-             on:click|stopPropagation={toggle_pin} on:keypress={toggle_pin} role="button" tabindex="-1">
+             on:click|stopPropagation={toggle_pin} on:keypress={toggle_pin} role="button" tabindex="0">
             <Fa icon={(pinned && !isHovered) || (!pinned && isHovered) ? faStarActive : faStarInactive} class="inline-block" />
         </div>
     </td>
