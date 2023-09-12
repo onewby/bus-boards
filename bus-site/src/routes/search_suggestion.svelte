@@ -61,8 +61,12 @@
     {#if moveable}
     <td class="align-middle">
         <div class="flex flex-col items-center pr-4">
-            <div on:click|stopPropagation={move_up} class="hover:text-amber-500"><Fa icon={faChevronUp} /></div>
-            <div on:click|stopPropagation={move_down} class="hover:text-amber-500"><Fa icon={faChevronDown} /></div>
+            <div on:click|stopPropagation={move_up} on:keypress={move_up} role="button" tabindex="0" class="hover:text-amber-500">
+                <Fa icon={faChevronUp} />
+            </div>
+            <div on:click|stopPropagation={move_down} on:keypress={move_down} role="button" tabindex="0" class="hover:text-amber-500">
+                <Fa icon={faChevronDown} />
+            </div>
         </div>
     </td>
     {/if}
