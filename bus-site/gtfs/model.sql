@@ -39,9 +39,6 @@ create table if not exists stances
     crs       TEXT
 );
 
-create index if not exists stances_stop_index
-    on stances (stop);
-
 create table if not exists shapes
 (
     shape_id          TEXT,
@@ -49,9 +46,6 @@ create table if not exists shapes
     shape_pt_lon      REAL,
     shape_pt_sequence integer
 );
-
-create index if not exists shapes_shape_id_index
-    on shapes (shape_id);
 
 create table if not exists agency
 (
@@ -101,8 +95,6 @@ create table if not exists calendar_dates
     constraint calendar_dates_pk
         primary key (service_id, date)
 );
-create unique index if not exists calendar_dates_service_id_exception_type_date_uindex
-    on calendar_dates (service_id, exception_type, date);
 
 create table if not exists trips
 (
@@ -134,12 +126,6 @@ create table if not exists stop_times
     constraint stop_times_trips_source_trip_id_fk
         foreign key (trip_id) references trips
 );
-
-create index if not exists stop_times_trip_id_stop_sequence_index
-    on stop_times (trip_id asc, stop_sequence desc);
-
-create index if not exists stop_times_stop_id_index
-    on stop_times (stop_id);
 
 create table if not exists file_hashes
 (

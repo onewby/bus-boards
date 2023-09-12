@@ -1,10 +1,12 @@
-<script>
+<script lang="ts">
     import Fa from "svelte-fa";
     import {faBus} from "@fortawesome/free-solid-svg-icons";
     import SearchSuggestion from "./search_suggestion.svelte";
+    import type {SearchResult} from "../api.type";
+    import {starredStops} from "../stores";
 
     let input = ""
-    let results = []
+    let results: SearchResult[] = []
 
     async function onInput() {
         if(input !== "") {
@@ -32,28 +34,20 @@
             <table class="bg-white dark:bg-slate-800 border dark:border-gray-500 text-left m-0 border-collapse">
                 <tbody>
                 {#each results as result}
-                    <SearchSuggestion title={result.name} subtitle={result.parent} on:click={window.location.href=`/stop/${result.id}`} />
+                    <SearchSuggestion result={result} on:click={() => window.location.href=`/stop/${result.id}`} />
                 {/each}
                 </tbody>
             </table>
             <button class="bg-blue-600 hover:bg-blue-700 dark:bg-blue-800 dark:hover:bg-blue-900 transition-colors rounded-md text-white pl-4 pr-4 pt-2 pb-2 mt-8" type="submit">Search</button>
         </form>
     </div>
-    <!--<div class="max-w-2xl flex flex-row space-x-4 w-full h-fit">
-        <button class="btn mt-4 pl-8 pr-8 pt-4 pb-4 text-2xl font-bold w-full">
-            Operators
-        </button>
-        <button class="btn mt-4 pl-8 pr-8 pt-4 pb-4 text-2xl font-bold w-full">
-            Locations
-        </button>
-    </div>-->
-    <!--<div class="max-w-2xl flex flex-row flex-wrap w-full h-fit gap-x-2">
-        {#each operators as operator}
-            <button class="btn mt-2 pl-4 pr-4 pt-2 pb-2 text-lg">
-                {operator}
-            </button>
+    <table class="panel text-left m-0 border-collapse max-w-2xl w-full mt-4">
+        <tbody>
+        {#each $starredStops as stop}
+            <SearchSuggestion result={stop} moveable={true} />
         {/each}
-    </div>-->
+        </tbody>
+    </table>
 </div>
 
 <svelte:head>

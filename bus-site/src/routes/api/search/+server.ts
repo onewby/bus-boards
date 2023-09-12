@@ -3,7 +3,7 @@ import {error} from "@sveltejs/kit";
 import {db} from "../../../db";
 
 const stmt = db.prepare(
-    "SELECT id,name,parent,qualifier FROM stops_search WHERE stops_search MATCH ? || '*' ORDER BY rank LIMIT 5 OFFSET ?")
+    "SELECT name,parent,qualifier,locality FROM stops_search WHERE stops_search MATCH ? || '*' ORDER BY rank LIMIT 5 OFFSET ?")
 
 export const GET: RequestHandler = ({url}) => {
     const query = url.searchParams.get("query")

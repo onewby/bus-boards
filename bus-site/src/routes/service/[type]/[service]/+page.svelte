@@ -174,7 +174,7 @@
     </div>
 
     <div class="panel w-full mt-2 flex flex-col items-center">
-        {#if browser}
+        {#if browser && data}
             <Map width="100%" height="300px" lon={lon} lat={lat} bind:zoom>
                 <Tiles />
                 <GeoJSON data={geoData} options={geoOptions} />

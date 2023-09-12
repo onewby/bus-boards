@@ -48,14 +48,14 @@ export const GET: RequestHandler = async ({url}) => {
 
         const dest = cps[cps.length - 1].locationName
         const params = cps.map(cp => `'${cp.crs}'`).join(",")
-        const coordsQuery = db.prepare(`SELECT crs,lat,long,stop FROM stances WHERE crs IN (${params})`).all()
+        const coordsQuery = db.prepare(`SELECT crs,lat,long,s.name as name,s.locality as locality FROM stances INNER JOIN main.stops s on s.id = stances.stop WHERE crs IN (${params})`).all()
         const coords: Record<string, Record<string, any>> = {}
         coordsQuery.forEach(result => coords[result['crs']] = result)
 
         const stops: ServiceStopData[] =
             cps.map((cp, i) => ({
-                id: coords[cp.crs]?.['stop'] ?? "",
-                name: cp.locationName,
+                name: coords[cp.crs]?.['name'] ?? "",
+                display_name: cp.locationName,
                 loc: undefined,
                 ind: cp.crs === details.crs && details.platform ? "Platform " + details.platform : undefined,
                 arr: cp.st,
@@ -67,7 +67,8 @@ export const GET: RequestHandler = async ({url}) => {
                 lat: coords[cp.crs]?.['lat'] ?? UK_CTR_LAT,
                 status: cp.et ? (isNum(cp.et[0]) ? "Exp. " + cp.et : cp.et)
                     : cp.at ? (isNum(cp.at[0]) ? "Dep. " + cp.at : cp.at) : undefined,
-                seq: i
+                seq: i,
+                locality: coords[cp.crs]?.['locality'] ?? ""
             }))
         let currStop = cps.findLastIndex(stop => stop.at != undefined)
         let nextStop = currStop + 1

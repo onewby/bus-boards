@@ -33,8 +33,9 @@ export type StopData = {
 }
 
 export type ServiceStopData = {
-    id: string,
+    locality: string,
     name: string,
+    display_name: string,
     loc?: string,
     ind?: string,
     arr: string,
@@ -80,10 +81,10 @@ export type ServiceData = {
 }
 
 export type SearchResult = {
-    id: string,
     name: string,
     parent: string,
-    qualifier: string
+    qualifier: string,
+    locality: string
 }
 
 export type SearchData = {

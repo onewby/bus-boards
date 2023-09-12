@@ -2,6 +2,8 @@ import type {ServiceData} from "../../../../api.type";
 import {error} from "@sveltejs/kit";
 import type {PageServerLoad} from "./$types";
 
+export const ssr = false;
+
 export const load: PageServerLoad<ServiceData> = async ({params, fetch}) => {
     if(params.type === "bus") {
         return await fetchData(`/api/service?id=` + params.service, fetch)

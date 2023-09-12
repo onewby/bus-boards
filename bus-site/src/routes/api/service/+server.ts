@@ -16,7 +16,7 @@ export const GET: RequestHandler = async ({url}) => {
                                             INNER JOIN main.routes r on r.route_id = trips.route_id
                                             WHERE trip_id=?`).get(id)
     if(service === undefined) throw error(404, "Service not found.")
-    const stops = db.prepare(`SELECT stops.id, stops.name, indicator as ind, arrival_time as arr,departure_time as dep, l.name as loc,
+    const stops = db.prepare(`SELECT stops.name, stops.name as display_name, stops.locality, indicator as ind, arrival_time as arr,departure_time as dep, l.name as loc,
                                             timepoint as major, drop_off_type as doo, pickup_type as puo, stances.lat as lat, stances.long as long,
                                             stop_sequence as seq, stops.locality_name AS full_loc
                                         FROM stop_times

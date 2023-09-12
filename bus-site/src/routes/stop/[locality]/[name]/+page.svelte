@@ -1,18 +1,18 @@
 <script lang="ts">
-    import Header from "../../header.svelte";
+    import Header from "../../../header.svelte";
     import Service from "./service.svelte";
     import { page } from '$app/stores';
 
     import Fa from "svelte-fa";
-    import type {StopData} from "../../../api.type";
+    import type {StopData} from "../../../../api.type";
     import {faMap} from "@fortawesome/free-solid-svg-icons";
     import {slide} from "svelte/transition";
 
-    import Map from "../../../map/Map.svelte";
-    import Tiles from "../../../map/Tiles.svelte";
+    import Map from "../../../../map/Map.svelte";
+    import Tiles from "../../../../map/Tiles.svelte";
     import 'leaflet/dist/leaflet.css';
     import type {GeoJSONOptions} from "leaflet";
-    import GeoJSON from "../../../map/GeoJSON.svelte";
+    import GeoJSON from "../../../../map/GeoJSON.svelte";
     import L from "leaflet";
     import {browser} from "$app/environment";
 

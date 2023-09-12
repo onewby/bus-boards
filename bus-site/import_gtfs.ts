@@ -17,6 +17,7 @@ const db = new Database(__file.dir + "/stops.sqlite");
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON')
 
+let indexingScript = readFileSync("gtfs/indexes.sql", {encoding: "utf-8"})
 let tableCreateScript = readFileSync("gtfs/model.sql", {encoding: "utf-8"})
 db.exec(tableCreateScript)
 
@@ -75,6 +76,8 @@ async function import_zips() {
     } catch (e) {
         console.log(e)
     }
+
+    console.log("Imported data successfully.")
 }
 
 async function import_zip(zip: CentralDirectory) {
@@ -91,10 +94,6 @@ async function import_zip(zip: CentralDirectory) {
         await import_txt_file(zip, tuple[0], tuple[1], tuple[2])
     }
     console.log(`Insertions completed in ${(Date.now() - startTime) / 1000} seconds`)
-    startTime = Date.now()
-    console.log("Updating max stop sequence numbers")
-    db.exec("UPDATE trips SET max_stop_seq=(SELECT max(stop_sequence) FROM stop_times WHERE stop_times.trip_id=trips.trip_id)")
-    console.log(`Max stop sequence number updates finished in ${(Date.now() - startTime) / 1000} seconds`)
 }
 
 async function import_txt_file(zip: CentralDirectory, file_name: string, sql: Statement, defaults: Object = {}) {
@@ -193,12 +192,25 @@ function clean_stops() {
     console.log("Rebuilding stop search table")
     // Rebuild stops_search table
     db.exec("DROP TABLE IF EXISTS stops_search;");
-    db.exec("CREATE VIRTUAL TABLE stops_search USING fts5(name, parent, qualifier, id UNINDEXED);");
-    db.exec("INSERT INTO stops_search(name, parent, qualifier, id) SELECT stops.name, stops.locality_name, qualifier, stops.id FROM stops INNER JOIN localities l on l.code = stops.locality;");
+    db.exec("CREATE VIRTUAL TABLE stops_search USING fts5(name, parent, qualifier, id UNINDEXED, locality UNINDEXED);");
+    db.exec("INSERT INTO stops_search(name, parent, qualifier, id, locality) SELECT stops.name, stops.locality_name, qualifier, stops.id, stops.locality FROM stops INNER JOIN localities l on l.code = stops.locality;");
+}
+
+function clean_sequence_numbers() {
+    const startTime = Date.now()
+    console.log("Updating max stop sequence numbers")
+    db.exec("UPDATE trips SET max_stop_seq=(SELECT max(stop_sequence) FROM stop_times WHERE stop_times.trip_id=trips.trip_id)")
+    console.log(`Max stop sequence number updates finished in ${(Date.now() - startTime) / 1000} seconds`)
+}
+
+function create_indexes() {
+    console.log("Creating indexes")
+    db.exec(indexingScript)
 }
 
 await import_zips()
-console.log("Imported data successfully.")
+create_indexes()
+clean_sequence_numbers()
 clean_arrivals()
 clean_stops()
 db.close()

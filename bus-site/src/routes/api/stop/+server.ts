@@ -4,35 +4,35 @@ import {db} from "../../../db";
 import {operatorRegex, operatorMatches, routeOverrides, routeOverridesPrefixes} from "./operators";
 import {DateTime} from "luxon";
 import type {ServiceBoard} from "../../../darwin/darwin";
-import type {ServiceData, StopDeparture} from "../../../api.type";
+import type {StopDeparture} from "../../../api.type";
 import {darwin} from "../darwin";
 import {findRealtimeTrip, getRTServiceData} from "../service/gtfs-cache";
-import {GET as serviceGet} from "../service/+server"
 
 // Number of hours to get bus services for
 const HOURS_TO_SHOW = 2
 
 export const GET: RequestHandler = async ({url}) => {
-    const id = url.searchParams.get("id")
-    if(id == null || id == "") throw error(400, "No query provided.")
+    const locality = url.searchParams.get("locality")
+    const name = url.searchParams.get("name")
+    if(locality == null || name == "") throw error(400, "Invalid query provided.")
 
     let date = url.searchParams.get("date")
     if(date == null || date == "") date = new Date(Date.now()).toISOString()
 
     let startTime = DateTime.fromISO(date, {zone: "Europe/London"})
     if(!startTime.isValid) throw error(400, `Invalid date.`)
-    let dayName = startTime.weekdayLong.toLowerCase()
+    let dayName = startTime.weekdayLong!.toLowerCase()
 
     let endTime = startTime.plus({hour: HOURS_TO_SHOW})
-    let naiveEndTime = addTimeNaive(startTime.toSQLTime(), HOURS_TO_SHOW)
-    let endDayName = endTime.weekdayLong.toLowerCase()
-    let prevDayName = startTime.minus({day: 1}).weekdayLong.toLowerCase()
-    let naiveAdd24Start = addTimeNaive(startTime.toSQLTime(), 24)
-    let naiveAdd24End = addTimeNaive(startTime.toSQLTime(), 24 + HOURS_TO_SHOW)
+    let naiveEndTime = addTimeNaive(startTime.toSQLTime()!, HOURS_TO_SHOW)
+    let endDayName = endTime.weekdayLong!.toLowerCase()
+    let prevDayName = startTime.minus({day: 1}).weekdayLong!.toLowerCase()
+    let naiveAdd24Start = addTimeNaive(startTime.toSQLTime()!, 24)
+    let naiveAdd24End = addTimeNaive(startTime.toSQLTime()!, 24 + HOURS_TO_SHOW)
 
     let stop_info = db.prepare(
-        "SELECT id, name, locality_name, locality as locality_code FROM stops WHERE id=?"
-    ).get(id)
+        "SELECT id, name, locality_name, locality as locality_code FROM stops WHERE name=? AND locality=?"
+    ).get([name, locality])
 
     if(stop_info == undefined) throw error(404, "Stop not found.")
 

@@ -34,6 +34,7 @@ async function downloadGTFS() {
         let file = (await zipReader.getEntries()).shift()
         if(!file) return gtfsCache
 
+        // @ts-ignore
         gtfsCache = FeedMessage.decode(await file.getData(new Uint8ArrayWriter()))
         serviceCache = {}
     } catch (e) {

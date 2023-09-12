@@ -1,5 +1,5 @@
 <script lang="ts">
-    import type {StopDeparture} from "../../../api.type.js";
+    import type {StopDeparture} from "../../../../api.type.js";
     import Fa from "svelte-fa";
     import {faTrain} from "@fortawesome/free-solid-svg-icons";
     export let service: StopDeparture

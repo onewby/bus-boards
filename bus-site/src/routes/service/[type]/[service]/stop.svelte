@@ -19,7 +19,7 @@
     let apiTime = `${ct.getFullYear()}-${dateNum(ct.getMonth() + 1)}-${dateNum(ct.getDate())}T${sub1hr(stop.dep)}`
 </script>
 
-<a href={stop.id ? `/stop/${stop.id}?date=${apiTime}` : undefined} class="w-full relative">
+<a data-sveltekit-reload href={stop.locality ? `/stop/${stop.locality}/${stop.name}?date=${apiTime}` : undefined} class="w-full relative">
     {#if realtime !== undefined}<div class="bg-blue-400 h-[0.8rem] w-[0.8rem] absolute left-[2.6rem] rounded-full z-10 ring ring-white shadow-md" style="top: calc(50% - 0.4rem - {((1-realtime) * 100).toFixed(0)}%)"></div>{/if}
     <div class="flex flex-row w-full pl-8 pr-8 hover:bg-amber-700/5 dark:hover:bg-gray-500/10 items-stretch">
         <div class="flex flex-col">
@@ -30,7 +30,7 @@
         <div class="flex items-center" class:divider>
             <div>
                 {#if stop.loc}<span class="font-medium">{stop.loc}</span>{/if}
-                {stop.name}
+                {stop.display_name}
                 {#if stop.ind}<span class="text-gray-600 dark:text-gray-300">&nbsp;({stop.ind})</span>{/if}
             </div>
         </div>
