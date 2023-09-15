@@ -66,13 +66,15 @@ export type ServiceBranch = {
     route: [number, number][]
 }
 
+export type ServiceInfo = {
+    code: string,
+    dest: string,
+    cancelled: boolean,
+    message: string
+}
+
 export type ServiceData = {
-    service: {
-        code: string,
-        dest: string,
-        cancelled: boolean,
-        message: string
-    }
+    service: ServiceInfo
     operator: {
         name: string,
         url: string

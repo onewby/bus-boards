@@ -2,6 +2,8 @@ import {FeedMessage} from "./gtfs-realtime";
 import {Uint8ArrayWriter, ZipReader} from "@zip.js/zip.js";
 import type {ServiceData} from "../../../api.type";
 import {GET as serviceGet} from "./+server";
+import {load_all_stagecoach_data} from "./stagecoach";
+import {readFileSync, writeFileSync} from "fs";
 
 /*
  * Realtime data
@@ -36,6 +38,10 @@ async function downloadGTFS() {
 
         // @ts-ignore
         gtfsCache = FeedMessage.decode(await file.getData(new Uint8ArrayWriter()))
+
+        const stagecoach = await load_all_stagecoach_data()
+        gtfsCache.entity.push(...stagecoach)
+
         serviceCache = {}
     } catch (e) {
         gtfsCache = {header: undefined, entity: []}

@@ -40,7 +40,7 @@ async function import_zips() {
 
     if(process.argv.length < 3 || process.argv[2].toLowerCase() != "-s") {
         console.log("Downloading GTFS data (usually ~550MB)")
-        let resp = await fetch("https://data.bus-data.dft.gov.uk/timetable/download/gtfs-file/all/")
+        let resp = await fetch("https://data.bus-data.dft.gov.uk/timetable/download/gtfs-file/scotland/")
         if(!resp.ok || !resp.body) {
             console.error("Cannot download GTFS data")
             return

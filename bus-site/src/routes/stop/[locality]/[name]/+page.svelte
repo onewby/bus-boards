@@ -23,7 +23,7 @@
     const dateNum = (num: number) => num.toString().padStart(2, "0")
     let time = $page.url.searchParams.get("date") ?? `${ct.getFullYear()}-${dateNum(ct.getMonth() + 1)}-${dateNum(ct.getDate())}T${dateNum(ct.getHours())}:${dateNum(ct.getMinutes())}`
 
-    let operators = {}
+    let operators: Record<string, Set<string>> = {}
     $: {
         operators = {}
         data.times.forEach(time => {

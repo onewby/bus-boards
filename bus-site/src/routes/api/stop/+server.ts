@@ -30,7 +30,7 @@ export const GET: RequestHandler = async ({url}) => {
     let naiveAdd24Start = addTimeNaive(startTime.toSQLTime()!, 24)
     let naiveAdd24End = addTimeNaive(startTime.toSQLTime()!, 24 + HOURS_TO_SHOW)
 
-    let stop_info = db.prepare(
+    let stop_info: any = db.prepare(
         "SELECT id, name, locality_name, locality as locality_code FROM stops WHERE name=? AND locality=?"
     ).get([name, locality])
 
@@ -38,7 +38,7 @@ export const GET: RequestHandler = async ({url}) => {
 
     let offset = Math.round(startTime.diffNow("minutes").minutes)
 
-    let stance_info = db.prepare(
+    let stance_info: any[] = db.prepare(
         "SELECT code, indicator, street, crs, lat, long FROM stances WHERE stop=?"
     ).all(stop_info['id'])
 

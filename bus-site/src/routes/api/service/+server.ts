@@ -6,17 +6,18 @@ import proj4 from "proj4";
 import {intercityOperators} from "../stop/operators";
 import type {ServiceData, ServiceStopData} from "../../../api.type";
 import {findRealtimeTrip} from "./gtfs-cache";
+import {TripDescriptor_ScheduleRelationship} from "./gtfs-realtime";
 
 proj4.defs("EPSG:27700","+proj=tmerc +lat_0=49 +lon_0=-2 +k=0.9996012717 +x_0=400000 +y_0=-100000 +ellps=airy +datum=OSGB36 +units=m +no_defs");
 
 export const GET: RequestHandler = async ({url}) => {
     const id = url.searchParams.get("id")
     if(id === null) throw error(400, "ID not provided.")
-    const service = db.prepare(`SELECT route_short_name as code, trip_headsign as dest, max_stop_seq as mss FROM trips
+    const service: any = db.prepare(`SELECT route_short_name as code, trip_headsign as dest, max_stop_seq as mss FROM trips
                                             INNER JOIN main.routes r on r.route_id = trips.route_id
                                             WHERE trip_id=?`).get(id)
     if(service === undefined) throw error(404, "Service not found.")
-    const stops = db.prepare(`SELECT stops.name, stops.name as display_name, stops.locality, indicator as ind, arrival_time as arr,departure_time as dep, l.name as loc,
+    const stops: any[] = db.prepare(`SELECT stops.name, stops.name as display_name, stops.locality, indicator as ind, arrival_time as arr,departure_time as dep, l.name as loc,
                                             timepoint as major, drop_off_type as doo, pickup_type as puo, stances.lat as lat, stances.long as long,
                                             stop_sequence as seq, stops.locality_name AS full_loc
                                         FROM stop_times
@@ -24,11 +25,11 @@ export const GET: RequestHandler = async ({url}) => {
                                             INNER JOIN stops on stops.id = stances.stop
                                             INNER JOIN localities l on l.code = stops.locality
                                         WHERE trip_id=? ORDER BY stop_sequence`).all(id)
-    const operator = db.prepare(`SELECT agency_name as name, agency_url as url FROM trips
+    const operator: any = db.prepare(`SELECT agency_name as name, agency_url as url FROM trips
                                             INNER JOIN main.routes r on r.route_id = trips.route_id
                                             INNER JOIN main.agency a on r.agency_id = a.agency_id
                                             WHERE trip_id = ?`).get(id)
-    const shape = db.prepare(`SELECT shape_pt_lat as lat, shape_pt_lon as long
+    const shape: any[] = db.prepare(`SELECT shape_pt_lat as lat, shape_pt_lon as long
                                         FROM shapes INNER JOIN trips t on shapes.shape_id = t.shape_id
                                         WHERE trip_id=? ORDER BY shape_pt_sequence`).all(id)
 
@@ -76,12 +77,14 @@ export const GET: RequestHandler = async ({url}) => {
 
     let realtime = undefined
     const trip = findRealtimeTrip(id)
+    service.cancelled = false
     if(trip) {
+        service.cancelled = trip.vehicle?.trip?.scheduleRelationship === TripDescriptor_ScheduleRelationship.CANCELED
         let currentStop = trip.vehicle?.currentStopSequence
         let currentPos = trip.vehicle?.position
-        if(currentStop && currentPos) {
+        if(currentStop !== undefined && currentPos) {
             let currentStopIndex = stops.findIndex(stop => stop.seq === currentStop)
-            let pos = getStopPositions.all({seq: currentStop, id: id})
+            let pos: any[] = getStopPositions.all({seq: currentStop, id: id})
             if(pos.length == 2) {
                 // Positioning
                 const prevBNG = bngToWGS84.inverse({x: pos[0]["long"], y: pos[0]["lat"]})
@@ -110,7 +113,10 @@ export const GET: RequestHandler = async ({url}) => {
                         // Absorb delay in longer layovers
                         if(stop.arr && stop.dep) {
                             delay = delay.minus(DateTime.fromSQL(stop.dep).diff(DateTime.fromSQL(stop.arr)))
-                            if(delay.toMillis() < 0) delay = Duration.fromMillis(0)
+                            if(delay.toMillis() < 0) {
+                                delay = Duration.fromMillis(0)
+                                stop.status = "On time"
+                            }
                         }
                     } else {
                         stop.status = "On time"
@@ -123,6 +129,12 @@ export const GET: RequestHandler = async ({url}) => {
                     stop: currentStopIndex,
                     pos: currentPos,
                     pct: pct
+                }
+            } else {
+                realtime = {
+                    stop: -1,
+                    pct: 0,
+                    pos: currentPos
                 }
             }
         }
