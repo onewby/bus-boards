@@ -37,11 +37,12 @@ async function downloadGTFS() {
         if(!file) return gtfsCache
 
         // @ts-ignore
-        gtfsCache = FeedMessage.decode(await file.getData(new Uint8ArrayWriter()))
+        const newCache = FeedMessage.decode(await file.getData(new Uint8ArrayWriter()))
 
         const stagecoach = await load_all_stagecoach_data()
-        gtfsCache.entity.push(...stagecoach)
+        newCache.entity.push(...stagecoach)
 
+        gtfsCache = newCache
         serviceCache = {}
     } catch (e) {
         gtfsCache = {header: undefined, entity: []}
