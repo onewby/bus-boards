@@ -1,4 +1,3 @@
-import {readFileSync} from "fs";
 import {DateTime} from "luxon";
 import type {FeedEntity} from "./gtfs-realtime";
 import {
@@ -8,6 +7,7 @@ import {
     VehiclePosition_VehicleStopStatus
 } from "./gtfs-realtime";
 import {db} from "../../../db";
+import {format_gtfs_date, format_gtfs_time, notNull} from "./realtime_util";
 
 type StagecoachData = {
     "services": StagecoachService[]
@@ -145,22 +145,10 @@ function json_reviver(this: any, key: string, value: string) {
             return DateTime.fromSeconds(Number(value) / 1000)
         case "cd":
         case "jc":
-            return Boolean(value.toLowerCase())
+            return value === "True"
         default:
             return value
     }
-}
-
-function notNull(value: FeedEntity | null): value is FeedEntity {
-    return value !== null
-}
-
-function format_gtfs_time(time: DateTime): string {
-    return time.toFormat("HH:mm:ss")
-}
-
-function format_gtfs_date(time: DateTime): string {
-    return time.toFormat("yyyyMMdd")
 }
 
 export async function load_all_stagecoach_data() {

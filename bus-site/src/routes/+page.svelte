@@ -34,7 +34,7 @@
             <table class="bg-white dark:bg-slate-800 border dark:border-gray-500 text-left m-0 border-collapse">
                 <tbody>
                 {#each results as result}
-                    <SearchSuggestion result={result} on:click={() => window.location.href=`/stop/${result.id}`} />
+                    <SearchSuggestion result={result} />
                 {/each}
                 </tbody>
             </table>

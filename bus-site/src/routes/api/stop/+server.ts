@@ -19,14 +19,19 @@ export const GET: RequestHandler = async ({url}) => {
     let date = url.searchParams.get("date")
     if(date == null || date == "") date = new Date(Date.now()).toISOString()
 
-    let startTime = DateTime.fromISO(date, {zone: "Europe/London"})
-    if(!startTime.isValid) throw error(400, `Invalid date.`)
-    let dayName = startTime.weekdayLong!.toLowerCase()
+    let filterLoc = url.searchParams.get("filterLoc")
+    let filterName = url.searchParams.get("filterName")
+    let filter = filterLoc !== null && filterName !== null
 
-    let endTime = startTime.plus({hour: HOURS_TO_SHOW})
+    let requestedTime = DateTime.fromISO(date, {zone: "Europe/London"})
+    if(!requestedTime.isValid) throw error(400, `Invalid date.`)
+    let dayName = requestedTime.weekdayLong!.toLowerCase()
+
+    let startTime = requestedTime.minus({hour: 2})
+    let endTime = requestedTime.plus({hour: HOURS_TO_SHOW})
     let naiveEndTime = addTimeNaive(startTime.toSQLTime()!, HOURS_TO_SHOW)
     let endDayName = endTime.weekdayLong!.toLowerCase()
-    let prevDayName = startTime.minus({day: 1}).weekdayLong!.toLowerCase()
+    let prevDayName = requestedTime.minus({day: 1}).weekdayLong!.toLowerCase()
     let naiveAdd24Start = addTimeNaive(startTime.toSQLTime()!, 24)
     let naiveAdd24End = addTimeNaive(startTime.toSQLTime()!, 24 + HOURS_TO_SHOW)
 
@@ -36,7 +41,7 @@ export const GET: RequestHandler = async ({url}) => {
 
     if(stop_info == undefined) throw error(404, "Stop not found.")
 
-    let offset = Math.round(startTime.diffNow("minutes").minutes)
+    let offset = Math.round(requestedTime.diffNow("minutes").minutes)
 
     let stance_info: any[] = db.prepare(
         "SELECT code, indicator, street, crs, lat, long FROM stances WHERE stop=?"
@@ -66,26 +71,26 @@ export const GET: RequestHandler = async ({url}) => {
     // To select stop_times for all stances within a stop as part of 'WHERE stop_id IN (${params})'
     let params = stances.map(_ => "?").join(", ")
 
-    let dayStmt = db.prepare(stopTimesStmt(dayName, prevDayName, params))
-    let nextDayStmt = db.prepare(stopTimesStmt(endDayName, dayName, params, 1))
+    let dayStmt = db.prepare(stopTimesStmt(dayName, prevDayName, params, undefined, filter))
+    let nextDayStmt = db.prepare(stopTimesStmt(endDayName, dayName, params, 1, filter))
     let stop_times: StopDeparture[]
     // If we go past midnight, we need to handle this in SQL
     if(startTime.hour > endTime.hour) {
         // Get yesterday's buses after midnight going into the morning
-        stop_times = dayStmt.all(stances, {date: fmtDate(startTime.minus({day: 1})), start: naiveAdd24Start, end: naiveAdd24End})
+        stop_times = dayStmt.all(stances, {date: fmtDate(startTime.minus({day: 1})), start: naiveAdd24Start, end: naiveAdd24End, filterName, filterLoc})
             .map(mapWithTimestamp(-1))
         // and add them to today's buses - first everything going from the day into potentially the next morning
-        stop_times = stop_times.concat(dayStmt.all(stances, {date: fmtDate(startTime), start: startTime.toSQLTime(), end: naiveEndTime})
+        stop_times = stop_times.concat(dayStmt.all(stances, {date: fmtDate(startTime), start: startTime.toSQLTime(), end: naiveEndTime, filterName, filterLoc})
             .map(mapWithTimestamp()))
         // and anything in the morning registered on the next day
-        stop_times = stop_times.concat(nextDayStmt.all(stances, {date: fmtDate(endTime), start: "00:00:00", end: endTime.toSQLTime()})
+        stop_times = stop_times.concat(nextDayStmt.all(stances, {date: fmtDate(endTime), start: "00:00:00", end: endTime.toSQLTime(), filterName, filterLoc})
             .map(mapWithTimestamp()))
     } else {
         // Get yesterday's buses after midnight going into the morning
-        stop_times = dayStmt.all(stances, {date: fmtDate(startTime.minus({day: 1})), start: naiveAdd24Start, end: naiveAdd24End})
+        stop_times = dayStmt.all(stances, {date: fmtDate(startTime.minus({day: 1})), start: naiveAdd24Start, end: naiveAdd24End, filterName, filterLoc})
             .map(mapWithTimestamp(-1))
         // and add them to today's buses
-        stop_times = stop_times.concat(dayStmt.all(stances, {date: fmtDate(startTime), start: startTime.toSQLTime(), end: endTime.toSQLTime()}))
+        stop_times = stop_times.concat(dayStmt.all(stances, {date: fmtDate(startTime), start: startTime.toSQLTime(), end: endTime.toSQLTime(), filterName, filterLoc}))
             .map(mapWithTimestamp())
     }
     stop_times.forEach(time => time['departure_time'] = modTime(time['departure_time']))
@@ -117,6 +122,7 @@ export const GET: RequestHandler = async ({url}) => {
         // - Update their status
         stop.status = serviceData.branches[0].stops.find(searchingStop => searchingStop.seq === stop.seq)?.status
     }))
+    stop_times = stop_times.filter(stop => stop._timestamp! >= requestedTime || stop.status?.startsWith("Exp. ") || stop.status === "Cancelled")
 
     const stations = await Promise.all(stationPromises)
     const services = stations.filter(board => board.trainServices).flatMap(board => board.trainServices!.service)
@@ -179,7 +185,7 @@ const toLuxon = (time: string, addDays = 0) => {
     return DateTime.fromSQL(modTime(time)).plus({day: addDays})
 }
 
-const stopTimesStmt = (dayName: string, prevDayName: string, params: string, addDay: (-1|0|1) = 0) =>
+const stopTimesStmt = (dayName: string, prevDayName: string, params: string, addDay: (-1|0|1) = 0, filter = false) =>
     `SELECT stop_times.trip_id,coalesce(stop_headsign,t.trip_headsign) as trip_headsign,
                     ${addDay == 1 ? "(printf('%02d', (substring(departure_time, 0, 3) + 24)) || substring(departure_time, 3)) as departure_time"
                             : addDay == -1 ? "(printf('%02d', (substring(departure_time, 0, 3) - 24)) || substring(departure_time, 3)) as departure_time"
@@ -199,6 +205,7 @@ const stopTimesStmt = (dayName: string, prevDayName: string, params: string, add
                         OR (EXISTS (SELECT 1 FROM main.calendar_dates WHERE calendar_dates.service_id = t.service_id AND date = :date AND exception_type=1)))
                     AND departure_time >= :start AND departure_time <= :end
                     AND pickup_type <> 1
+                    ${filter ? "AND EXISTS (SELECT stop_sequence AS inner_seq FROM stop_times WHERE trip_id=t.trip_id AND inner_seq > seq AND stop_id IN (SELECT code FROM stances WHERE stop=(SELECT id FROM stops WHERE locality=:filterLoc AND name=:filterName)))" : ""}
                 ORDER BY departure_time`
 
 const isNum = (c: string) => c >= '0' && c <= '9'

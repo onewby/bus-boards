@@ -4,8 +4,8 @@
     import { page } from '$app/stores';
 
     import Fa from "svelte-fa";
-    import type {StopData} from "../../../../api.type";
-    import {faMap} from "@fortawesome/free-solid-svg-icons";
+    import type {SearchResult, StopData} from "../../../../api.type";
+    import {faMap, faXmark} from "@fortawesome/free-solid-svg-icons";
     import {slide} from "svelte/transition";
 
     import Map from "../../../../map/Map.svelte";
@@ -15,6 +15,8 @@
     import GeoJSON from "../../../../map/GeoJSON.svelte";
     import L from "leaflet";
     import {browser} from "$app/environment";
+    import {createFloatingActions} from "svelte-floating-ui";
+    import {size} from "@floating-ui/core";
 
     // let departures = true
     export let data: StopData;
@@ -43,6 +45,11 @@
         params.set("date", time)
         if(operatorFilter !== "") params.set("operator", operatorFilter)
         if(stanceFilter !== "") params.set("stance", stanceFilter)
+        if(data.filter) {
+            params.set("filterLoc", data.filter.locality)
+            params.set("filterName", data.filter.name)
+            // TODO On cold load, load correct filter stuff into the box through stop - use page.server.ts
+        }
         filterURL = `/stop/${$page.params.locality}/${$page.params.name}?${params.toString()}`
     }
 
@@ -89,6 +96,46 @@
             marker.bindPopup(`<b>${feature.properties.street ?? data.stop.name}</b><br>${feature.properties.indicator}`, popupOptions)
             return marker
         }
+    }
+
+    const [ floatingRef, floatingContent ] = createFloatingActions({
+        strategy: "absolute",
+        placement: "bottom-start",
+        middleware: [
+            size({
+                apply({rects, elements}) {
+                    Object.assign(elements.floating.style, {
+                        width: `${rects.reference.width}px`,
+                    });
+                },
+            })
+        ]
+    });
+
+    let destInput = ""
+    let results: SearchResult[] = []
+
+    async function onDestSearch(e) {
+        if(e.target.value !== "") {
+            let resp = await fetch(`/api/search?query=${encodeURIComponent(e.target.value.trim())}`)
+            results = await resp.json()
+        } else {
+            results = []
+        }
+    }
+
+    function bindDestination(result: SearchResult | undefined) {
+        data.filter = result
+        results = []
+    }
+
+    function clearDestination() {
+        let name = data.filter!.name
+        let loc = data.filter!.parent
+        data.filter = undefined
+        results = []
+        destInput = loc + " " + name
+        onDestSearch({target: {value: destInput}})
     }
 </script>
 
@@ -141,13 +188,40 @@
                 </div>
             </div>
         {/if}
-        <div class="flex flex-row items-center">
-            <input type="datetime-local" bind:value={time} class="dark:bg-gray-800">
-            <a href={filterURL}>
-                <button class="bg-blue-600 hover:bg-blue-700 dark:bg-blue-800 dark:hover:bg-blue-900 transition-colors rounded-md text-white pl-4 pr-4 pt-2 pb-2 ml-2">Go</button>
-            </a>
+        <div class="flex flex-col sm:flex-row gap-x-4 w-full">
+            <div class="flex flex-row items-center w-full gap-x-4">
+                <label for="stop" class="whitespace-nowrap">Stops at</label>
+                {#if data.filter}
+                    <div class="flex flex-row items-center px-2 py-1 w-full cursor-pointer border border-gray-500 bg-white dark:bg-slate-800 hover:bg-gray-50 dark:hover:bg-slate-900" on:click={clearDestination}>
+                        <div class="flex flex-col w-full items-start">
+                            <div>{data.filter.name}</div>
+                            <div class="text-xs">{data.filter.parent}</div>
+                        </div>
+                        <Fa icon={faXmark} class="inline-block" />
+                    </div>
+                {:else}
+                    <input id="stop" class="bg-white dark:bg-gray-800 w-full" use:floatingRef on:input={onDestSearch} bind:value={destInput}>
+                {/if}
+            </div>
+            <div class="flex flex-row items-start w-fit">
+                <input type="datetime-local" bind:value={time} class="dark:bg-gray-800">
+                <a href={filterURL}>
+                    <button class="bg-blue-600 hover:bg-blue-700 dark:bg-blue-800 dark:hover:bg-blue-900 transition-colors rounded-md text-white pl-4 pr-4 pt-2 pb-2 ml-2">Go</button>
+                </a>
+            </div>
         </div>
     </div>
+
+    {#if results.length > 0}
+    <div class="flex flex-col w-full absolute z-50" use:floatingContent>
+        {#each results as result}
+            <div class="flex flex-col items-start px-2 py-1 w-full cursor-pointer border dark:border-gray-500 bg-white dark:bg-slate-800 hover:bg-gray-50 dark:hover:bg-slate-900" on:click={() => bindDestination(result)}>
+                <div>{result.name}</div>
+                <div class="text-xs">{result.parent}</div>
+            </div>
+        {/each}
+    </div>
+    {/if}
 
     <div class="panel w-full mt-2 flex flex-col">
         {#if filteredTimes.length === 0}

@@ -1,0 +1,15 @@
+{
+  "sources": {
+    "https://xploredundee.arcticapi.com": ["OP524"],
+    "https://mytrip.arcticapi.com": ["OP525"],
+    "https://mcgills.arcticapi.com/network/vehicles": ["OP612"],
+    "https://mcgillsse.arcticapi.com/network/vehicles": ["OP8781", "OP8747"]
+  },
+  "operators": {
+    "OP524": ["TRDU", "Xplore Dundee"],
+    "OP525": ["MOFF", "Moffat \u0026 Williamson"],
+    "OP612": ["McG", "McGill\u0027s"],
+    "OP8747": ["MESC", "McGills Scotland East Ltd"],
+    "OP8781": ["MBLB", "Midland Bluebird Ltd"]
+  }
+}

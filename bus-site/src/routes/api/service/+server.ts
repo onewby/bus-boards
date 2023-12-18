@@ -7,6 +7,7 @@ import {intercityOperators} from "../stop/operators";
 import type {ServiceData, ServiceStopData} from "../../../api.type";
 import {findRealtimeTrip} from "./gtfs-cache";
 import {TripDescriptor_ScheduleRelationship} from "./gtfs-realtime";
+import {findPctBetween} from "./realtime_util";
 
 proj4.defs("EPSG:27700","+proj=tmerc +lat_0=49 +lon_0=-2 +k=0.9996012717 +x_0=400000 +y_0=-100000 +ellps=airy +datum=OSGB36 +units=m +no_defs");
 
@@ -17,14 +18,14 @@ export const GET: RequestHandler = async ({url}) => {
                                             INNER JOIN main.routes r on r.route_id = trips.route_id
                                             WHERE trip_id=?`).get(id)
     if(service === undefined) throw error(404, "Service not found.")
-    const stops: any[] = db.prepare(`SELECT stops.name, stops.name as display_name, stops.locality, indicator as ind, arrival_time as arr,departure_time as dep, l.name as loc,
+    const stops: ServiceStopData[] = db.prepare(`SELECT stops.name, stops.name as display_name, stops.locality, indicator as ind, arrival_time as arr,departure_time as dep, l.name as loc,
                                             timepoint as major, drop_off_type as doo, pickup_type as puo, stances.lat as lat, stances.long as long,
                                             stop_sequence as seq, stops.locality_name AS full_loc
                                         FROM stop_times
                                             INNER JOIN stances on stances.code = stop_times.stop_id
                                             INNER JOIN stops on stops.id = stances.stop
                                             INNER JOIN localities l on l.code = stops.locality
-                                        WHERE trip_id=? ORDER BY stop_sequence`).all(id)
+                                        WHERE trip_id=? ORDER BY stop_sequence`).all(id) as ServiceStopData[]
     const operator: any = db.prepare(`SELECT agency_name as name, agency_url as url FROM trips
                                             INNER JOIN main.routes r on r.route_id = trips.route_id
                                             INNER JOIN main.agency a on r.agency_id = a.agency_id
@@ -36,14 +37,17 @@ export const GET: RequestHandler = async ({url}) => {
     // Better coach listings - show root locality name
     if(intercityOperators.includes(operator.name)) {
         stops.forEach((stop) => {
+            // @ts-ignore
             if(stop.loc.includes("University") || stop.loc.includes("Airport")) return
             let existingLoc = stop.loc
+            // @ts-ignore
             stop.loc = stop.full_loc.split(" › ")[0];
             if(stop.name == "Park and Ride" && existingLoc != stop.loc) {
                 stop.name = existingLoc + " " + stop.name
             }
         })
     }
+    // @ts-ignore
     stops.forEach((stop) => delete stop.full_loc)
 
     // Simplify tram listings - show more akin to trains
@@ -80,6 +84,9 @@ export const GET: RequestHandler = async ({url}) => {
     service.cancelled = false
     if(trip) {
         service.cancelled = trip.vehicle?.trip?.scheduleRelationship === TripDescriptor_ScheduleRelationship.CANCELED
+        if(service.cancelled) {
+            stops.forEach(stop => stop.status = "Cancelled")
+        }
         let currentStop = trip.vehicle?.currentStopSequence
         let currentPos = trip.vehicle?.position
         if(currentStop !== undefined && currentPos) {
@@ -107,7 +114,7 @@ export const GET: RequestHandler = async ({url}) => {
                 // Apply delay to all stops past the current stop
                 let delays = stops.slice(currentStopIndex, stops.length)
                 for(let stop of delays) {
-                    if(delay.toMillis() >= 1000 * 120) {
+                    if(delay.toMillis() >= 1000 * 120 || delay.toMillis() <= -1000 * 60) {
                         stop.status = "Exp. " + DateTime.fromSQL(stop.arr ?? stop.dep).plus(delay).toFormat("HH:mm")
 
                         // Absorb delay in longer layovers
@@ -142,7 +149,9 @@ export const GET: RequestHandler = async ({url}) => {
 
     // Convert drop off only and put down only to booleans for "doesn't drop off", "doesn't pick up"
     stops.forEach((stop) => {
+        // @ts-ignore
         stop.doo = stop.doo === 1
+        // @ts-ignore
         stop.puo = stop.puo === 1
     })
     delete service.mss
@@ -182,27 +191,5 @@ const getShape = db.prepare(`SELECT shape_pt_lat as lat, shape_pt_lon as lon FRO
                              WHERE shape_pt_sequence >= (SELECT shape_pt_sequence FROM shapes WHERE shape_pt_lat=:min_lat AND shape_pt_lon=:min_lon)
                                 AND shape_pt_sequence <= (SELECT shape_pt_sequence FROM shapes WHERE shape_pt_lat=:max_lat AND shape_pt_lon=:max_lon)
                              ORDER BY shape_pt_sequence`)
-
-type Position = {
-    x: number,
-    y: number
-}
-
-function findNearestLinePoint(s1: Position, s2: Position, point: Position): Position {
-    const m = (s2.y - s1.y) / (s2.x - s1.x)
-    const c = s1.y - m*s1.x
-    const xp = (point.y * m + point.x - m*c) / (m**2 + 1)
-    const yp = m*xp + c
-    return {x: xp, y: yp}
-}
-
-function distanceBetween(s1: Position, s2: Position) {
-    return Math.sqrt((s2.x - s1.x) ** 2 + (s2.y - s1.y) ** 2)
-}
-
-function findPctBetween(s1: Position, s2: Position, point: Position) {
-    const linePoint = findNearestLinePoint(s1, s2, point)
-    return Math.max(0, 1 - (distanceBetween(s1, linePoint) / distanceBetween(s1, s2)))
-}
 
 const bngToWGS84 = proj4("EPSG:27700", "EPSG:4326")

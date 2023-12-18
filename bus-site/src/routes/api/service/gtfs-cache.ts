@@ -3,13 +3,13 @@ import {Uint8ArrayWriter, ZipReader} from "@zip.js/zip.js";
 import type {ServiceData} from "../../../api.type";
 import {GET as serviceGet} from "./+server";
 import {load_all_stagecoach_data} from "./stagecoach";
-import {readFileSync, writeFileSync} from "fs";
+import {load_passenger_sources} from "./passenger";
 
 /*
  * Realtime data
  */
 
-let gtfsCache: FeedMessage = {header: undefined, entity: []}
+export let gtfsCache: FeedMessage = {header: undefined, entity: []}
 // Caches /api/service outputs for tracking services to prevent latency from recalculating delay (cleared on GTFS update)
 let serviceCache: Record<string, ServiceData> = {}
 
@@ -27,7 +27,7 @@ function gtfsUpdateLoop() {
 }
 
 // Download GTFS data
-async function downloadGTFS() {
+export async function downloadGTFS() {
     try {
         const gtfsResp = await fetch("https://data.bus-data.dft.gov.uk/avl/download/gtfsrt")
         if(!gtfsResp.ok || !gtfsResp.body) return gtfsCache // Fail nicely - provide previous cache
@@ -39,14 +39,15 @@ async function downloadGTFS() {
         // @ts-ignore
         const newCache = FeedMessage.decode(await file.getData(new Uint8ArrayWriter()))
 
-        const stagecoach = await load_all_stagecoach_data()
-        newCache.entity.push(...stagecoach)
+        const sources = [load_all_stagecoach_data()/*, load_passenger_sources()*/]
+        newCache.entity.push(...(await Promise.all(sources)).flat())
 
         gtfsCache = newCache
         serviceCache = {}
     } catch (e) {
         gtfsCache = {header: undefined, entity: []}
         serviceCache = {}
+        console.log(e)
     }
 }
 
