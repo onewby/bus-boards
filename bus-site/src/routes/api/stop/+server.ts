@@ -29,11 +29,11 @@ export const GET: RequestHandler = async ({url}) => {
 
     let startTime = requestedTime.minus({hour: 2})
     let endTime = requestedTime.plus({hour: HOURS_TO_SHOW})
-    let naiveEndTime = addTimeNaive(startTime.toSQLTime()!, HOURS_TO_SHOW)
+    let naiveEndTime = addTimeNaive(requestedTime.toSQLTime()!, HOURS_TO_SHOW)
     let endDayName = endTime.weekdayLong!.toLowerCase()
     let prevDayName = requestedTime.minus({day: 1}).weekdayLong!.toLowerCase()
     let naiveAdd24Start = addTimeNaive(startTime.toSQLTime()!, 24)
-    let naiveAdd24End = addTimeNaive(startTime.toSQLTime()!, 24 + HOURS_TO_SHOW)
+    let naiveAdd24End = addTimeNaive(requestedTime.toSQLTime()!, 24 + HOURS_TO_SHOW)
 
     let stop_info: any = db.prepare(
         "SELECT id, name, locality_name, locality as locality_code FROM stops WHERE name=? AND locality=?"

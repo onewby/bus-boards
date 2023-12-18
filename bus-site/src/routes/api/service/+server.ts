@@ -43,7 +43,7 @@ export const GET: RequestHandler = async ({url}) => {
             // @ts-ignore
             stop.loc = stop.full_loc.split(" › ")[0];
             if(stop.name == "Park and Ride" && existingLoc != stop.loc) {
-                stop.name = existingLoc + " " + stop.name
+                stop.display_name = existingLoc + " " + stop.name
             }
         })
     }
@@ -63,7 +63,7 @@ export const GET: RequestHandler = async ({url}) => {
         case "Nottingham Express Transit (Tram)":
         case "London Docklands Light Railway - TfL":
         case "London Tramlink":
-            stops.forEach(stop => stop.name = stop.name.replace(suffixes[operator.name], ""))
+            stops.forEach(stop => stop.display_name = stop.name.replace(suffixes[operator.name], ""))
         // Fallthrough
         case "Stagecoach Supertram":
             stops.forEach(stop => {
@@ -119,7 +119,9 @@ export const GET: RequestHandler = async ({url}) => {
 
                         // Absorb delay in longer layovers
                         if(stop.arr && stop.dep) {
-                            delay = delay.minus(DateTime.fromSQL(stop.dep).diff(DateTime.fromSQL(stop.arr)))
+                            try {
+                                delay = delay.minus(DateTime.fromSQL(stop.dep).diff(DateTime.fromSQL(stop.arr)))
+                            } catch(e) {}
                             if(delay.toMillis() < 0) {
                                 delay = Duration.fromMillis(0)
                                 stop.status = "On time"

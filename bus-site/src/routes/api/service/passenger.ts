@@ -1,4 +1,3 @@
-import {readFileSync} from "fs";
 import type {FeedEntity} from "./gtfs-realtime";
 import {
     TripDescriptor_ScheduleRelationship,
@@ -9,12 +8,10 @@ import {distanceBetween, format_gtfs_time} from "./realtime_util";
 import {db} from "../../../db";
 import {DateTime} from "luxon";
 import type {StopVisits, Vehicles} from "../../../api.type";
-
-const sourceFile: {sources: Record<string, string[]>, operators: Record<string, [string, string]>}
-    = JSON.parse(readFileSync(new URL("./passenger-sources.json", import.meta.url), {encoding: "utf-8"}))
+import sourceFile from "./passenger-sources.json";
 
 const opsBySource: Record<string, string[]> = sourceFile.sources
-const operatorCodes: Record<string, [string, string]> = sourceFile.operators
+const operatorCodes = sourceFile.operators
 
 // Get all second-last stops to get timings from
 const stopsQuery = db.prepare(
