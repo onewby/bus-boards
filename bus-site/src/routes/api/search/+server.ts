@@ -7,9 +7,9 @@ const stmt = db.prepare(
 
 export const GET: RequestHandler = ({url}) => {
     const query = url.searchParams.get("query")
-    if(query == null || query == "") throw error(400, "No query provided.")
+    if(query == null || query == "") error(400, "No query provided.");
     const page = Number(url.searchParams.get("page")) ?? 0
-    if(isNaN(page)) throw error(400, "Page is not a number.")
+    if(isNaN(page)) error(400, "Page is not a number.");
     const offset = page * 5
     return new Response(JSON.stringify(stmt.all([query.split(" ").map(w => `"${w}"`).join(" "), offset])))
 }

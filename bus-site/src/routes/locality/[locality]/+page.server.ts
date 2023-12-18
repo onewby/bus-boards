@@ -25,9 +25,9 @@ const dbParent = db.prepare(`
 const dbSublocalities = db.prepare("SELECT code as id, name, lat, long FROM localities WHERE parent=? ORDER BY name")
 
 export const load: PageServerLoad = async ({params}) => {
-    if(!params.locality) throw error(400, "Locality code not specified")
+    if(!params.locality) error(400, "Locality code not specified");
     let info: LInfo = dbInfo.get(params.locality) as LInfo
-    if(!info) throw error(404)
+    if(!info) error(404);
     let parent: string | undefined = info.parent ? (dbParent.get(info.parent) as LParent).parent : undefined
     let stops: LStop[] = dbStops.all(params.locality) as LStop[]
     let sublocs: LSubloc[] = dbSublocalities.all(params.locality) as LSubloc[]

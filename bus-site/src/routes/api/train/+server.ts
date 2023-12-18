@@ -11,13 +11,13 @@ const UK_CTR_LAT = 54.00366
 
 export const GET: RequestHandler = async ({url}) => {
     let id = url.searchParams.get("id")
-    if(id === null) throw error(404, "ID not provided.")
+    if(id === null) error(404, "ID not provided.");
 
     let details: ServiceDetails
     try {
         details = await darwin.getServiceDetails(id)
     } catch (e) {
-        throw error(404, "Cannot find service.")
+        error(404, "Cannot find service.");
     }
 
     const prevCalls = details.previousCallingPoints.callingPointList

@@ -19,7 +19,7 @@ export const load: PageServerLoad<StopData> = async ({params, fetch, url}) => {
     }
 
     let resp = await fetch(`/api/stop?${apiParams}`)
-    if(!resp.ok) throw error(resp.status < 500 ? resp.status : 503, await resp.json())
+    if(!resp.ok) error(resp.status < 500 ? resp.status : 503, await resp.json());
     let data: StopData = await resp.json()
 
     if(filterLoc && filterName) {

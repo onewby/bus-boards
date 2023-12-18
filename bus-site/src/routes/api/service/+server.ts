@@ -13,11 +13,11 @@ proj4.defs("EPSG:27700","+proj=tmerc +lat_0=49 +lon_0=-2 +k=0.9996012717 +x_0=40
 
 export const GET: RequestHandler = async ({url}) => {
     const id = url.searchParams.get("id")
-    if(id === null) throw error(400, "ID not provided.")
+    if(id === null) error(400, "ID not provided.");
     const service: any = db.prepare(`SELECT route_short_name as code, trip_headsign as dest, max_stop_seq as mss FROM trips
                                             INNER JOIN main.routes r on r.route_id = trips.route_id
                                             WHERE trip_id=?`).get(id)
-    if(service === undefined) throw error(404, "Service not found.")
+    if(service === undefined) error(404, "Service not found.");
     const stops: ServiceStopData[] = db.prepare(`SELECT stops.name, stops.name as display_name, stops.locality, indicator as ind, arrival_time as arr,departure_time as dep, l.name as loc,
                                             timepoint as major, drop_off_type as doo, pickup_type as puo, stances.lat as lat, stances.long as long,
                                             stop_sequence as seq, stops.locality_name AS full_loc

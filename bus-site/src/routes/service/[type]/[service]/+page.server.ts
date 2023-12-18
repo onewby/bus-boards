@@ -11,13 +11,13 @@ export const load: PageServerLoad<ServiceData> = async ({params, fetch}) => {
         return await fetchData(`/api/train?id=` + params.service, fetch)
     }
 
-    throw error(404, "Service type not found.")
+    error(404, "Service type not found.");
 }
 
 type FetchType = typeof fetch
 
 async function fetchData(url: string, fetch: FetchType): Promise<ServiceData> {
     let resp = await fetch(url)
-    if(!resp.ok) throw error(resp.status < 500 ? resp.status : 503, await resp.json())
+    if(!resp.ok) error(resp.status < 500 ? resp.status : 503, await resp.json());
     return await resp.json()
 }

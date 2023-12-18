@@ -14,7 +14,7 @@ const HOURS_TO_SHOW = 2
 export const GET: RequestHandler = async ({url}) => {
     const locality = url.searchParams.get("locality")
     const name = url.searchParams.get("name")
-    if(locality == null || name == "") throw error(400, "Invalid query provided.")
+    if(locality == null || name == "") error(400, "Invalid query provided.");
 
     let date = url.searchParams.get("date")
     if(date == null || date == "") date = new Date(Date.now()).toISOString()
@@ -24,7 +24,7 @@ export const GET: RequestHandler = async ({url}) => {
     let filter = filterLoc !== null && filterName !== null
 
     let requestedTime = DateTime.fromISO(date, {zone: "Europe/London"})
-    if(!requestedTime.isValid) throw error(400, `Invalid date.`)
+    if(!requestedTime.isValid) error(400, `Invalid date.`);
     let dayName = requestedTime.weekdayLong!.toLowerCase()
 
     let startTime = requestedTime.minus({hour: 2})
@@ -39,7 +39,7 @@ export const GET: RequestHandler = async ({url}) => {
         "SELECT id, name, locality_name, locality as locality_code FROM stops WHERE name=? AND locality=?"
     ).get([name, locality])
 
-    if(stop_info == undefined) throw error(404, "Stop not found.")
+    if(stop_info == undefined) error(404, "Stop not found.");
 
     let offset = Math.round(requestedTime.diffNow("minutes").minutes)
 
