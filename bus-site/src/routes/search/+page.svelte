@@ -4,7 +4,7 @@
     import InfiniteLoading from "svelte-infinite-loading";
     import type {SearchResult} from "../../api.type";
 
-    let results = []
+    let results: SearchResult[] = []
     let pageNum = 0
 
     async function handle({detail: {loaded, complete, error}}) {
@@ -39,7 +39,7 @@
 
     <div class="panel w-full mt-2 flex flex-col">
         {#each results as result, i}
-            <a class="pl-4 pr-4 pt-2.5 pb-2.5 transition-colors hover:bg-gray-50 dark:hover:bg-slate-900" href="/stop/{result.id}">
+            <a class="pl-4 pr-4 pt-2.5 pb-2.5 transition-colors hover:bg-gray-50 dark:hover:bg-slate-900" href="/stop/{result.locality}/{encodeURIComponent(result.name)}">
                 <p class="text-lg">{result.name}</p>
                 {#if result.parent}
                     <p class="text-sm">{result.parent}</p>
