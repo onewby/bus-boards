@@ -1,15 +1,34 @@
 {
   "sources": {
-    "https://xploredundee.arcticapi.com": ["OP524"],
-    "https://mytrip.arcticapi.com": ["OP525"],
-    "https://mcgills.arcticapi.com/network/vehicles": ["OP612"],
-    "https://mcgillsse.arcticapi.com/network/vehicles": ["OP8781", "OP8747"]
+    "https://xploredundee.arcticapi.com": ["Xplore Dundee"],
+    "https://mcgills.arcticapi.com": ["McGill\\u0027s"],
+    "https://mcgillsse.arcticapi.com": ["Midland Bluebird Ltd", "McGills Scotland East Ltd"],
+    "https://westcoastmotors.arcticapi.com": ["WCMO"]
   },
   "operators": {
-    "OP524": ["TRDU", "Xplore Dundee"],
-    "OP525": ["MOFF", "Moffat \u0026 Williamson"],
-    "OP612": ["McG", "McGill\u0027s"],
-    "OP8747": ["MESC", "McGills Scotland East Ltd"],
-    "OP8781": ["MBLB", "Midland Bluebird Ltd"]
+    "Xplore Dundee": {
+      "gtfs": "OP524",
+      "opCode": "TRDU"
+    },
+    "Moffat \\u0026 Williamson": {
+      "gtfs": "OP525",
+      "opCode": "MOFF"
+    },
+    "McGill\\u0027s": {
+      "gtfs": "OP612",
+      "opCode": "McG"
+    },
+    "McGills Scotland East Ltd": {
+      "gtfs": "OP8747",
+      "opCode": "MESC"
+    },
+    "Midland Bluebird Ltd": {
+      "gtfs": "OP8781",
+      "opCode": "MBLB"
+    },
+    "WCMO": {
+      "gtfs": "OP528",
+      "opCode": "WCMO"
+    }
   }
 }

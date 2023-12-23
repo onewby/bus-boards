@@ -245,3 +245,111 @@ export type Meta = {
     luggage_racks?:           boolean;
     reading_lights?:          boolean;
 }
+
+export type PolarTimetable = {
+    _links:    PolarTimetableLinks;
+    _embedded: PolarTimetableEmbedded;
+    date:      string;
+}
+
+export type PolarTimetableEmbedded = {
+    "transmodel:line":      EmbeddedTransmodelLine[];
+    "transmodel:direction": TransmodelDirection;
+    "timetable:waypoint":   TimetableWaypoint[];
+    "timetable:journey":    PolarTimetableJourney[];
+}
+
+export type PolarTimetableJourney = {
+    id:        string;
+    _embedded: TimetableJourneyEmbedded;
+    _links:    TimetableJourneyLinks;
+}
+
+export type TimetableJourneyEmbedded = {
+    "timetable:visit": PolarTimetableVisit[];
+}
+
+export type PolarTimetableVisit = {
+    aimedArrivalTime:   string;
+    aimedDepartureTime: string | null;
+    _links:             PolarTimetableVisitLinks;
+}
+
+export type PolarTimetableVisitLinks = {
+    "timetable:waypoint": Self;
+}
+
+export type Self = {
+    href: string;
+}
+
+export type TimetableJourneyLinks = {
+    "transmodel:line": LinksTransmodelLine;
+}
+
+export type LinksTransmodelLine = {
+    name:        string;
+    description: string;
+    colors:      Colors;
+    href:        string;
+}
+
+export type TimetableWaypoint = {
+    principle: boolean;
+    major:     boolean;
+    _links:    TimetableWaypointLinks;
+}
+
+export type TimetableWaypointLinks = {
+    self:          Self;
+    "naptan:stop": NaptanStop;
+}
+
+export type TransmodelDirection = {
+    name:        string;
+    origin:      string;
+    destination: string;
+    vias:        any[];
+    _links?:     NaptanStopLinks;
+    href?:       string;
+}
+
+export type EmbeddedTransmodelLine = {
+    id:          string;
+    name:        string;
+    description: string;
+    detail:      string | null;
+    colors:      Colors;
+    _embedded:   TransmodelLineEmbedded;
+    _links:      NaptanStopLinks;
+    weighting:   number | null;
+}
+
+export type TransmodelLineEmbedded = {
+    "transmodel:operator": TransmodelOperator;
+}
+
+export type TransmodelOperator = {
+    code: string;
+    name: string;
+}
+
+export type PolarTimetableLinks = {
+    "transmodel:line":      LinksTransmodelLine[];
+    "transmodel:direction": TransmodelDirection[];
+    self:                   Self;
+    switch:                 Switch;
+}
+
+export type Switch = {
+    href:      string;
+    templated: boolean;
+}
+
+export type PolarLines = {
+    _embedded: PolarLinesEmbedded;
+}
+
+export type PolarLinesEmbedded = {
+    "transmodel:line": EmbeddedTransmodelLine[];
+}

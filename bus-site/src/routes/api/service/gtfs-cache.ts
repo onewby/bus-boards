@@ -39,7 +39,7 @@ export async function downloadGTFS() {
         // @ts-ignore
         const newCache = FeedMessage.decode(await file.getData(new Uint8ArrayWriter()))
 
-        const sources = [load_all_stagecoach_data()/*, load_passenger_sources()*/]
+        const sources = [load_all_stagecoach_data(), load_passenger_sources()]
         newCache.entity.push(...(await Promise.all(sources)).flat())
 
         gtfsCache = newCache

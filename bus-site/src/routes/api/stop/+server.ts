@@ -196,13 +196,14 @@ const stopTimesStmt = (dayName: string, prevDayName: string, params: string, add
                     INNER JOIN stances s ON stop_times.stop_id = s.code
                     INNER JOIN routes r on r.route_id = t.route_id
                     INNER JOIN main.agency a on r.agency_id = a.agency_id
+                    LEFT OUTER JOIN main.calendar c on t.service_id = c.service_id
+                    LEFT OUTER JOIN main.calendar_dates d on (c.service_id = d.service_id AND d.date=:date)
                 WHERE
                     stop_id IN (${params}) AND
                     stop_times.stop_sequence <> t.max_stop_seq AND
-                    departure_time IS NOT NULL AND
-                    ((EXISTS (SELECT 1 FROM calendar WHERE calendar.service_id = t.service_id AND start_date <= :date AND end_date >= :date AND ${dayName}=1)
-                        AND NOT EXISTS (SELECT 1 FROM main.calendar_dates WHERE calendar_dates.service_id = t.service_id AND date = :date AND exception_type=2))
-                        OR (EXISTS (SELECT 1 FROM main.calendar_dates WHERE calendar_dates.service_id = t.service_id AND date = :date AND exception_type=1)))
+                    departure_time IS NOT NULL
+                    AND ((start_date <= :date AND end_date >= :date AND ${dayName}=1) OR exception_type=1)
+                    AND NOT (exception_type IS NOT NULL AND exception_type = 2)
                     AND departure_time >= :start AND departure_time <= :end
                     AND pickup_type <> 1
                     ${filter ? "AND EXISTS (SELECT stop_sequence AS inner_seq FROM stop_times WHERE trip_id=t.trip_id AND inner_seq > seq AND stop_id IN (SELECT code FROM stances WHERE stop=(SELECT id FROM stops WHERE locality=:filterLoc AND name=:filterName)))" : ""}

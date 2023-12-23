@@ -103,6 +103,7 @@ create table if not exists trips
     service_id    TEXT,
     trip_headsign TEXT,
     max_stop_seq  integer,
+    min_stop_seq  integer,
     shape_id      TEXT,
     constraint trips_pk
         primary key (trip_id),
@@ -131,4 +132,15 @@ create table if not exists file_hashes
 (
     source TEXT PRIMARY KEY,
     hash TEXT
+);
+
+CREATE TABLE polar
+(
+    gtfs      TEXT
+        constraint polar_pk
+            primary key
+        constraint polar_trips_trip_id_fk
+            references trips,
+    polar     TEXT,
+    direction INT
 );

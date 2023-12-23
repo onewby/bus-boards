@@ -10,6 +10,7 @@ import type {CentralDirectory, File} from "unzipper";
 import {parse} from "csv-parse";
 import hasha from "hasha";
 import JSON5 from "json5";
+import {downloadRouteDirections} from "./import_passenger";
 
 const __file = parsePath(fileURLToPath(import.meta.url))
 
@@ -197,7 +198,12 @@ function clean_stops() {
 }
 
 function clean_sequence_numbers() {
-    const startTime = Date.now()
+    let startTime = Date.now()
+    console.log("Updating min stop sequence numbers")
+    db.exec("UPDATE trips SET min_stop_seq=(SELECT min(stop_sequence) FROM stop_times WHERE stop_times.trip_id=trips.trip_id)")
+    console.log(`min stop sequence number updates finished in ${(Date.now() - startTime) / 1000} seconds`)
+
+    startTime = Date.now()
     console.log("Updating max stop sequence numbers")
     db.exec("UPDATE trips SET max_stop_seq=(SELECT max(stop_sequence) FROM stop_times WHERE stop_times.trip_id=trips.trip_id)")
     console.log(`Max stop sequence number updates finished in ${(Date.now() - startTime) / 1000} seconds`)
@@ -213,4 +219,5 @@ create_indexes()
 clean_sequence_numbers()
 clean_arrivals()
 clean_stops()
+await downloadRouteDirections()
 db.close()
