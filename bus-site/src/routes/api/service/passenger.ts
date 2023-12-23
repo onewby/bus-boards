@@ -1,14 +1,14 @@
-import type {FeedEntity} from "./gtfs-realtime";
+import type {FeedEntity} from "./gtfs-realtime.js";
 import {
     TripDescriptor_ScheduleRelationship,
     VehiclePosition_CongestionLevel, VehiclePosition_OccupancyStatus,
     VehiclePosition_VehicleStopStatus
-} from "./gtfs-realtime";
-import {distanceBetween, findNearestSegmentPoint, format_gtfs_time, type Position} from "./realtime_util";
-import {db} from "../../../db";
+} from "./gtfs-realtime.js";
+import {distanceBetween, findNearestSegmentPoint, format_gtfs_time, type Position} from "./realtime_util.js";
+import {db} from "../../../db.js";
 import {DateTime} from "luxon";
 import type {Vehicles} from "../../../api.type";
-import sourceFile from "./passenger-sources.json";
+import sourceFile from "./passenger-sources.json" assert {type: 'json'};
 import groupBy from "object.groupby";
 
 const routeIDQuery = db.prepare("SELECT route_id FROM routes WHERE agency_id=? AND route_short_name=?").pluck()

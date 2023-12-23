@@ -8,7 +8,11 @@
 		"preview": "vite preview",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
-		"gtfs": "node --no-warnings=ExperimentalWarning --loader ts-node/esm import_gtfs.ts"
+		"import:gtfs": "node --no-warnings=ExperimentalWarning --loader ts-node/esm import_gtfs.ts",
+		"service:start": "PORT=3123 node build/index.js",
+		"service:realtime": "tsc --esModuleInterop --module esnext --target esnext --moduleResolution node --resolveJsonModule realtime/feeder.ts && vite-node --options.transformMode.ssr='/.*/' realtime/gtfs_microservice.ts",
+		"all": "GTFS=microservice concurrently 'npm:service:realtime' 'npm:service:start'",
+        "dev:rt": "GTFS=microservice concurrently 'npm:service:realtime' 'npm:dev'"
 	},
 	"devDependencies": {
 		"@sveltejs/adapter-auto": "^3.0.0",
@@ -22,6 +26,7 @@
 		"@types/geojson": "^7946.0.10",
 		"@types/leaflet": "^1.9.3",
 		"@types/luxon": "^3.3.0",
+		"@types/node": "^20.10.5",
 		"@types/object.groupby": "^1.0.0",
 		"@types/proj4": "^2.5.2",
 		"@types/unzipper": "^0.10.6",
@@ -39,7 +44,8 @@
 		"tsconfig-paths": "^4.2.0",
 		"tslib": "^2.6.2",
 		"typescript": "^5.3.3",
-		"vite": "^5.0.0"
+		"vite": "^5.0.0",
+		"vite-node": "^1.1.0"
 	},
 	"type": "module",
 	"dependencies": {
@@ -51,6 +57,7 @@
 		"better-sqlite3": "^8.4.0",
 		"bun-types": "^1.0.1",
 		"cli-progress": "^3.12.0",
+		"concurrently": "^8.2.2",
 		"csv-parse": "^5.4.0",
 		"fast-xml-parser": "^4.2.7",
 		"geojson": "^0.5.0",
