@@ -8,8 +8,7 @@
 		"preview": "vite preview",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
-		"gtfs": "node --no-warnings=ExperimentalWarning --loader ts-node/esm import_gtfs.ts",
-
+		"gtfs": "node --no-warnings=ExperimentalWarning --loader ts-node/esm import_gtfs.ts"
 	},
 	"devDependencies": {
 		"@sveltejs/adapter-auto": "^3.0.0",
