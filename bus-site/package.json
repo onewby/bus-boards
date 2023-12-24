@@ -10,8 +10,9 @@
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
 		"import:gtfs": "vite-node --options.transformMode.ssr='/.*/' import_gtfs.ts",
         "import:passenger": "vite-node --options.transformMode.ssr='/.*/' import_passenger.ts",
+        "build:realtime": "tsc --esModuleInterop --module esnext --target esnext --moduleResolution node --resolveJsonModule realtime/feeder.ts",
 		"service:start": "PORT=3123 node build/index.js",
-		"service:realtime": "tsc --esModuleInterop --module esnext --target esnext --moduleResolution node --resolveJsonModule realtime/feeder.ts && vite-node --options.transformMode.ssr='/.*/' realtime/gtfs_microservice.ts",
+		"service:realtime": "npm run build:realtime && vite-node --options.transformMode.ssr='/.*/' realtime/gtfs_microservice.ts",
 		"all": "vite build && GTFS=microservice concurrently 'npm:service:realtime' 'npm:service:start'",
 		"dev:rt": "GTFS=microservice concurrently 'npm:service:realtime' 'npm:dev'"
 	},

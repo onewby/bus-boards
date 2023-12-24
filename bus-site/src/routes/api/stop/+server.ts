@@ -77,21 +77,21 @@ export const GET: RequestHandler = async ({url}) => {
     // If we go past midnight, we need to handle this in SQL
     if(startTime.hour > endTime.hour) {
         // Get yesterday's buses after midnight going into the morning
-        stop_times = dayStmt.all(stances, {date: fmtDate(startTime.minus({day: 1})), start: naiveAdd24Start, end: naiveAdd24End, filterName, filterLoc})
-            .map(mapWithTimestamp(-1))
+        stop_times = (dayStmt.all(stances, {date: fmtDate(startTime.minus({day: 1})), start: naiveAdd24Start, end: naiveAdd24End, filterName, filterLoc}) as StopDeparture[])
+            .map(mapWithTimestamp(requestedTime, -1))
         // and add them to today's buses - first everything going from the day into potentially the next morning
-        stop_times = stop_times.concat(dayStmt.all(stances, {date: fmtDate(startTime), start: startTime.toSQLTime(), end: naiveEndTime, filterName, filterLoc})
-            .map(mapWithTimestamp()))
+        stop_times = (stop_times.concat(dayStmt.all(stances, {date: fmtDate(startTime), start: startTime.toSQLTime(), end: naiveEndTime, filterName, filterLoc}) as StopDeparture[])
+            .map(mapWithTimestamp(requestedTime)))
         // and anything in the morning registered on the next day
-        stop_times = stop_times.concat(nextDayStmt.all(stances, {date: fmtDate(endTime), start: "00:00:00", end: endTime.toSQLTime(), filterName, filterLoc})
-            .map(mapWithTimestamp()))
+        stop_times = (stop_times.concat(nextDayStmt.all(stances, {date: fmtDate(endTime), start: "00:00:00", end: endTime.toSQLTime(), filterName, filterLoc}) as StopDeparture[])
+            .map(mapWithTimestamp(requestedTime)))
     } else {
         // Get yesterday's buses after midnight going into the morning
-        stop_times = dayStmt.all(stances, {date: fmtDate(startTime.minus({day: 1})), start: naiveAdd24Start, end: naiveAdd24End, filterName, filterLoc})
-            .map(mapWithTimestamp(-1))
+        stop_times = (dayStmt.all(stances, {date: fmtDate(startTime.minus({day: 1})), start: naiveAdd24Start, end: naiveAdd24End, filterName, filterLoc}) as StopDeparture[])
+            .map(mapWithTimestamp(requestedTime, -1))
         // and add them to today's buses
-        stop_times = stop_times.concat(dayStmt.all(stances, {date: fmtDate(startTime), start: startTime.toSQLTime(), end: endTime.toSQLTime(), filterName, filterLoc}))
-            .map(mapWithTimestamp())
+        stop_times = stop_times.concat(dayStmt.all(stances, {date: fmtDate(startTime), start: startTime.toSQLTime(), end: endTime.toSQLTime(), filterName, filterLoc}) as StopDeparture[])
+            .map(mapWithTimestamp(requestedTime))
     }
     stop_times.forEach(time => time['departure_time'] = modTime(time['departure_time']))
     stop_times.forEach(time => time.type = "bus")
@@ -138,7 +138,7 @@ export const GET: RequestHandler = async ({url}) => {
         colour: "",
         type: "train",
         status: service.etd !== undefined && isNum(service.etd[0]) ? "Exp. " + service.etd : service.etd,
-        _timestamp: toLuxon(service.std ?? service.sta!)
+        _timestamp: toLuxon(requestedTime, service.std ?? service.sta!)
                     .plus({day: fromAfternoon && (service.std ?? service.sta!)[0] === "0" ? 1 : 0})
     }))
 
@@ -172,17 +172,17 @@ const addTimeNaive = (time: string, add: number) => (Number(time.substring(0, 2)
 const modTime = (time: string) => (Number(time.substring(0, 2)) % 24).toString().padStart(2, "0") + time.substring(2, 5)
 
 // Not really a use for map, but it is helpful for concise syntax
-const mapWithTimestamp = (addDays = 0) => {
+const mapWithTimestamp = (date: DateTime, addDays = 0) => {
     return (dep: StopDeparture) => {
-        dep._timestamp = toLuxon(dep.departure_time, addDays)
+        dep._timestamp = toLuxon(date, dep.departure_time, addDays)
         return dep
     }
 }
 
-const toLuxon = (time: string, addDays = 0) => {
+const toLuxon = (date: DateTime, time: string, addDays = 0) => {
     let hrs = Number(time.substring(0, 2))
     addDays += Math.floor(hrs / 24)
-    return DateTime.fromSQL(modTime(time)).plus({day: addDays})
+    return DateTime.fromSQL(`${date.toSQLDate()} ${modTime(time)}`).plus({day: addDays})
 }
 
 const stopTimesStmt = (dayName: string, prevDayName: string, params: string, addDay: (-1|0|1) = 0, filter = false) =>
