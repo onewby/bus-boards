@@ -4,7 +4,7 @@ import { Worker } from 'worker_threads';
 
 const PORT = 3948
 
-const worker = new Worker(new URL('./feeder.js', import.meta.url));
+const worker = new Worker(new URL('./feeder.js', import.meta.url), {workerData: "run"});
 
 let gtfsCache = JSON.stringify({header: undefined, entity: []})
 

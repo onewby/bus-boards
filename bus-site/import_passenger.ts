@@ -3,6 +3,7 @@ import type {PolarLines, PolarTimetable} from "./src/api.type";
 import {format_gtfs_time} from "./src/routes/api/service/realtime_util.js";
 import {db} from "./src/db.js";
 import sourceFile from "./src/routes/api/service/passenger-sources.json" assert {type: "json"}
+import { resolve } from "path";
 
 const allRoutesQuery = db.prepare("SELECT route_id,route_short_name FROM routes WHERE agency_id=?")
 const routeQuery = (date: string, route: string) => db.prepare(
@@ -22,7 +23,7 @@ const directions = ["inbound", "outbound"]
 const insert = db.prepare("INSERT OR IGNORE INTO polar (gtfs, polar, direction) VALUES (:gtfs, :polar, :direction)")
 export async function downloadRouteDirections() {
     console.log("Downloading route directions for Passenger vehicle detection")
-    const currDate = DateTime.fromISO("2024-01-08T10:42:07+0000") // temporary until after holidays
+    const currDate = DateTime.now()
     const days = [...new Array(7).keys()].map((i) => currDate.plus({'days': i}))
 
     db.exec("DELETE FROM polar")
@@ -31,7 +32,7 @@ export async function downloadRouteDirections() {
         if(!routeNamesResp.ok) {
             console.log(`Could not get response for lines of ${baseURL}`)
         }
-        const routeNames: PolarLines = await routeNamesResp.json()
+        const routeNames = await routeNamesResp.json() as PolarLines
 
         for(let op of operators) {
             const operator = op as keyof typeof sourceFile.operators
@@ -48,18 +49,17 @@ export async function downloadRouteDirections() {
                 }
                 console.log(`- ${route.route_short_name} (${timetableName})`)
 
-                let dayPromises = days.map(async day => {
+                let dayPromises = days.flatMap(async day => {
                     const routes = routeQuery(day.toFormat("yyyyMMdd"), route.route_id)
-                    const trips = []
-                    for(let direction of directions) {
+                    return Promise.all(directions.map(async direction => {
                         const lineTimetableResp = await fetch(`${baseURL}/network/operators/${sourceFile.operators[operator].opCode}/lines/${timetableName}/timetables?direction=${direction}&date=${day.toSQLDate()}`)
                         if (!lineTimetableResp.ok) {
                             console.log(`Could not get response for line ${timetableName} of ${operator} (${direction}, ${day.toSQLDate()})`)
-                            continue
+                            return []
                         }
-                        const lineTimetable: PolarTimetable = await lineTimetableResp.json()
+                        const lineTimetable = await lineTimetableResp.json() as PolarTimetable
 
-                        trips.push(...(lineTimetable?._embedded?.["timetable:journey"]
+                        return lineTimetable?._embedded?.["timetable:journey"]
                             ?.filter(tj => tj._links["transmodel:line"].name === route.route_short_name)
                             .map(tj => {
                                 let oTime = DateTime.fromISO(tj._embedded["timetable:visit"][0].aimedDepartureTime!)
@@ -80,11 +80,10 @@ export async function downloadRouteDirections() {
                                     direction: directions.indexOf(direction)
                                 } : undefined
                             })
-                            .filter(trip => trip !== undefined) ?? []))
-                    }
-                    return trips
+                            .filter(trip => trip !== undefined) ?? []
+                    }))
                 })
-                const linkedTrips = (await Promise.all(dayPromises)).flat()
+                const linkedTrips = (await Promise.all(dayPromises)).flat(2)
                 db.transaction((trips: typeof linkedTrips) => {
                     trips.forEach(trip => {
                         insert.run(trip)
@@ -96,3 +95,7 @@ export async function downloadRouteDirections() {
 }
 
 const addTimeNaive = (time: string, add: number) => (Number(time.substring(0, 2)) + add).toString().padStart(2, "0") + time.substring(2, time.length)
+
+if(resolve(process.argv[1]).endsWith("vite-node")) {
+    await downloadRouteDirections()
+}

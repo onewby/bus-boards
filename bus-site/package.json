@@ -8,11 +8,12 @@
 		"preview": "vite preview",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
-		"import:gtfs": "node --no-warnings=ExperimentalWarning --loader ts-node/esm import_gtfs.ts",
+		"import:gtfs": "vite-node --options.transformMode.ssr='/.*/' import_gtfs.ts",
+        "import:passenger": "vite-node --options.transformMode.ssr='/.*/' import_passenger.ts",
 		"service:start": "PORT=3123 node build/index.js",
 		"service:realtime": "tsc --esModuleInterop --module esnext --target esnext --moduleResolution node --resolveJsonModule realtime/feeder.ts && vite-node --options.transformMode.ssr='/.*/' realtime/gtfs_microservice.ts",
-		"all": "GTFS=microservice concurrently 'npm:service:realtime' 'npm:service:start'",
-        "dev:rt": "GTFS=microservice concurrently 'npm:service:realtime' 'npm:dev'"
+		"all": "vite build && GTFS=microservice concurrently 'npm:service:realtime' 'npm:service:start'",
+		"dev:rt": "GTFS=microservice concurrently 'npm:service:realtime' 'npm:dev'"
 	},
 	"devDependencies": {
 		"@sveltejs/adapter-auto": "^3.0.0",
@@ -31,6 +32,7 @@
 		"@types/proj4": "^2.5.2",
 		"@types/unzipper": "^0.10.6",
 		"@types/utm": "^1.1.1",
+		"@types/ws": "^8.5.10",
 		"@vite-pwa/sveltekit": "^0.3.0",
 		"autoprefixer": "^10.4.14",
 		"node-fetch": "^3.3.2",
@@ -72,6 +74,8 @@
 		"svelte-fa": "^3.0.4",
 		"svelte-floating-ui": "^1.5.8",
 		"svelte-infinite-loading": "^1.3.8",
-		"unzipper": "^0.10.14"
+		"unzipper": "^0.10.14",
+		"websocket-promise-lite": "^2.1.1",
+		"ws": "^8.15.1"
 	}
 }

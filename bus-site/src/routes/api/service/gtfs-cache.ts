@@ -1,10 +1,8 @@
 import {FeedMessage} from "./gtfs-realtime";
-import {Uint8ArrayWriter, ZipReader} from "@zip.js/zip.js";
 import type {ServiceData} from "../../../api.type";
 import {GET as serviceGet} from "./+server";
-import {load_all_stagecoach_data} from "./stagecoach";
-import {load_passenger_sources} from "./passenger";
 import {env} from "$env/dynamic/private";
+import {downloadGTFS as feederDownloadGTFS, gtfsCache as feederGTFSCache} from "../../../../realtime/feeder.ts";
 
 /*
  * Realtime data
@@ -34,29 +32,15 @@ export async function downloadGTFS() {
             const gtfsResp = await fetch(env.GTFS_URL ?? "http://localhost:3948")
             if(!gtfsResp.ok || !gtfsResp.body) return gtfsCache // Fail nicely - provide previous cache
             gtfsCache = await gtfsResp.json()
-            serviceCache = {}
         } else {
-            const gtfsResp = await fetch("https://data.bus-data.dft.gov.uk/avl/download/gtfsrt")
-            if(!gtfsResp.ok || !gtfsResp.body) return gtfsCache // Fail nicely - provide previous cache
-
-            const zipReader = new ZipReader(gtfsResp.body)
-            let file = (await zipReader.getEntries()).shift()
-            if(!file) return gtfsCache
-
-            // @ts-ignore
-            const newCache = FeedMessage.decode(await file.getData(new Uint8ArrayWriter()))
-
-            const sources = [load_all_stagecoach_data(), load_passenger_sources()]
-            newCache.entity.push(...(await Promise.all(sources)).flat())
-
-            gtfsCache = newCache
-            serviceCache = {}
+            await feederDownloadGTFS()
+            gtfsCache = feederGTFSCache
         }
     } catch (e) {
         gtfsCache = {header: undefined, entity: []}
-        serviceCache = {}
         console.log(e)
     }
+    serviceCache = {}
 }
 
 // Locate trip in GTFS cache

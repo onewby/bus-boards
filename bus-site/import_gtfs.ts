@@ -10,7 +10,6 @@ import type {CentralDirectory, File} from "unzipper";
 import {parse} from "csv-parse";
 import hasha from "hasha";
 import JSON5 from "json5";
-import {downloadRouteDirections} from "./import_passenger";
 
 const __file = parsePath(fileURLToPath(import.meta.url))
 
@@ -219,5 +218,4 @@ create_indexes()
 clean_sequence_numbers()
 clean_arrivals()
 clean_stops()
-await downloadRouteDirections()
 db.close()
