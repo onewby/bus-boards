@@ -7,12 +7,14 @@ import {downloadRouteDirections} from "../import_passenger.js";
 import {DateTime} from "luxon";
 import {workerData} from "node:worker_threads";
 import {load_first_vehicles} from "../src/routes/api/service/first.js";
+import {existsSync} from "node:fs";
+import {readFileSync, writeFileSync} from "fs";
 
 export let gtfsCache: FeedMessage
-let lastUpdate = DateTime.fromSQL("02:00:00")
+let lastUpdate = existsSync(".update") ? DateTime.fromISO(readFileSync(".update", "utf-8")) : DateTime.fromSQL("02:00:00")
 
 export async function initGTFS() {
-    await downloadRouteDirections()
+    await checkPassengerUpdate()
     await downloadGTFS()
     publish()
     gtfsUpdateLoop()
@@ -22,12 +24,17 @@ function gtfsUpdateLoop() {
     setTimeout(async () => {
         await downloadGTFS()
         publish()
-        if(lastUpdate.diffNow("days").days <= -5) {
-            await downloadRouteDirections()
-            lastUpdate = DateTime.now()
-        }
+        await checkPassengerUpdate()
         gtfsUpdateLoop()
     }, 10000)
+}
+
+async function checkPassengerUpdate() {
+    if(lastUpdate.diffNow("days").days <= -5) {
+        await downloadRouteDirections()
+        lastUpdate = DateTime.now()
+        writeFileSync(".update", DateTime.now().toISO()!)
+    }
 }
 
 export async function downloadGTFS() {
