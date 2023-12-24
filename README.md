@@ -49,7 +49,7 @@ This just does things in a different way, that's all.
 - Search for stops
 - View all scheduled departures for a 2-hour period
   - View services in the past or future that exist in the current dataset
-  - Filter by stance and/or operator
+  - Filter by stance, intermediate stop and/or operator
 - See the realtime location of buses where available
 
 
@@ -114,25 +114,24 @@ There are better/clearer ways to organise this, so this may change.
    re-run this to regenerate locality and stance data at any point, or you 
    can use `./rebuildDB.sh` in subsequent rebuilds to only update timetable 
    data.
+5. Modify the file `bus-site/first.env` to insert an API key for the FirstBus API.
 
 
 ## Next steps
 
 - [ ] Fix unmerged stances (e.g. for Seacroft and Wakefield Bus Stations)
-- [ ] Delay prediction
-  - [ ] Show on departures board 
+- [x] Delay prediction
+  - [x] Show on departures board 
 - [ ] Use route shape data for improved locating
 - [ ] Use data from other sources where possible (e.g. TfWM, TfGM)
 - [ ] Explore the use of using TransXChange and the Traveline National 
   Dataset directly (and not GTFS conversions) for improved accuracy 
 - [x] Use National Rail Darwin API for integrated bus/train departures
   - [ ] Expand integration to include trams etc.
-  - [ ] Improve location finding by finding stops in the same locality 
-    within very close range
 - [ ] View arrivals
 - [x] Locality pages (view all stops in a locality)
 - [x] Host online
-- [ ] Filter boards by destination or calling points
+- [x] Filter boards by destination or calling points
 - [x] Show maps of all the stances grouped within a stop
 
 

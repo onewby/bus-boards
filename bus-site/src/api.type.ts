@@ -353,3 +353,99 @@ export type PolarLines = {
 export type PolarLinesEmbedded = {
     "transmodel:line": EmbeddedTransmodelLine[];
 }
+
+export type FirstVehicles = {
+    jsonrpc: string;
+    method:  string;
+    params:  Params;
+}
+
+export type Params = {
+    resource: Resource;
+}
+
+export type Resource = {
+    member: Member[];
+}
+
+export type Member = {
+    dir:             string;
+    line:            string;
+    line_name:       string;
+    operator:        string;
+    operator_name:   string;
+    origin_atcocode: string;
+    request_time:    string;
+    status:          Status;
+    stops:           Stop[];
+}
+
+export type Status = {
+    bearing:                number;
+    location:               FirstLocation;
+    occupancy:              Occupancy;
+    progress_between_stops: ProgressBetweenStops;
+    recorded_at_time:       string;
+    stops_index:            StopsIndex;
+    vehicle_id:             string;
+}
+
+export type FirstLocation = {
+    coordinates: number[];
+    type:        string;
+}
+
+export type Occupancy = {
+    types: Type[];
+}
+
+export type Type = {
+    capacity: number;
+    name:     string;
+    occupied: number;
+}
+
+export type ProgressBetweenStops = {
+    value: number;
+}
+
+export type StopsIndex = {
+    type:  string;
+    value: number;
+}
+
+export type Stop = {
+    aimed:        Aimed;
+    atcocode:     string;
+    bearing:      string;
+    date:         string;
+    indicator:    string;
+    latitude:     number;
+    locality:     string;
+    longitude:    number;
+    name:         string;
+    smscode:      string;
+    stop_name:    string;
+    time:         string;
+    timing_point: boolean;
+}
+
+export type Aimed = {
+    arrival:   Arrival;
+    departure: Arrival;
+}
+
+export type Arrival = {
+    date: null | string;
+    time: null | string;
+}
+
+export type FirstWebSocketInfo = {
+    data:  Data;
+    links: Links;
+}
+
+export type Data = {
+    url:            string;
+    "access-token": string;
+}

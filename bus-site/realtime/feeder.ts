@@ -6,6 +6,7 @@ import {load_passenger_sources} from "../src/routes/api/service/passenger.js";
 import {downloadRouteDirections} from "../import_passenger.js";
 import {DateTime} from "luxon";
 import {workerData} from "node:worker_threads";
+import {load_first_vehicles} from "../src/routes/api/service/first.js";
 
 export let gtfsCache: FeedMessage
 let lastUpdate = DateTime.fromSQL("02:00:00")
@@ -42,7 +43,7 @@ export async function downloadGTFS() {
         const newCache = FeedMessage.decode(await file.getData(new Uint8ArrayWriter()))
         newCache.entity = newCache.entity.filter(e => e.vehicle?.trip?.tripId !== "")
 
-        const sources = [load_all_stagecoach_data(), load_passenger_sources()]
+        const sources = [load_all_stagecoach_data(), load_passenger_sources(), load_first_vehicles()]
         newCache.entity.push(...(await Promise.all(sources)).flat())
 
         gtfsCache = newCache
