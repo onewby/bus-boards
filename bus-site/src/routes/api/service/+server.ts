@@ -99,40 +99,42 @@ export const GET: RequestHandler = async ({url}) => {
                 const posBNG = bngToWGS84.inverse({x: currentPos.longitude, y: currentPos.latitude})
                 const pct = findPctBetween(prevBNG, currBNG, posBNG)
 
-                // Calculate bus delay per stop
-                let prevStop: ServiceStopData = stops[currentStopIndex - 1]
-                let currStop: ServiceStopData = stops[currentStopIndex]
+                if(!service.cancelled) {
+                    // Calculate bus delay per stop
+                    let prevStop: ServiceStopData = stops[currentStopIndex - 1]
+                    let currStop: ServiceStopData = stops[currentStopIndex]
 
-                let prevDep = DateTime.fromSQL(prevStop.dep)
-                let currArr = DateTime.fromSQL(currStop.arr)
-                // Get the time that the bus should have been at this position at
-                let expectedTime = prevDep.plus(currArr.diff(prevDep).mapUnits(u => isNaN(pct) ? u : u * pct))
+                    let prevDep = DateTime.fromSQL(prevStop.dep)
+                    let currArr = DateTime.fromSQL(currStop.arr)
+                    // Get the time that the bus should have been at this position at
+                    let expectedTime = prevDep.plus(currArr.diff(prevDep).mapUnits(u => isNaN(pct) ? u : u * pct))
 
-                // Delay = current time - expected time
-                let delay = DateTime.now().diff(expectedTime)
+                    // Delay = current time - expected time
+                    let delay = DateTime.now().diff(expectedTime)
 
-                // Apply delay to all stops past the current stop
-                let delays = stops.slice(currentStopIndex, stops.length)
-                for(let stop of delays) {
-                    if(delay.toMillis() >= 1000 * 120 || delay.toMillis() <= -1000 * 60) {
-                        stop.status = "Exp. " + DateTime.fromSQL(stop.arr ?? stop.dep).plus(delay).toFormat("HH:mm")
+                    // Apply delay to all stops past the current stop
+                    let delays = stops.slice(currentStopIndex, stops.length)
+                    for(let stop of delays) {
+                        if(delay.toMillis() >= 1000 * 120 || delay.toMillis() <= -1000 * 60) {
+                            stop.status = "Exp. " + DateTime.fromSQL(stop.arr ?? stop.dep).plus(delay).toFormat("HH:mm")
 
-                        // Absorb delay in longer layovers
-                        if(stop.arr && stop.dep) {
-                            try {
-                                delay = delay.minus(DateTime.fromSQL(stop.dep).diff(DateTime.fromSQL(stop.arr)))
-                            } catch(e) {}
-                            if(delay.toMillis() < 0) {
-                                delay = Duration.fromMillis(0)
-                                stop.status = "On time"
+                            // Absorb delay in longer layovers
+                            if(stop.arr && stop.dep) {
+                                try {
+                                    delay = delay.minus(DateTime.fromSQL(stop.dep).diff(DateTime.fromSQL(stop.arr)))
+                                } catch(e) {}
+                                if(delay.toMillis() < 0) {
+                                    delay = Duration.fromMillis(0)
+                                    stop.status = "On time"
+                                }
                             }
+                        } else {
+                            stop.status = "On time"
                         }
-                    } else {
-                        stop.status = "On time"
                     }
+                    // Show current delayed stop in major stops list for context (since previous stops don't show delay, can look on time when delayed)
+                    if(stops[currentStopIndex].status !== "On time") stops[currentStopIndex].major = true
                 }
-                // Show current delayed stop in major stops list for context (since previous stops don't show delay, can look on time when delayed)
-                if(stops[currentStopIndex].status !== "On time") stops[currentStopIndex].major = true
 
                 realtime = {
                     stop: currentStopIndex,

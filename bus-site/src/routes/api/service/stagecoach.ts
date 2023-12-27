@@ -177,7 +177,7 @@ async function load_stagecoach_data(operator: typeof SC_OPERATORS[number]): Prom
               AND substr(origin.departure_time, 1, 5) = ?
               AND ((start_date <= :date AND end_date >= :date AND ${timeWithoutMins.weekdayLong!.toLowerCase()}=1) OR exception_type=1)
               AND NOT (exception_type IS NOT NULL AND exception_type = 2)
-        `).get(SC_LOCAL_OPERATORS[sc[LOCAL_OPERATOR]], sc[ROUTE_NUMBER], sc[NEXT_STOP_CODE], format_gtfs_time(timeWithoutMins).substring(0, 5)) as TripStop | undefined
+        `).get({date: Number(timeWithoutMins.toISODate({format: 'basic'}))}, SC_LOCAL_OPERATORS[sc[LOCAL_OPERATOR]], sc[ROUTE_NUMBER], sc[NEXT_STOP_CODE], format_gtfs_time(timeWithoutMins).substring(0, 5)) as TripStop | undefined
         if(!stop) return null
         // Locate current stop from next std and stop
         return {
