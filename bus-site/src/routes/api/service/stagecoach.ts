@@ -92,7 +92,7 @@ type StagecoachService = {
     // Next stop on route
     ns: string,
     // Journey completed heuristic
-    jc: string,
+    jc: boolean,
     // "RAG"
     rg: string
 }
@@ -122,6 +122,7 @@ const NEXT_STOP_CODE = "ns"
 const PREV_STOP_CODE = "pr"
 const ROUTE_NUMBER = "sn"
 const LOCAL_OPERATOR = "so"
+const JOURNEY_DONE = "jc"
 
 function json_reviver(this: any, key: string, value: string) {
     switch(key) {
@@ -162,18 +163,21 @@ async function load_stagecoach_data(operator: typeof SC_OPERATORS[number]): Prom
     const srcJson: StagecoachData = JSON.parse(await resp.text(), json_reviver)
     // load data here
     return srcJson.services.map((sc): FeedEntity | null => {
+        if(sc[JOURNEY_DONE] && !sc[CANCELLED]) return null // journey is done, stop tracking
         let timeWithoutMins = DateTime.fromSeconds(Math.floor(sc[ORIGIN_STD].toSeconds() / 60) * 60)
         // Locate trip ID from origin std and stop
         const stop: TripStop | undefined = db.prepare(`
-            SELECT t.trip_id, r.route_id, stop_sequence as stop_seq, stop_id FROM stop_times
+            SELECT t.trip_id, r.route_id, stop_times.stop_sequence as stop_seq, stop_times.stop_id FROM stop_times
                 INNER JOIN trips t on t.trip_id = stop_times.trip_id
                 INNER JOIN main.routes r on t.route_id = r.route_id
-            WHERE agency_id = ? AND route_short_name = ? AND stop_id=?
-              AND EXISTS(SELECT * FROM stop_times 
-                                  WHERE trip_id=t.trip_id
-                                    AND stop_sequence = (SELECT min(stop_sequence) FROM stop_times WHERE trip_id=t.trip_id)
-                                    AND departure_time >= ? AND departure_time < ?)
-        `).get(SC_LOCAL_OPERATORS[sc[LOCAL_OPERATOR]], sc[ROUTE_NUMBER], sc[NEXT_STOP_CODE], format_gtfs_time(timeWithoutMins), format_gtfs_time(timeWithoutMins.plus({minutes: 1}))) as TripStop | undefined
+                INNER JOIN stop_times origin on (origin.trip_id=t.trip_id AND origin.stop_sequence=t.min_stop_seq)
+                LEFT OUTER JOIN main.calendar c on c.service_id = t.service_id
+                LEFT OUTER JOIN main.calendar_dates d on (d.service_id = c.service_id AND d.date=:date)
+            WHERE agency_id = ? AND route_short_name = ? AND stop_times.stop_id=?
+              AND substr(origin.departure_time, 1, 5) = ?
+              AND ((start_date <= :date AND end_date >= :date AND ${timeWithoutMins.weekdayLong!.toLowerCase()}=1) OR exception_type=1)
+              AND NOT (exception_type IS NOT NULL AND exception_type = 2)
+        `).get(SC_LOCAL_OPERATORS[sc[LOCAL_OPERATOR]], sc[ROUTE_NUMBER], sc[NEXT_STOP_CODE], format_gtfs_time(timeWithoutMins).substring(0, 5)) as TripStop | undefined
         if(!stop) return null
         // Locate current stop from next std and stop
         return {

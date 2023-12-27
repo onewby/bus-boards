@@ -1,6 +1,6 @@
 import {parentPort} from "worker_threads";
 import {Uint8ArrayWriter, ZipReader} from "@zip.js/zip.js";
-import {FeedMessage} from "../src/routes/api/service/gtfs-realtime.js";
+import {type FeedEntity, FeedHeader_Incrementality, FeedMessage} from "../src/routes/api/service/gtfs-realtime.js";
 import {load_all_stagecoach_data} from "../src/routes/api/service/stagecoach.js";
 import {load_passenger_sources} from "../src/routes/api/service/passenger.js";
 import {downloadRouteDirections} from "../import_passenger.js";
@@ -37,26 +37,38 @@ async function checkPassengerUpdate() {
     }
 }
 
+export async function load_gtfs_source(): Promise<FeedEntity[]> {
+    const gtfsResp = await fetch("https://data.bus-data.dft.gov.uk/avl/download/gtfsrt")
+    if(!gtfsResp.ok || !gtfsResp.body) return [] // Fail nicely - provide previous cache
+
+    const zipReader = new ZipReader(gtfsResp.body)
+    let file = (await zipReader.getEntries()).shift()
+    if(!file) return []
+
+    // @ts-ignore
+    const entries = FeedMessage.decode(await file.getData(new Uint8ArrayWriter()))
+    entries.entity = entries.entity.filter(e => e.vehicle?.trip?.tripId !== "")
+
+    return entries.entity
+}
+
 export async function downloadGTFS() {
-    try {
-        const gtfsResp = await fetch("https://data.bus-data.dft.gov.uk/avl/download/gtfsrt")
-        if(!gtfsResp.ok || !gtfsResp.body) return // Fail nicely - provide previous cache
+    const sources = [load_gtfs_source(), load_all_stagecoach_data(), load_passenger_sources(), load_first_vehicles()]
+    const newEntries = (await Promise.allSettled(sources)).map(p => {
+        if(p.status === 'fulfilled') {
+            return p.value
+        } else {
+            console.error(p.reason)
+            return []
+        }
+    }).flat()
 
-        const zipReader = new ZipReader(gtfsResp.body)
-        let file = (await zipReader.getEntries()).shift()
-        if(!file) return
-
-        // @ts-ignore
-        const newCache = FeedMessage.decode(await file.getData(new Uint8ArrayWriter()))
-        newCache.entity = newCache.entity.filter(e => e.vehicle?.trip?.tripId !== "")
-
-        const sources = [load_all_stagecoach_data(), load_passenger_sources(), load_first_vehicles()]
-        newCache.entity.push(...(await Promise.all(sources)).flat())
-
-        gtfsCache = newCache
-    } catch (e) {
-        gtfsCache = {header: undefined, entity: []}
-        console.log(e)
+    gtfsCache = {
+        header: {
+            gtfsRealtimeVersion: "2.0",
+            incrementality: FeedHeader_Incrementality.FULL_DATASET,
+            timestamp: Math.floor(Date.now() / 1000)
+        }, entity: newEntries
     }
 }
 
