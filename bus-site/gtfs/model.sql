@@ -134,7 +134,7 @@ create table if not exists file_hashes
     hash TEXT
 );
 
-CREATE TABLE polar
+CREATE TABLE IF NOT EXISTS polar
 (
     gtfs      TEXT
         constraint polar_pk

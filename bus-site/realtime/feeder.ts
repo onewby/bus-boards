@@ -11,7 +11,7 @@ import {existsSync} from "node:fs";
 import {readFileSync, writeFileSync} from "fs";
 
 export let gtfsCache: FeedMessage
-let lastUpdate = existsSync(".update") ? DateTime.fromISO(readFileSync(".update", "utf-8")) : DateTime.fromSQL("02:00:00")
+let lastUpdate = existsSync(".update") ? DateTime.fromISO(readFileSync(".update", "utf-8")) : DateTime.now().minus({days: 5, hours: 1})
 
 export async function initGTFS() {
     await checkPassengerUpdate()
@@ -32,7 +32,7 @@ function gtfsUpdateLoop() {
 async function checkPassengerUpdate() {
     if(lastUpdate.diffNow("days").days <= -5) {
         await downloadRouteDirections()
-        lastUpdate = DateTime.now()
+        lastUpdate = DateTime.now().set({hour: 2, minute: 0, second: 0, millisecond: 0})
         writeFileSync(".update", DateTime.now().toISO()!)
     }
 }
