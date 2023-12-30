@@ -92,7 +92,7 @@ export async function downloadRouteDirections() {
                         const lineTimetable = await lineTimetableResp.json() as PolarTimetable
 
                         return lineTimetable?._embedded?.["timetable:journey"]
-                            ?.filter(tj => tj._links["transmodel:line"].name === route.route_short_name)
+                            ?.filter(tj => tj._links["transmodel:line"].name === timetableName)
                             .map(tj => {
                                 let oTime = DateTime.fromISO(tj._embedded["timetable:visit"][0].aimedDepartureTime!)
                                 let dTime = DateTime.fromISO(tj._embedded["timetable:visit"][tj._embedded["timetable:visit"].length - 1].aimedArrivalTime)
@@ -132,10 +132,19 @@ export async function downloadRouteDirections() {
                 const dirs = inboundOutbounds.all(route.route_id) as OriginDestDirection[]
                 const missings = missingDirections.all(route.route_id) as Missing[]
 
-                const dirFixes = missings.map(m => {return {
-                    trip_id: m.trip_id,
-                    direction: dirs.find(d => d.origin === m.origin && d.dest === m.dest)?.direction
-                }}).filter(d => d.direction !== undefined)
+                const dirFixes = missings.map(m => {
+                    let dir = dirs.find(d => d.origin === m.origin && d.dest === m.dest)?.direction
+                    if(!dir) {
+                        // More lax version of direction finding for part trips - only applied if nothing conflicts
+                        let allDirs = [...new Set(dirs.filter(d => d.origin === m.origin || d.dest === m.dest)
+                            .map(d => d.direction))]
+                        if(allDirs.length === 1) dir = allDirs[0]
+                    }
+                    return {
+                        trip_id: m.trip_id,
+                        direction: dir
+                    }
+                }).filter(d => d.direction !== undefined)
 
                 db.transaction((fixes: typeof dirFixes) => {
                     fixes.forEach(f => fixMissingDirection.run(f))

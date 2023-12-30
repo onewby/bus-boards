@@ -103,6 +103,8 @@ export const operatorMatches: Record<string, string> = {
     "Llew Jones Coaches": "#ffbe00",
     "Phil Anslow Travel": "#56308C",
     "Nottingham City Transport": "#00857a",
+    "Bright Bus": "#ea580c",
+    "Bee Network": "#ffdc44",
     "Avanti West Coast": "#1f4555",
     "c2c": "#bc0087",
     "Caledonian Sleeper": "#003941",

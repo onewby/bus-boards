@@ -81,7 +81,8 @@ locality_changes: List[Tuple[LocalityCode, LocalityName, LocalityCode, LocalityC
     ("E0034956", "London Victoria Coach Station", "E0034917", "Victoria"),
     ("E0057190", "Luton Rail Station", "N0071638", "Luton"),
     ("N0078022", "Bus Station", "ES002978", "Glasgow"),
-    ("E0039083", "Rail Station Entrance", "N0071638", "Luton")
+    ("E0039083", "Rail Station Entrance", "N0071638", "Luton"),
+    ("E0033284", "Wellington Bridge St Real Time Tracking", "N0077039", "Leeds")
 ]
 
 # (locality, from name, to name)
@@ -136,13 +137,22 @@ manual_renames: List[Tuple[LocalityCode, StopName, StopName]] = [
     ("E0015874", "Arrival Stand", "Bus Station"),
     ("ES002978", "Bus Station", "Partick Station Interchange"),
     ("ES002978", "Partick Rail Station", "Partick Station Interchange"),
-    ("ES002978", "Partick SPT Subway Station", "Partick Station Interchange")
+    ("ES002978", "Partick SPT Subway Station", "Partick Station Interchange"),
+    ("ES003486", "Stance", "Rail Station"), # could be Goosecroft Road - bit of an editorial decision
+    ("ES001670", "Stance", "Bus Station"),
+    ("ES000097", "Stance", "Bus Station"),
+    ("ES001470", "Stance 8", "Transport Interchange"),
+    ("ES000923", "Town Centre Stances", "Town Centre"),
+    ("ES000923", "Town Centre stances", "Town Centre"),
+    ("N0077005", "Nelson Street Real Time Tracking", "Nelson Street")
 ]
 
 # ATCOCodes for stances that should be marked as arrivals that are not
 manual_arrivals: List[str] = [
     "6400L00040",
-    "6090117"
+    "6090117",
+    "64803493",
+    "6490IM002"
 ]
 
 
@@ -208,6 +218,7 @@ def standardise_synonyms(df: pd.DataFrame):
     df["CommonName"] = df["CommonName"].str.replace("(?i) Stn", " Station", regex=True)
     df["OriginalCommonName"] = df["CommonName"]
     df["CommonName"] = df.apply(lambda x: simplify_station_name(df, x), axis=1)
+    df["CommonName"] = df.apply(lambda x: standardise_station_name(df, x), axis=1)
 
     # Check if a child locality would be more suitable for a station
 
@@ -235,12 +246,26 @@ leeds_regex = re.compile(r'(?P<stop>[a-zA-Z ]+) (?P<stance>[a-zA-Z]?\d{0,2})')
 station_regex = re.compile(r'(?P<stop>[a-zA-Z]+) (?P<stance>[a-zA-Z]\d{1,2})')
 
 
+# Simplify "Footown Rail Station" in Footown to "Rail Station"
 def simplify_station_name(df: pd.DataFrame, x: Stop):
     if x["CommonName"].endswith("Rail Station") or x["CommonName"].endswith("Bus Station"):
         new_name = x["CommonName"].removeprefix(x["LocalityName"] + " ")
         return new_name if (df["CommonName"] == new_name).any() else x["CommonName"]
     else:
         return x["CommonName"]
+
+
+# Change "X Station" to "X Rail Station" where a rail station exists
+def standardise_station_name(df: pd.DataFrame, x: Stop):
+    if x["CommonName"].endswith("Station") and not x["CommonName"].endswith("Rail Station"):
+        new_name = x["CommonName"].removesuffix("Station") + "Rail Station"
+        if (df["CommonName"] == new_name).any():
+            return new_name
+        else:
+            new_name2 = new_name.removeprefix(x["LocalityName"] + " ")
+            if new_name != new_name2 and (df["CommonName"] == new_name2).any():
+                return new_name2
+    return x["CommonName"]
 
 
 # Split a stop name into a stop location and stance
