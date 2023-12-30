@@ -1,6 +1,6 @@
 import {DateTime} from "luxon";
 import type {PolarLines, PolarTimetable} from "./src/api.type";
-import {format_gtfs_time} from "./src/routes/api/service/realtime_util.js";
+import {addTimeNaive, format_gtfs_time} from "./src/routes/api/service/realtime_util.js";
 import {db} from "./src/db.js";
 import sourceFile from "./src/routes/api/service/passenger-sources.json" assert {type: "json"}
 import { resolve } from "path";
@@ -8,15 +8,47 @@ import { resolve } from "path";
 const allRoutesQuery = db.prepare("SELECT route_id,route_short_name FROM routes WHERE agency_id=?")
 const routeQuery = (date: string, route: string) => db.prepare(
     `SELECT start.departure_time as minss, finish.departure_time as maxss, trips.trip_id
-                FROM trips
-                    LEFT OUTER JOIN main.calendar c on trips.service_id = c.service_id
-                    LEFT OUTER JOIN main.calendar_dates d on (c.service_id = d.service_id AND d.date=20231220)
-                    INNER JOIN main.stop_times start on (start.trip_id=trips.trip_id AND start.stop_sequence=trips.min_stop_seq)
-                    INNER JOIN main.stop_times finish on (finish.trip_id=trips.trip_id AND finish.stop_sequence=trips.max_stop_seq)
-                WHERE route_id=:route
-                  AND ((start_date <= :date AND end_date >= :date AND ${DateTime.fromFormat(date, "yyyyMMdd").weekdayLong!.toLowerCase()}=1) OR exception_type=1)
-                  AND NOT (exception_type IS NOT NULL AND exception_type = 2)`
+            FROM trips
+                LEFT OUTER JOIN main.calendar c on trips.service_id = c.service_id
+                LEFT OUTER JOIN main.calendar_dates d on (c.service_id = d.service_id AND d.date=:date)
+                INNER JOIN main.stop_times start on (start.trip_id=trips.trip_id AND start.stop_sequence=trips.min_stop_seq)
+                INNER JOIN main.stop_times finish on (finish.trip_id=trips.trip_id AND finish.stop_sequence=trips.max_stop_seq)
+            WHERE route_id=:route
+              AND ((start_date <= :date AND end_date >= :date AND ${DateTime.fromFormat(date, "yyyyMMdd").weekdayLong!.toLowerCase()}=1) OR exception_type=1)
+              AND NOT (exception_type IS NOT NULL AND exception_type = 2)`
 ).all({date: Number(date), route}) as {minss: string, maxss: string, trip_id: string}[]
+
+// direction+0 and ORDER BY needed to trick SQLite query optimiser into in-memory sorting rather than building an index
+const inboundOutbounds = db.prepare(
+    `SELECT DISTINCT origin.stop_id as origin, dest.stop_id as dest, direction + 0 AS direction
+            FROM polar
+                INNER JOIN main.trips t on t.trip_id = polar.gtfs
+                INNER JOIN main.stop_times origin on (t.trip_id = origin.trip_id AND origin.stop_sequence=t.min_stop_seq)
+                INNER JOIN main.stop_times dest on (t.trip_id = dest.trip_id AND dest.stop_sequence=t.max_stop_seq)
+            WHERE t.route_id=? ORDER BY direction`)
+
+const missingDirections = db.prepare(
+    `SELECT trips.trip_id, origin.stop_id AS origin, dest.stop_id AS dest FROM trips
+                LEFT OUTER JOIN main.polar p on trips.trip_id = p.gtfs
+                INNER JOIN main.stop_times origin on (trips.trip_id = origin.trip_id AND origin.stop_sequence=trips.min_stop_seq)
+                INNER JOIN main.stop_times dest on (trips.trip_id = dest.trip_id AND dest.stop_sequence=trips.max_stop_seq)
+            WHERE route_id=? AND p.direction IS NULL`)
+
+const fixMissingDirection = db.prepare(
+    `INSERT INTO polar (gtfs, direction) VALUES (:trip_id, :direction)`
+)
+
+type Missing = {
+    trip_id: string,
+    origin: string,
+    dest: string
+}
+
+type OriginDestDirection = {
+    origin: string,
+    dest: string,
+    direction: string
+}
 
 const directions = ["inbound", "outbound"]
 
@@ -66,13 +98,20 @@ export async function downloadRouteDirections() {
                                 let dTime = DateTime.fromISO(tj._embedded["timetable:visit"][tj._embedded["timetable:visit"].length - 1].aimedArrivalTime)
                                 let oTimeStr = format_gtfs_time(oTime)
                                 let dTimeStr = format_gtfs_time(dTime)
-                                let daysDiff = dTime.diff(oTime, ['days', 'hours']).get("days")
-                                if (daysDiff >= 1) {
-                                    dTimeStr = addTimeNaive(dTimeStr, 24 * daysDiff)
-                                }
+                                let daysDiff = dTime.set({hour: 0, minute: 0, second: 0, millisecond: 0})
+                                    .diff(oTime.set({hour: 0, minute: 0, second: 0, millisecond: 0}),['days'])
+                                    .get("days")
+                                if (daysDiff >= 1) dTimeStr = addTimeNaive(dTimeStr, 24 * daysDiff)
 
                                 let trip = routes.find(r =>
                                     r.minss === oTimeStr && r.maxss === dTimeStr)
+                                if(trip === undefined) {
+                                    // Some misses seem to be due to rounding
+                                    dTimeStr = format_gtfs_time(dTime.minus({minute: 1}))
+                                    if (daysDiff >= 1) dTimeStr = addTimeNaive(dTimeStr, 24 * daysDiff)
+                                    trip = routes.find(r =>
+                                        r.minss === oTimeStr && r.maxss === dTimeStr)
+                                }
 
                                 return trip?.trip_id ? {
                                     gtfs: trip.trip_id,
@@ -85,16 +124,26 @@ export async function downloadRouteDirections() {
                 })
                 const linkedTrips = (await Promise.all(dayPromises)).flat(2)
                 db.transaction((trips: typeof linkedTrips) => {
-                    trips.forEach(trip => {
-                        insert.run(trip)
-                    })
+                    trips.forEach(trip => insert.run(trip))
                 })(linkedTrips)
+
+                // Fill in missing trips
+
+                const dirs = inboundOutbounds.all(route.route_id) as OriginDestDirection[]
+                const missings = missingDirections.all(route.route_id) as Missing[]
+
+                const dirFixes = missings.map(m => {return {
+                    trip_id: m.trip_id,
+                    direction: dirs.find(d => d.origin === m.origin && d.dest === m.dest)?.direction
+                }}).filter(d => d.direction !== undefined)
+
+                db.transaction((fixes: typeof dirFixes) => {
+                    fixes.forEach(f => fixMissingDirection.run(f))
+                })(dirFixes)
             }
         }
     }
 }
-
-const addTimeNaive = (time: string, add: number) => (Number(time.substring(0, 2)) + add).toString().padStart(2, "0") + time.substring(2, time.length)
 
 if(resolve(process.argv[1]).endsWith("vite-node")) {
     await downloadRouteDirections()
