@@ -7,7 +7,7 @@ import {intercityOperators} from "../stop/operators";
 import type {ServiceData, ServiceStopData} from "../../../api.type";
 import {findRealtimeTrip} from "./gtfs-cache";
 import {TripDescriptor_ScheduleRelationship} from "./gtfs-realtime";
-import {findPctBetween} from "./realtime_util";
+import {findPctBetween, sqlToLuxon} from "./realtime_util";
 
 proj4.defs("EPSG:27700","+proj=tmerc +lat_0=49 +lon_0=-2 +k=0.9996012717 +x_0=400000 +y_0=-100000 +ellps=airy +datum=OSGB36 +units=m +no_defs");
 
@@ -104,8 +104,8 @@ export const GET: RequestHandler = async ({url}) => {
                     let prevStop: ServiceStopData = stops[currentStopIndex - 1]
                     let currStop: ServiceStopData = stops[currentStopIndex]
 
-                    let prevDep = DateTime.fromSQL(prevStop.dep)
-                    let currArr = DateTime.fromSQL(currStop.arr)
+                    let prevDep = sqlToLuxon(prevStop.dep)
+                    let currArr = sqlToLuxon(currStop.arr)
                     // Get the time that the bus should have been at this position at
                     let expectedTime = prevDep.plus(currArr.diff(prevDep).mapUnits(u => isNaN(pct) ? u : u * pct))
 
@@ -116,12 +116,12 @@ export const GET: RequestHandler = async ({url}) => {
                     let delays = stops.slice(currentStopIndex, stops.length)
                     for(let stop of delays) {
                         if(delay.toMillis() >= 1000 * 120 || delay.toMillis() <= -1000 * 60) {
-                            stop.status = "Exp. " + DateTime.fromSQL(stop.arr ?? stop.dep).plus(delay).toFormat("HH:mm")
+                            stop.status = "Exp. " + sqlToLuxon(stop.arr ?? stop.dep).plus(delay).toFormat("HH:mm")
 
                             // Absorb delay in longer layovers
                             if(stop.arr && stop.dep) {
                                 try {
-                                    delay = delay.minus(DateTime.fromSQL(stop.dep).diff(DateTime.fromSQL(stop.arr)))
+                                    delay = delay.minus(sqlToLuxon(stop.dep).diff(sqlToLuxon(stop.arr)))
                                 } catch(e) {}
                                 if(delay.toMillis() < 0) {
                                     delay = Duration.fromMillis(0)

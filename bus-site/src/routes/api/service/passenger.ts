@@ -4,7 +4,13 @@ import {
     VehiclePosition_CongestionLevel, VehiclePosition_OccupancyStatus,
     VehiclePosition_VehicleStopStatus
 } from "./gtfs-realtime.js";
-import {distanceBetween, findNearestSegmentPoint, format_gtfs_time, type Position} from "./realtime_util.js";
+import {
+    addTimeNaive,
+    distanceBetween,
+    findNearestSegmentPoint,
+    format_gtfs_time,
+    type Position, sqlToLuxon
+} from "./realtime_util.js";
 import {db} from "../../../db.js";
 import {DateTime} from "luxon";
 import type {Vehicles} from "../../../api.type";
@@ -174,8 +180,6 @@ async function process_vehicles(vehicles: Vehicles, operators: (keyof typeof sou
     return gtfsRT
 }
 
-const addTimeNaive = (time: string, add: number) => (Number(time.substring(0, 2)) + add).toString().padStart(2, "0") + time.substring(2, time.length)
-
 function minIndex(arr: any[]) {
     let lowest = 0
     for(let i = 0; i < arr.length; i++) {
@@ -190,10 +194,4 @@ function minPredicate<T>(arr: T[], comparator: (i1: T, i2: T) => boolean) {
         if(comparator(arr[i], arr[lowest])) lowest = i
     }
     return arr[lowest]
-}
-
-function sqlToLuxon(time: string) {
-    let days = Math.floor(Number(time.substring(0, 2)) / 24)
-    let newTime = addTimeNaive(time, -24 * days)
-    return DateTime.fromSQL(newTime).plus({days})
 }

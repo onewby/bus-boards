@@ -1,5 +1,5 @@
 import type {FeedEntity} from "./gtfs-realtime.js";
-import type {DateTime} from "luxon";
+import {DateTime} from "luxon";
 
 export type Position = {
     x: number,
@@ -41,4 +41,14 @@ export function format_gtfs_time(time: DateTime): string {
 
 export function format_gtfs_date(time: DateTime): string {
     return time.toFormat("yyyyMMdd")
+}
+
+export function addTimeNaive(time: string, add: number) {
+    return (Number(time.substring(0, 2)) + add).toString().padStart(2, "0") + time.substring(2, time.length);
+}
+
+export function sqlToLuxon(time: string) {
+    let days = Math.floor(Number(time.substring(0, 2)) / 24)
+    let newTime = addTimeNaive(time, -24 * days)
+    return DateTime.fromSQL(newTime).plus({days})
 }

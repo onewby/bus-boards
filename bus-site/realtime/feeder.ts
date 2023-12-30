@@ -6,7 +6,7 @@ import {load_passenger_sources} from "../src/routes/api/service/passenger.js";
 import {downloadRouteDirections} from "../import_passenger.js";
 import {DateTime} from "luxon";
 import {workerData} from "node:worker_threads";
-import {load_first_vehicles} from "../src/routes/api/service/first.js";
+import {initialise_first, load_first_vehicles} from "../src/routes/api/service/first.js";
 import {existsSync} from "node:fs";
 import {readFileSync, writeFileSync} from "fs";
 
@@ -15,6 +15,7 @@ let lastUpdate = existsSync(".update") ? DateTime.fromISO(readFileSync(".update"
 
 export async function initGTFS() {
     await checkPassengerUpdate()
+    await initialise_first()
     await downloadGTFS()
     publish()
     gtfsUpdateLoop()
