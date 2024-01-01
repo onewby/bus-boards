@@ -1,0 +1,4 @@
+Uses Leaflet's utility classes, which are a little difficult to bundle separately for a server environment
+https://github.com/Leaflet/Leaflet/
+
+Modified slightly to remove triggered references to window, which are not needed for the utility classes in use to work

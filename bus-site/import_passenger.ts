@@ -1,6 +1,6 @@
 import {DateTime} from "luxon";
 import type {PolarLines, PolarTimetable} from "./src/api.type";
-import {addTimeNaive, format_gtfs_time} from "./src/routes/api/service/realtime_util.js";
+import {addTimeNaive, dayDiff, format_gtfs_time} from "./src/routes/api/service/realtime_util.js";
 import {db} from "./src/db.js";
 import sourceFile from "./src/routes/api/service/passenger-sources.json" assert {type: "json"}
 import { resolve } from "path";
@@ -98,9 +98,7 @@ export async function downloadRouteDirections() {
                                 let dTime = DateTime.fromISO(tj._embedded["timetable:visit"][tj._embedded["timetable:visit"].length - 1].aimedArrivalTime)
                                 let oTimeStr = format_gtfs_time(oTime)
                                 let dTimeStr = format_gtfs_time(dTime)
-                                let daysDiff = dTime.set({hour: 0, minute: 0, second: 0, millisecond: 0})
-                                    .diff(oTime.set({hour: 0, minute: 0, second: 0, millisecond: 0}),['days'])
-                                    .get("days")
+                                let daysDiff = dayDiff(oTime, dTime)
                                 if (daysDiff >= 1) dTimeStr = addTimeNaive(dTimeStr, 24 * daysDiff)
 
                                 let trip = routes.find(r =>

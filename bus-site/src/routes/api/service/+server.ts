@@ -42,7 +42,7 @@ export const GET: RequestHandler = async ({url}) => {
             let existingLoc = stop.loc
             // @ts-ignore
             stop.loc = stop.full_loc.split(" › ")[0];
-            if(stop.name == "Park and Ride" && existingLoc != stop.loc) {
+            if((stop.name == "Park and Ride" || stop.name == "Rail Station") && existingLoc != stop.loc) {
                 stop.display_name = existingLoc + " " + stop.name
             }
         })

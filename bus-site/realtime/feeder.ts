@@ -9,6 +9,7 @@ import {workerData} from "node:worker_threads";
 import {initialise_first, load_first_vehicles} from "../src/routes/api/service/first.js";
 import {existsSync} from "node:fs";
 import {readFileSync, writeFileSync} from "fs";
+import {load_coaches} from "../src/routes/api/service/coaches.js";
 
 export let gtfsCache: FeedMessage
 let lastUpdate = existsSync(".update") ? DateTime.fromISO(readFileSync(".update", "utf-8")) : DateTime.now().minus({days: 5, hours: 1})
@@ -54,7 +55,7 @@ export async function load_gtfs_source(): Promise<FeedEntity[]> {
 }
 
 export async function downloadGTFS() {
-    const sources = [load_gtfs_source(), load_all_stagecoach_data(), load_passenger_sources(), load_first_vehicles()]
+    const sources = [load_gtfs_source(), load_all_stagecoach_data(), load_passenger_sources(), load_first_vehicles(), load_coaches()]
     const newEntries = (await Promise.allSettled(sources)).map(p => {
         if(p.status === 'fulfilled') {
             return p.value

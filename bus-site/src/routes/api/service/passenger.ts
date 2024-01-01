@@ -6,9 +6,7 @@ import {
 } from "./gtfs-realtime.js";
 import {
     addTimeNaive,
-    distanceBetween,
-    findNearestSegmentPoint,
-    format_gtfs_time,
+    format_gtfs_time, minIndex,
     type Position, sqlToLuxon
 } from "./realtime_util.js";
 import {db} from "../../../db.js";
@@ -16,9 +14,10 @@ import {DateTime} from "luxon";
 import type {Vehicles} from "../../../api.type";
 import sourceFile from "./passenger-sources.json" assert {type: 'json'};
 import groupBy from "object.groupby";
+import {Point, LineUtil} from "../../../leaflet/geometry/index.js"
 
 const routeIDQuery = db.prepare("SELECT route_id FROM routes WHERE agency_id=? AND route_short_name=?").pluck()
-const lineSegmentQuery = db.prepare(
+export const lineSegmentQuery = db.prepare(
     `SELECT DISTINCT code as stop_id, lat as y, long as x FROM stances
              WHERE code IN (
                  SELECT stop_id FROM stop_times
@@ -89,25 +88,24 @@ async function process_vehicles(vehicles: Vehicles, operators: (keyof typeof sou
             let latLongs = groupBy(
                 lineSegmentQuery.all(routeID) as ({stop_id: string} & Position)[],
                 ls => ls.stop_id)
+            let points = Object.fromEntries(Object.entries(latLongs).map(([code, details]) => [code, new Point(details[0].x, details[0].y)]))
 
             // Calculate all closeness values (create vehicle-candidate table)
             let closeness: TripCandidateList[] = lineVehicles.map((vehicle, i) => {
-                let loc = {x: vehicle.geometry.coordinates[0], y: vehicle.geometry.coordinates[1]}
+                let loc = new Point(vehicle.geometry.coordinates[0], vehicle.geometry.coordinates[1])
                 let direction = vehicle.properties.direction === 'inbound' ? 0 : 1
                 return {vehicle: i, cands: candidates.filter(c => c.direction === direction).map(candidate => {
                     // out of all line segments for this candidate, find the closest one
                     let route = candidate.route.split(",")
                     let departureTimes = candidate.times.split(",")
                     let segments = [...Array(route.length - 1).keys()].map(i => {
-                        return findNearestSegmentPoint(loc, latLongs[route[i]][0], latLongs[route[i+1]][0])
+                        return LineUtil.closestPointOnSegment(loc, points[route[i]], points[route[i+1]])
                     })
-                    let segmentDistances = segments.map(segment => {
-                        return distanceBetween(loc, segment)
-                    })
+                    let segmentDistances = segments.map(segment => loc.distanceTo(segment))
                     let index = minIndex(segmentDistances)
 
                     // figure out where the vehicle *would* be right now (min/max at start/end)
-                    let pct = distanceBetween(latLongs[route[index]][0], segments[index]) / distanceBetween(latLongs[route[index]][0], latLongs[route[index+1]][0])
+                    let pct = points[route[index]].distanceTo(segments[index]) / points[route[index]].distanceTo(points[route[index+1]])
                     let fromTime = sqlToLuxon(departureTimes[index])
                     let toTime = sqlToLuxon(departureTimes[index + 1])
                     let current = fromTime.plus({milliseconds: toTime.diff(fromTime).toMillis() * pct})
@@ -178,14 +176,6 @@ async function process_vehicles(vehicles: Vehicles, operators: (keyof typeof sou
         }
     }
     return gtfsRT
-}
-
-function minIndex(arr: any[]) {
-    let lowest = 0
-    for(let i = 0; i < arr.length; i++) {
-        if(arr[i] < arr[lowest]) lowest = i
-    }
-    return lowest
 }
 
 function minPredicate<T>(arr: T[], comparator: (i1: T, i2: T) => boolean) {

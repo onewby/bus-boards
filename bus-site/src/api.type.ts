@@ -449,3 +449,111 @@ export type Data = {
     url:            string;
     "access-token": string;
 }
+
+export type MegabusVehicles = {
+    code:    number;
+    message: string;
+    routes:  MegabusRoute[];
+}
+
+export type MegabusRoute = {
+    metadata:                 Metadata;
+    chronological_departures: ChronologicalDeparture[];
+}
+
+export type ChronologicalDeparture = {
+    trip:           MegabusTrip;
+    active_vehicle: ActiveVehicle | null;
+    stop:           MegabusStop;
+    tracking:       Tracking;
+    coachtracker:   Coachtracker;
+}
+
+export type ActiveVehicle = {
+    current_wgs84_latitude_degrees:   number;
+    current_wgs84_longitude_degrees:  number;
+    current_forward_azimuth_degrees:  number;
+    current_speed_mph:                number | null;
+    last_update_time_unix:            number;
+    engine_is_currently_on:           boolean;
+    engine_is_currently_idling:       boolean;
+    last_update_time_formatted_local: string;
+}
+
+export type Coachtracker = {
+    is_earlier_departure: boolean;
+    is_later_departure:   boolean;
+}
+
+export type MegabusStop = {
+    sequence:                                 number;
+    original_source_sequence:                 number;
+    scheduled_arrival_time_unix:              number;
+    scheduled_departure_time_unix:            number;
+    live_arrival_time_unix:                   number | null;
+    live_departure_time_unix:                 number | null;
+    estimated_arrival_time_unix:              number | null;
+    estimated_departure_time_unix:            number | null;
+    scheduled_arrival_time_formatted_local:   string;
+    scheduled_departure_time_formatted_local: string;
+    live_arrival_time_formatted_local:        null | string;
+    live_departure_time_formatted_local:      null | string;
+    estimated_arrival_time_formatted_local:   null | string;
+    estimated_departure_time_formatted_local: null | string;
+}
+
+export type Tracking = {
+    current_delay_seconds:       number | null;
+    total_distance_km:           number;
+    is_future_trip:              boolean;
+    is_cancelled:                boolean;
+    is_completed:                boolean;
+    has_no_tracking:             boolean;
+    has_no_vehicle:              boolean;
+    has_no_gps:                  boolean;
+    is_stationary:               boolean;
+    is_arrived:                  boolean;
+    is_arrived_at_current_stop:  boolean;
+    is_moving:                   boolean;
+    is_moving_to_current_stop:   boolean;
+    has_departed_current_stop:   boolean;
+    has_moved_past_current_stop: boolean;
+    has_bypassed_current_stop:   boolean;
+}
+
+export type MegabusTrip = {
+    id:                             string;
+    operator_code:                  string;
+    operator_name:                  string;
+    source_operator_code:           null;
+    source_operator_name:           null;
+    class_code:                     string;
+    class_name:                     string;
+    route_id:                       string;
+    short_name:                     string;
+    direction:                      Direction;
+    pattern_code:                   string;
+    duplicate_service:              boolean;
+    duplicate_of_trip_id:           null;
+    departure_time_unix:            number;
+    arrival_time_unix:              number;
+    departure_location_name:        string;
+    arrival_location_name:          string;
+    departure_locale:               string;
+    arrival_locale:                 string;
+    duration_seconds:               number;
+    departure_time_formatted_local: string;
+    arrival_time_formatted_local:   string;
+}
+
+export enum Direction {
+    I = "I",
+    O = "O",
+}
+
+export type Metadata = {
+    route_id:                string;
+    short_name:              string;
+    departure_location_name: string;
+    arrival_location_name:   string;
+}

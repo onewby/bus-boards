@@ -14,14 +14,6 @@ export function findNearestLinePoint(s1: Position, s2: Position, point: Position
     return {x: xp, y: yp}
 }
 
-export function findNearestSegmentPoint(s1: Position, s2: Position, point: Position): Position {
-    const linePoint = findNearestLinePoint(s1, s2, point)
-    const exteriorMetric = (point.x - s1.x) / (s2.x - s1.x)
-    if (exteriorMetric < 0) return s1
-    if (exteriorMetric > 1) return s2
-    return linePoint
-}
-
 export function distanceBetween(s1: Position, s2: Position) {
     return Math.sqrt((s2.x - s1.x) ** 2 + (s2.y - s1.y) ** 2)
 }
@@ -51,4 +43,18 @@ export function sqlToLuxon(time: string) {
     let days = Math.floor(Number(time.substring(0, 2)) / 24)
     let newTime = addTimeNaive(time, -24 * days)
     return DateTime.fromSQL(newTime).plus({days})
+}
+
+export function dayDiff(from: DateTime, to: DateTime) {
+    return to.set({hour: 0, minute: 0, second: 0, millisecond: 0})
+        .diff(from.set({hour: 0, minute: 0, second: 0, millisecond: 0}),['days'])
+        .get("days")
+}
+
+export function minIndex(arr: any[]) {
+    let lowest = 0
+    for(let i = 0; i < arr.length; i++) {
+        if(arr[i] < arr[lowest]) lowest = i
+    }
+    return lowest
 }
