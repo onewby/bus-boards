@@ -54,8 +54,14 @@ export async function load_gtfs_source(): Promise<FeedEntity[]> {
     return entries.entity
 }
 
+export async function load_ember(): Promise<FeedEntity[]> {
+    const resp = await fetch("https://api.ember.to/v1/gtfs/realtime/")
+    if(!resp.ok || !resp.body) return []
+    return FeedMessage.decode(new Uint8Array(await resp.arrayBuffer())).entity
+}
+
 export async function downloadGTFS() {
-    const sources = [load_gtfs_source(), load_all_stagecoach_data(), load_passenger_sources(), load_first_vehicles(), load_coaches()]
+    const sources = [load_gtfs_source(), load_all_stagecoach_data(), load_passenger_sources(), load_first_vehicles(), load_coaches(), load_ember()]
     const newEntries = (await Promise.allSettled(sources)).map(p => {
         if(p.status === 'fulfilled') {
             return p.value

@@ -155,6 +155,35 @@ manual_arrivals: List[str] = [
     "6490IM002"
 ]
 
+ember_msip = [
+    {
+        "ATCOCode": "6400PT2223",
+        "CommonName": "MSIP",
+        "Indicator": "adj",
+        "NptgLocalityCode": "ES001047",
+        "LocalityName": "Douglas",
+        "ParentLocalityName": "Dundee",
+        "Longitude": -2.8917443188285388,
+        "Latitude": 56.48437762222269,
+        "Easting": 345179,
+        "Northing": 732831,
+        "BusStopType": "BCT"
+    },
+    {
+        "ATCOCode": "6400PT2224",
+        "CommonName": "MSIP",
+        "Indicator": "opp",
+        "NptgLocalityCode": "ES001047",
+        "LocalityName": "Douglas",
+        "ParentLocalityName": "Dundee",
+        "Longitude": -2.891352530924598,
+        "Latitude": 56.4844273663198,
+        "Easting": 345204,
+        "Northing": 732836,
+        "BusStopType": "BCT"
+    }
+]
+
 
 def group_data(df: pd.DataFrame) -> StopGroupings:
     # print("Dropping unwanted entries")
@@ -328,6 +357,11 @@ def fix_groupings(groups: StopGroupings):
 def main():
     print("Reading stops")
     df = pd.read_csv("Stops.csv", low_memory=False)
+    # Ember patch
+    if "6400PT2223" not in df["ATCOCode"]:
+        maxIndex = df.index.max()
+        for i in range(len(ember_msip)):
+            df.loc[maxIndex + 1 + i] = pd.Series(ember_msip[i], index=df.iloc[0].index)
 
     groups = group_data(df)
 

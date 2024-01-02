@@ -10,7 +10,22 @@ import type {CentralDirectory, File} from "unzipper";
 import {parse} from "csv-parse";
 import hasha from "hasha";
 import JSON5 from "json5";
-import {rmSync} from "node:fs";
+import {existsSync, rmSync} from "node:fs";
+
+const sourceFiles: { name: string, url: string, path: string, prefix: string }[] = [
+    {
+        name: "BODS (approx ~550MB)",
+        prefix: "",
+        url: "https://data.bus-data.dft.gov.uk/timetable/download/gtfs-file/all/",
+        path: "gtfs/itm_all_gtfs.zip"
+    },
+    {
+        name: "Ember",
+        prefix: "E",
+        url: "https://api.ember.to/v1/gtfs/static/",
+        path: "gtfs/ember.zip"
+    }
+]
 
 const __file = parsePath(fileURLToPath(import.meta.url))
 
@@ -22,7 +37,7 @@ let indexingScript = readFileSync("gtfs/indexes.sql", {encoding: "utf-8"})
 let tableCreateScript = readFileSync("gtfs/model.sql", {encoding: "utf-8"})
 db.exec(tableCreateScript)
 
-const sources = ["stop_times", "trips", "calendar_dates", "calendar", "routes", "agency"]
+const gtfsTables = ["stop_times", "trips", "calendar_dates", "calendar", "routes", "agency"]
 let addAgency = db.prepare("REPLACE INTO agency (agency_id, agency_name, agency_url, agency_timezone, agency_lang) VALUES (:agency_id, :agency_name, :agency_url, :agency_timezone, :agency_lang)")
 let addRoutes = db.prepare("REPLACE INTO routes (route_id, agency_id, route_short_name, route_long_name, route_type) VALUES (:route_id, :agency_id, :route_short_name, :route_long_name, :route_type)")
 let addCalendar = db.prepare("REPLACE INTO calendar (service_id, monday, tuesday, wednesday, thursday, friday, saturday, sunday, start_date, end_date) VALUES (:service_id, :monday, :tuesday, :wednesday, :thursday, :friday, :saturday, :sunday, :start_date, :end_date)")
@@ -31,35 +46,25 @@ let addTrips = db.prepare("REPLACE INTO trips (route_id, service_id, trip_id, tr
 let addStopTimes = db.prepare("REPLACE INTO stop_times (trip_id, arrival_time, departure_time, stop_id, stop_sequence, timepoint, stop_headsign, pickup_type, drop_off_type) VALUES (:trip_id, :arrival_time, :departure_time, :stop_id, :stop_sequence, :timepoint, NULLIF(:stop_headsign, ''), :pickup_type, :drop_off_type)")
 let dropAllSource = db.transaction(() => {
     db.pragma('foreign_keys = OFF')
-    sources.forEach(table => db.prepare(`DELETE FROM ${table}`).run())
+    gtfsTables.forEach(table => db.prepare(`DELETE FROM ${table}`).run())
     db.exec(tableCreateScript)
     db.pragma('foreign_keys = ON')
 })
 
 async function import_zips() {
-    const path = "gtfs/itm_all_gtfs.zip"
-
     if(process.argv.length < 3 || process.argv[2].toLowerCase() != "-s") {
-        console.log("Downloading GTFS data (usually ~550MB)")
-        let resp = await fetch("https://data.bus-data.dft.gov.uk/timetable/download/gtfs-file/all/")
-        if(!resp.ok || !resp.body) {
-            console.error("Cannot download GTFS data")
-            return
+        for(let source of sourceFiles) {
+            console.log(`Downloading ${source.name} GTFS data`)
+            await download_zip(source.url, source.path)
         }
-        let fileStream = createWriteStream(path)
-        // @ts-ignore
-        await finished(Readable.fromWeb(resp.body).pipe(fileStream))
-        fileStream.close()
 
         if(process.argv.length < 3 || process.argv[2].toLowerCase() != "-h") {
-            const hash = await hasha.fromFile(path, {algorithm: "sha256"})
-            let currentHash = undefined
-            try {
-                currentHash = readFileSync("gtfs/hash.txt", "utf-8")
-            } catch (e) {}
-
-            if(currentHash !== undefined && currentHash === hash) {
-                console.log("GTFS up to date - run ts-node-esm import_gtfs.ts -h to ignore hash")
+            const hash = await calculate_joint_hash()
+            if(existsSync("gtfs/hash.txt")) {
+                let currentHash = readFileSync("gtfs/hash.txt", "utf-8")
+                if(currentHash === hash) {
+                    console.log("GTFS up to date - run ts-node-esm import_gtfs.ts -h to ignore hash")
+                }
             }
         }
     }
@@ -68,43 +73,64 @@ async function import_zips() {
     dropAllSource()
     console.log("Inserting new data")
 
-    const zip = await Open.file(path)
-    try {
-        await import_zip(zip)
-
-        const hash = await hasha.fromFile(path, {algorithm: "sha256"})
-        writeFileSync("gtfs/hash.txt", hash)
-    } catch (e) {
-        console.log(e)
+    for(let source of sourceFiles) {
+        const zip = await Open.file(source.path)
+        try {
+            await import_zip(zip, source.prefix)
+        } catch (e) {
+            console.log(e)
+        }
     }
+    writeFileSync("gtfs/hash.txt", await calculate_joint_hash())
 
     console.log("Imported data successfully.")
 }
 
-async function import_zip(zip: CentralDirectory) {
-    let files: [string, Statement, Object][] = [
-        ["agency.txt", addAgency, {}],
-        ["routes.txt", addRoutes, {}],
-        ["calendar.txt", addCalendar, {}],
-        ["calendar_dates.txt", addCalendarDates, {}],
-        ["trips.txt", addTrips, {"trip_headsign": null}],
-        ["stop_times.txt", addStopTimes, {}]
+async function download_zip(url: string, path: string) {
+    let resp = await fetch(url)
+    if(!resp.ok || !resp.body) {
+        console.error(`Cannot download ${path}`)
+        return
+    }
+    let fileStream = createWriteStream(path)
+    // @ts-ignore
+    await finished(Readable.fromWeb(resp.body).pipe(fileStream))
+    fileStream.close()
+}
+
+async function calculate_joint_hash() {
+    return hasha(
+        (await Promise.all(
+            sourceFiles.map(async source => await hasha.fromFile(source.path, {algorithm: "sha256"}))
+        )).join()
+    )
+}
+
+async function import_zip(zip: CentralDirectory, prefix: string = "") {
+    const prefixable = ["service_id"]
+    let files: [string, Statement, Object?, string[]?][] = [
+        ["agency.txt", addAgency],
+        ["routes.txt", addRoutes, {"agency_id": "Ember"}],
+        ["calendar.txt", addCalendar, {}, prefixable],
+        ["calendar_dates.txt", addCalendarDates, {}, prefixable],
+        ["trips.txt", addTrips, {"trip_headsign": null}, prefixable],
+        ["stop_times.txt", addStopTimes, {"stop_headsign": null}]
     ]
     let startTime = Date.now()
     for(const tuple of files) {
-        await import_txt_file(zip, tuple[0], tuple[1], tuple[2])
+        await import_txt_file(zip, tuple[0], tuple[1], tuple?.[2], tuple?.[3], prefix)
     }
     console.log(`Insertions completed in ${(Date.now() - startTime) / 1000} seconds`)
 }
 
-async function import_txt_file(zip: CentralDirectory, file_name: string, sql: Statement, defaults: Object = {}) {
+async function import_txt_file(zip: CentralDirectory, file_name: string, sql: Statement, defaults: Object = {}, prefixable: string[] = [], prefix: string = "") {
     let file = zip.files.find(f => f.path == file_name)
     if(file) {
-        await insertSource(file, sql, defaults)
+        await insertSource(file, sql, defaults, prefixable, prefix)
     } else throw Error(`Could not find ${file_name}`)
 }
 
-async function insertSource(file: File, sql: Statement, defaults: Object = {}) {
+async function insertSource(file: File, sql: Statement, defaults: Object = {}, prefixable: string[] = [], prefix="") {
     let buffer = []
     let batchInsert = db.transaction((records) => {
         for(const record of records) {
@@ -114,6 +140,9 @@ async function insertSource(file: File, sql: Statement, defaults: Object = {}) {
     for await (const record of stream_csv(file)) {
         Object.entries(defaults).forEach(([k, v]) => {
             if(!(k in record)) record[k] = v
+        })
+        if(prefix) prefixable.forEach(field => {
+            record[field] = prefix + record[field]
         })
         buffer.push(record)
         if(buffer.length >= 100000) {
@@ -174,7 +203,7 @@ const del_one = db.prepare(`DELETE FROM stop_times WHERE rowid=?`)
 
 function clean_arrivals() {
     console.log("Cleaning arrivals")
-    let times = select_all.all()
+    let times = select_all.all() as {arrival_time: string, arr_id: string, dep_id: string}[]
     const times_length = times.length
     times = times.filter(val => !(!val['arrival_time'] || !val['dep_id'] || !val['arr_id']))
     console.log(`Fixing ${times.length} arrivals (could not fix ${times_length - times.length})`)
@@ -214,6 +243,11 @@ function create_indexes() {
     db.exec(indexingScript)
 }
 
+// Change Ember route names from 'Ember' to E{1,3,10}
+function patch_ember() {
+    db.exec("UPDATE routes SET route_short_name=route_id WHERE agency_id='Ember'")
+}
+
 // Remove .update file so Passenger trip IDs are remapped at runtime
 function reset_polar() {
     rmSync(".update", {force: true})
@@ -225,4 +259,5 @@ clean_sequence_numbers()
 clean_arrivals()
 clean_stops()
 reset_polar()
+patch_ember()
 db.close()
