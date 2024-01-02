@@ -57,11 +57,36 @@ export async function load_gtfs_source(): Promise<FeedEntity[]> {
 export async function load_ember(): Promise<FeedEntity[]> {
     const resp = await fetch("https://api.ember.to/v1/gtfs/realtime/")
     if(!resp.ok || !resp.body) return []
-    return FeedMessage.decode(new Uint8Array(await resp.arrayBuffer())).entity
+    let entities = FeedMessage.decode(new Uint8Array(await resp.arrayBuffer())).entity
+    // Ember feed contains separate vehicle positioning and delay update feed entities - we can merge them
+    entities.filter(trip => trip.tripUpdate && !trip.vehicle).forEach(vehicleless => {
+        let trip = entities.find(tripless => !tripless.tripUpdate && tripless.vehicle?.trip?.tripId === vehicleless.tripUpdate?.trip?.tripId)
+        if(trip) trip.tripUpdate = vehicleless.tripUpdate
+    })
+    // Integrate trip-based alerts: merge descriptions if multiple
+    entities.filter(trip => trip.alert && !trip.vehicle).forEach(vehicleless => {
+        let alertText = vehicleless.alert!.descriptionText?.translation[0].text
+        if(!alertText) return
+        vehicleless.alert!.informedEntity.forEach(entity => {
+            let trip = entities.find(unalerted => entity.trip?.tripId && unalerted.vehicle?.trip?.tripId === entity.trip?.tripId)
+            if(trip) {
+                if(trip.alert) {
+                    let text = trip.alert.descriptionText?.translation[0].text ?? ""
+                    if(!text.includes(alertText!)) {
+                        if(!trip.alert.descriptionText) trip.alert.descriptionText = {translation: [{text: "", language: "en"}]}
+                        trip.alert.descriptionText.translation[0].text = text + '\n' + alertText
+                    }
+                } else {
+                    trip.alert = structuredClone(vehicleless.alert)
+                }
+            }
+        })
+    })
+    return entities.filter(trip => trip.vehicle)
 }
 
 export async function downloadGTFS() {
-    const sources = [load_gtfs_source(), load_all_stagecoach_data(), load_passenger_sources(), load_first_vehicles(), load_coaches(), load_ember()]
+    const sources = [load_gtfs_source(), load_ember(), load_all_stagecoach_data(), load_passenger_sources(), load_first_vehicles(), load_coaches()]
     const newEntries = (await Promise.allSettled(sources)).map(p => {
         if(p.status === 'fulfilled') {
             return p.value

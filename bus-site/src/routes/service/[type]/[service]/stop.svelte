@@ -44,8 +44,17 @@
                 {/if}
             </div>
             {#if stop.status}
-                <div class="text-sm text-gray-700 dark:text-gray-300 {stop.status !== 'On time' ? 'text-red-600 dark:text-red-400' : ''}"
-                     class:font-medium={stop.status === "Cancelled"}>
+                {@const skipped = stop.status === 'Skipped'}
+                {@const delayed = stop.status.startsWith('Exp')}
+                {@const cancelled = stop.status === 'Cancelled'}
+                {@const onTime = stop.status === 'On time'}
+                {@const other = !(skipped || delayed || cancelled || onTime)}
+                <div class="text-sm"
+                     class:text-red-600={delayed || cancelled} class:dark:text-red-400={delayed || cancelled}
+                     class:text-green-600={onTime} class:dark:text-green-300={onTime}
+                     class:text-gray-700={other} class:dark:text-gray-300={other}
+                     class:text-cyan-600={skipped} class:dark:text-cyan-400={skipped}
+                     class:font-medium={cancelled || skipped}>
                     {stop.status}
                 </div>
             {/if}

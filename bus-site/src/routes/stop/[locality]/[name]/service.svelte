@@ -27,7 +27,17 @@
             {#if service.indicator && service.status !== 'Cancelled'}{service.indicator}{/if}
             {#if service.status}
                 {#if service.indicator && service.status !== 'Cancelled'}<br>{/if}
-                <span class="text-sm text-gray-700 dark:text-gray-300 {service.status !== 'On time' ? 'text-red-600 dark:text-red-400' : ''}" class:text-base={service.status === "Cancelled"}>
+                {@const skipped = service.status === 'Skipped'}
+                {@const delayed = service.status.startsWith('Exp')}
+                {@const cancelled = service.status === 'Cancelled'}
+                {@const onTime = service.status === 'On time'}
+                {@const other = !(skipped || delayed || cancelled || onTime)}
+                <span class="text-sm"
+                      class:text-red-600={delayed || cancelled} class:dark:text-red-400={delayed || cancelled}
+                      class:text-green-600={onTime} class:dark:text-green-300={onTime}
+                      class:text-gray-700={other} class:dark:text-gray-300={other}
+                      class:text-cyan-600={skipped} class:dark:text-cyan-400={skipped}
+                      class:text-base={cancelled || skipped}>
                     {service.status}
                 </span>
             {/if}

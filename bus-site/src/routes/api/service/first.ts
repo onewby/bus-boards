@@ -108,6 +108,10 @@ function generateRequest(region: [number, number, number, number]): RPCRequest {
 async function get_vehicles() {
     if(!activeWS || activeWS.readyState !== WebSocket.OPEN) {
         console.error("Attempted to get FirstBus vehicles but the WebSocket was disconnected")
+        if(activeWS?.readyState === WebSocket.CLOSED) {
+            console.log("Attempting to reconnect")
+            await initialise_first()
+        }
         return []
     }
     let currentRegion = 0
@@ -145,7 +149,7 @@ export async function load_first_vehicles(): Promise<FeedEntity[]> {
                     routeId: gtfsTrip.route_id,
                     directionId: -1,
                     startTime: vehicle.stops[0].time + ":00",
-                    startDate: vehicle.stops[0].date,
+                    startDate: vehicle.stops[0].date.replaceAll("-", ""),
                     scheduleRelationship: TripDescriptor_ScheduleRelationship.SCHEDULED
                 },
                 vehicle: undefined,

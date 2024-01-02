@@ -6,7 +6,7 @@ import proj4 from "proj4";
 import {intercityOperators} from "../stop/operators";
 import type {ServiceData, ServiceStopData} from "../../../api.type";
 import {findRealtimeTrip} from "./gtfs-cache";
-import {TripDescriptor_ScheduleRelationship} from "./gtfs-realtime";
+import {TripDescriptor_ScheduleRelationship, TripUpdate_StopTimeUpdate_ScheduleRelationship} from "./gtfs-realtime";
 import {findPctBetween, sqlToLuxon} from "./realtime_util";
 
 proj4.defs("EPSG:27700","+proj=tmerc +lat_0=49 +lon_0=-2 +k=0.9996012717 +x_0=400000 +y_0=-100000 +ellps=airy +datum=OSGB36 +units=m +no_defs");
@@ -84,12 +84,52 @@ export const GET: RequestHandler = async ({url}) => {
     service.cancelled = false
     if(trip) {
         service.cancelled = trip.vehicle?.trip?.scheduleRelationship === TripDescriptor_ScheduleRelationship.CANCELED
+            || trip.tripUpdate?.trip?.scheduleRelationship === TripDescriptor_ScheduleRelationship.CANCELED
         if(service.cancelled) {
             stops.forEach(stop => stop.status = "Cancelled")
         }
         let currentStop = trip.vehicle?.currentStopSequence
         let currentPos = trip.vehicle?.position
-        if(currentStop !== undefined && currentPos) {
+
+        // Ember (and other better GTFS sources) delay calculation
+        service.message = trip.alert?.descriptionText?.translation[0].text
+        if(trip.tripUpdate) {
+            let scheduledTimes = stops.map(stop => {
+                return DateTime.fromFormat(trip.vehicle?.trip?.startDate + stop.dep, "yyyyMMddHH:mm:ss")
+            })
+            for (let i = 1; i < scheduledTimes.length; i++) {
+                while(scheduledTimes[i - 1] > scheduledTimes[i]) {
+                    scheduledTimes[i] = scheduledTimes[i].plus({days: 1})
+                }
+            }
+
+            let actualTimes = stops.map((stop, i) => {
+                let update = trip.tripUpdate!.stopTimeUpdate.find(stu => stop.seq === stu.stopSequence)
+                if(update?.scheduleRelationship === TripUpdate_StopTimeUpdate_ScheduleRelationship.SKIPPED) return undefined
+                return update?.departure || update?.arrival ? DateTime.fromSeconds(update.departure?.time ?? update.arrival!.time) : scheduledTimes[i]
+            })
+            actualTimes.forEach((stop, i) => {
+                if(!stop) {
+                    stops[i].status = "Skipped"
+                    actualTimes[i] = scheduledTimes[i]
+                } else if (actualTimes[i]!.toMillis() - scheduledTimes[i].toMillis() < 60 * 1000) {
+                    stops[i].status = "On time"
+                } else {
+                    stops[i].status = "Exp. " + actualTimes[i]!.toFormat("HH:mm")
+                }
+            })
+
+            let current = actualTimes.findIndex(time => time! >= DateTime.now())
+            let pct = current === 0 || current === -1 ? 0 : actualTimes![current]!.diffNow().toMillis() / actualTimes![current]!.diff(actualTimes![current - 1]!).toMillis()
+            for (let i = 0; i < current; i++) stops[i].status = "Dep. " + actualTimes[i]!.toFormat("HH:mm")
+
+            realtime = {
+                stop: current,
+                pct: pct,
+                pos: currentPos
+            }
+
+        } else if(currentStop !== undefined && currentPos) {
             let currentStopIndex = stops.findIndex(stop => stop.seq === currentStop)
             let pos: any[] = getStopPositions.all({seq: currentStop, id: id})
             if(pos.length == 2) {
@@ -113,6 +153,7 @@ export const GET: RequestHandler = async ({url}) => {
                     let delay = DateTime.now().diff(expectedTime)
 
                     // Apply delay to all stops past the current stop
+                    stops.slice(0, currentStopIndex).forEach(stop => stop.status = 'Departed')
                     let delays = stops.slice(currentStopIndex, stops.length)
                     for(let stop of delays) {
                         if(delay.toMillis() >= 1000 * 120 || delay.toMillis() <= -1000 * 60) {
