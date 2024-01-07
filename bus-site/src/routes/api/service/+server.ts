@@ -8,7 +8,7 @@ import type {ServiceData, ServiceStopData} from "../../../api.type";
 import {findRealtimeTrip} from "./gtfs-cache";
 import {TripDescriptor_ScheduleRelationship, TripUpdate_StopTimeUpdate_ScheduleRelationship} from "./gtfs-realtime";
 import {findPctBetween, sqlToLuxon} from "./realtime_util";
-import {Point} from "../../../leaflet/geometry/Point.js";
+import { LatLng } from "../../../leaflet/geo/LatLng.js";
 
 proj4.defs("EPSG:27700","+proj=tmerc +lat_0=49 +lon_0=-2 +k=0.9996012717 +x_0=400000 +y_0=-100000 +ellps=airy +datum=OSGB36 +units=m +no_defs");
 
@@ -156,7 +156,7 @@ export const GET: RequestHandler = async ({url}) => {
                     // Apply delay to all stops past the current stop
                     // (don't show 'Departed' if too close to the last stop - may be a GPS error)
                     // TODO (also don't show if unrealistically early)
-                    let includeLastStop = new Point(stops[currentStopIndex - 1].long, stops[currentStopIndex - 1].lat).distanceTo([currentPos.longitude, currentPos.latitude]) <= 25 ? 1 : 0
+                    let includeLastStop = new LatLng(stops[currentStopIndex - 1].lat, stops[currentStopIndex - 1].long).distanceTo({lat: currentPos.latitude, lng: currentPos.longitude}) <= 25 ? 1 : 0
                     stops.slice(0, Math.max(currentStopIndex - includeLastStop, 0)).forEach(stop => stop.status = 'Departed')
                     let delays = stops.slice(Math.max(currentStopIndex - includeLastStop, 0), stops.length)
                     for(let stop of delays) {
