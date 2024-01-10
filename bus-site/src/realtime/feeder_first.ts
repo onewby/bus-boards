@@ -1,4 +1,4 @@
-import type {FirstVehicles, FirstWebSocketInfo, Member} from "../../../api.type";
+import type {FirstVehicles, FirstWebSocketInfo, Member} from "../api.type";
 import {WebSocket} from "ws";
 import {randomUUID} from "node:crypto";
 import {
@@ -6,14 +6,15 @@ import {
     TripDescriptor_ScheduleRelationship,
     VehiclePosition_CongestionLevel, VehiclePosition_OccupancyStatus,
     VehiclePosition_VehicleStopStatus
-} from "./gtfs-realtime.js";
-import {db} from "../../../db.js";
+} from "../routes/api/service/gtfs-realtime.js";
+import {db} from "../db.js";
 import {DateTime} from "luxon";
 import {readFileSync, writeFileSync} from "fs";
 import {existsSync} from "node:fs";
+import {Feeder} from "./feeder.js";
 
 // Configure in first.env
-const apiKey = readFileSync(new URL("../../../../first.env", import.meta.url), "utf-8")
+const apiKey = existsSync(new URL("../../first.env", import.meta.url)) ? readFileSync(new URL("../../first.env", import.meta.url), "utf-8") : ""
 
 const operators: Record<string, string> = {
     "FGLA": "OP584",
@@ -62,7 +63,7 @@ export async function initialise_first() {
     })
     if(!wsInfoResp.ok) return {jsonrpc: "", method: "", params: {resource: {member: []}}}
 
-    const wsInfo: FirstWebSocketInfo = await wsInfoResp.json()
+    const wsInfo: FirstWebSocketInfo = await wsInfoResp.json() as FirstWebSocketInfo
 
     const ws = new WebSocket("wss://streaming.bus.first.transportapi.com/", {
         headers: {
@@ -237,3 +238,18 @@ function sendAndReceive(ws: WebSocket, request: RPCRequest): Promise<RPCRequest>
         ws.on("message", listener)
     })
 }
+
+class FirstFeeder extends Feeder {
+    constructor() {
+        super(load_first_vehicles);
+    }
+
+    override async init() {
+        if(this.isMainFile()) {
+            await initialise_first()
+            this.run()
+        }
+    }
+}
+
+new FirstFeeder().init()

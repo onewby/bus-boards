@@ -42,7 +42,8 @@ let addAgency = db.prepare("REPLACE INTO agency (agency_id, agency_name, agency_
 let addRoutes = db.prepare("REPLACE INTO routes (route_id, agency_id, route_short_name, route_long_name, route_type) VALUES (:route_id, :agency_id, :route_short_name, :route_long_name, :route_type)")
 let addCalendar = db.prepare("REPLACE INTO calendar (service_id, monday, tuesday, wednesday, thursday, friday, saturday, sunday, start_date, end_date) VALUES (:service_id, :monday, :tuesday, :wednesday, :thursday, :friday, :saturday, :sunday, :start_date, :end_date)")
 let addCalendarDates = db.prepare("REPLACE INTO calendar_dates (service_id, date, exception_type) VALUES (:service_id, :date, :exception_type)")
-let addTrips = db.prepare("REPLACE INTO trips (route_id, service_id, trip_id, trip_headsign) VALUES (:route_id, :service_id, :trip_id, :trip_headsign)")
+let addShapes = db.prepare("REPLACE INTO shapes (shape_id, shape_pt_lat, shape_pt_lon, shape_pt_sequence) VALUES (:shape_id, :shape_pt_lat, :shape_pt_lon, :shape_pt_sequence)")
+let addTrips = db.prepare("REPLACE INTO trips (route_id, service_id, trip_id, trip_headsign, shape_id) VALUES (:route_id, :service_id, :trip_id, :trip_headsign, :shape_id)")
 let addStopTimes = db.prepare("REPLACE INTO stop_times (trip_id, arrival_time, departure_time, stop_id, stop_sequence, timepoint, stop_headsign, pickup_type, drop_off_type) VALUES (:trip_id, :arrival_time, :departure_time, :stop_id, :stop_sequence, :timepoint, NULLIF(:stop_headsign, ''), :pickup_type, :drop_off_type)")
 let dropAllSource = db.transaction(() => {
     db.pragma('foreign_keys = OFF')
@@ -113,7 +114,8 @@ async function import_zip(zip: CentralDirectory, prefix: string = "") {
         ["routes.txt", addRoutes, {"agency_id": "Ember"}],
         ["calendar.txt", addCalendar, {}, prefixable],
         ["calendar_dates.txt", addCalendarDates, {}, prefixable],
-        ["trips.txt", addTrips, {"trip_headsign": null}, prefixable],
+        ["shapes.txt", addShapes],
+        ["trips.txt", addTrips, {"trip_headsign": null, "shape_id": null}, prefixable],
         ["stop_times.txt", addStopTimes, {"stop_headsign": null}]
     ]
     let startTime = Date.now()
@@ -243,9 +245,30 @@ function create_indexes() {
     db.exec(indexingScript)
 }
 
-// Change Ember route names from 'Ember' to E{1,3,10}
-function patch_ember() {
+function patch_display_names() {
+    console.log("Patching route display names")
+    // Change Ember route names from 'Ember' to E{1,3,10}
     db.exec("UPDATE routes SET route_short_name=route_id WHERE agency_id='Ember'")
+    // Fix coach operators' destinations where local locality names used
+    db.exec(`UPDATE trips SET trip_headsign=(SELECT CASE
+    WHEN original = 'Tokyngton' THEN 'Wembley Stadium'
+    WHEN original = 'Centenary Square' THEN 'Birmingham'
+    WHEN original = 'Penglais' THEN 'Aberystwyth University'
+    WHEN original = 'Causewayhead' THEN 'University of Stirling'
+    WHEN origin_loc = dest_loc THEN original
+    WHEN dest_loc = 'London' THEN dest_loc || ' ' || original
+    ELSE dest_loc END)
+FROM (SELECT trips.trip_id,
+         (SELECT IFNULL(substr(s.locality_name, 0, NULLIF(instr(s.locality_name, '›') - 1, -1)), s.locality_name)
+            FROM stances INNER JOIN main.stops s on s.id = stances.stop WHERE code=dest.stop_id) as dest_loc,
+         (SELECT IFNULL(substr(s.locality_name, 0, NULLIF(instr(s.locality_name, '›') - 1, -1)), s.locality_name)
+            FROM stances INNER JOIN main.stops s on s.id = stances.stop WHERE code=origin.stop_id) as origin_loc,
+          trip_headsign AS original FROM trips
+  INNER JOIN main.routes r on r.route_id = trips.route_id
+  INNER JOIN main.stop_times origin on (trips.trip_id = origin.trip_id AND trips.min_stop_seq=origin.stop_sequence)
+  INNER JOIN main.stop_times dest on (trips.trip_id = dest.trip_id AND trips.max_stop_seq=dest.stop_sequence)
+WHERE agency_id IN ('OP5050', 'OP564', 'OP5051', 'OP545', 'OP563') AND NOT instr(trip_headsign, 'Airport')) AS trip_subquery
+WHERE trips.trip_id=trip_subquery.trip_id`)
 }
 
 // Remove .update file so Passenger trip IDs are remapped at runtime
@@ -259,5 +282,5 @@ clean_sequence_numbers()
 clean_arrivals()
 clean_stops()
 reset_polar()
-patch_ember()
+patch_display_names()
 db.close()

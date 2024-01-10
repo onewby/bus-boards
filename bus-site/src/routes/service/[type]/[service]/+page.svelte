@@ -84,7 +84,7 @@
                 className: "bg-amber-500 h-full w-full rounded border-black border"
             })
             let marker = L.marker(latlng, {icon: divIcon})
-            marker.bindPopup(`<b>${feature.properties.name} (${feature.properties.ind})</b><br>${feature.properties.loc}`, popupOptions)
+            marker.bindPopup(`<b>${feature.properties.display_name} (${feature.properties.ind})</b><br>${feature.properties.loc}`, popupOptions)
             return marker
         }
     }
@@ -179,7 +179,7 @@
                 <Tiles />
                 <GeoJSON data={geoData} options={geoOptions} />
                 {#each data.branches.flatMap(br => br.stops) as stop}
-                    <HTMLMarker lon={stop.long} lat={stop.lat} popup="{timeFmt(stop.dep)}<br><b>{stop.name}{stop.ind ? ` (${stop.ind})` : ''}</b><br>{stop.loc ? stop.loc : ''}"
+                    <HTMLMarker lon={stop.long} lat={stop.lat} popup="{timeFmt(stop.dep)}<br><b>{stop.display_name}{stop.ind ? ` (${stop.ind})` : ''}</b><br>{stop.loc ? stop.loc : ''}"
                                 divIcon={{ className: "bg-amber-400 rounded border border-black" }} zIndex={-1000}/>
                 {/each}
                 {#if branch.realtime?.pos}

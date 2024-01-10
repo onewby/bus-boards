@@ -1,28 +1,28 @@
-import type {FeedEntity} from "./gtfs-realtime.js";
+import {downloadRouteDirections} from "../../import_passenger.js";
+import {readFileSync, writeFileSync} from "fs";
+import {existsSync} from "node:fs";
 import {
+    FeedEntity,
     TripDescriptor_ScheduleRelationship,
     VehiclePosition_CongestionLevel, VehiclePosition_OccupancyStatus,
     VehiclePosition_VehicleStopStatus
-} from "./gtfs-realtime.js";
+} from "../routes/api/service/gtfs-realtime.js";
 import {
     addTimeNaive,
     format_gtfs_time, minIndex,
     type Position, sqlToLuxon
-} from "./realtime_util.js";
-import {db} from "../../../db.js";
+} from "../routes/api/service/realtime_util.js";
+import {db} from "../db.js";
 import {DateTime} from "luxon";
-import type {Vehicles} from "../../../api.type";
-import sourceFile from "./passenger-sources.json" assert {type: 'json'};
+import type {Vehicles} from "../api.type";
+import sourceFile from "../routes/api/service/passenger-sources.json" assert {type: 'json'};
 import groupBy from "object.groupby";
-import {Point, LineUtil} from "../../../leaflet/geometry/index.js"
+import {Point, LineUtil} from "../leaflet/geometry/index.js"
+import {Feeder} from "./feeder.js";
+import {lineSegmentQuery} from "./feeder_util.js";
 
 const routeIDQuery = db.prepare("SELECT route_id FROM routes WHERE agency_id=? AND route_short_name=?").pluck()
-export const lineSegmentQuery = db.prepare(
-    `SELECT DISTINCT code as stop_id, lat as y, long as x FROM stances
-             WHERE code IN (
-                 SELECT stop_id FROM stop_times
-                    INNER JOIN main.trips t on t.trip_id = stop_times.trip_id WHERE t.route_id=?)`
-)
+
 const currentTripsQuery = (date: DateTime, startTime: string, endTime: string, route: string) => db.prepare(
     `SELECT trips.trip_id, p.direction, :date as date,
                 (SELECT group_concat(stop_id) FROM (SELECT stop_id FROM stop_times WHERE trip_id=trips.trip_id ORDER BY stop_sequence)) as route,
@@ -56,7 +56,7 @@ export async function load_passenger_sources(): Promise<FeedEntity[]>  {
 export async function get_passenger_source(baseURL: keyof typeof sourceFile.sources) {
     let vehiclesResp = await fetch(`${baseURL}/network/vehicles`)
     if(!vehiclesResp.ok) return []
-    return process_vehicles(await vehiclesResp.json(), sourceFile.sources[baseURL] as (keyof typeof sourceFile.operators)[])
+    return process_vehicles(await vehiclesResp.json() as Vehicles, sourceFile.sources[baseURL] as (keyof typeof sourceFile.operators)[])
 }
 
 async function process_vehicles(vehicles: Vehicles, operators: (keyof typeof sourceFile.operators)[]): Promise<FeedEntity[]> {
@@ -95,25 +95,25 @@ async function process_vehicles(vehicles: Vehicles, operators: (keyof typeof sou
                 let loc = new Point(vehicle.geometry.coordinates[0], vehicle.geometry.coordinates[1])
                 let direction = vehicle.properties.direction === 'inbound' ? 0 : 1
                 return {vehicle: i, cands: candidates.filter(c => c.direction === direction).map(candidate => {
-                    // out of all line segments for this candidate, find the closest one
-                    let route = candidate.route.split(",")
-                    let departureTimes = candidate.times.split(",")
-                    let segments = [...Array(route.length - 1).keys()].map(i => {
-                        return LineUtil.closestPointOnSegment(loc, points[route[i]], points[route[i+1]])
-                    })
-                    let segmentDistances = segments.map(segment => loc.distanceTo(segment))
-                    let index = minIndex(segmentDistances)
+                        // out of all line segments for this candidate, find the closest one
+                        let route = candidate.route.split(",")
+                        let departureTimes = candidate.times.split(",")
+                        let segments = [...Array(route.length - 1).keys()].map(i => {
+                            return LineUtil.closestPointOnSegment(loc, points[route[i]], points[route[i+1]])
+                        })
+                        let segmentDistances = segments.map(segment => loc.distanceTo(segment))
+                        let index = minIndex(segmentDistances)
 
-                    // figure out where the vehicle *would* be right now (min/max at start/end)
-                    let pct = points[route[index]].distanceTo(segments[index]) / points[route[index]].distanceTo(points[route[index+1]])
-                    let fromTime = sqlToLuxon(departureTimes[index])
-                    let toTime = sqlToLuxon(departureTimes[index + 1])
-                    let current = fromTime.plus({milliseconds: toTime.diff(fromTime).toMillis() * pct})
-                    let diff = Math.abs(nowDate.diff(current).toMillis())
+                        // figure out where the vehicle *would* be right now (min/max at start/end)
+                        let pct = points[route[index]].distanceTo(segments[index]) / points[route[index]].distanceTo(points[route[index+1]])
+                        let fromTime = sqlToLuxon(departureTimes[index])
+                        let toTime = sqlToLuxon(departureTimes[index + 1])
+                        let current = fromTime.plus({milliseconds: toTime.diff(fromTime).toMillis() * pct})
+                        let diff = Math.abs(nowDate.diff(current).toMillis())
 
-                    // get absolute time in seconds difference
-                    return {candidate: candidate, diff, stopIndex: index, route, departureTimes}
-                })};
+                        // get absolute time in seconds difference
+                        return {candidate: candidate, diff, stopIndex: index, route, departureTimes}
+                    })};
             }).filter(v => v.cands.length > 0)
 
             // Assign vehicles to trips via closeness (closest assigned first)
@@ -185,3 +185,27 @@ function minPredicate<T>(arr: T[], comparator: (i1: T, i2: T) => boolean) {
     }
     return arr[lowest]
 }
+
+
+
+class PassengerFeeder extends Feeder {
+
+    lastUpdate = existsSync(".update") ? DateTime.fromISO(readFileSync(".update", "utf-8")) : DateTime.now().minus({days: 5, hours: 1})
+
+    async checkPassengerUpdate() {
+        if (this.lastUpdate.diffNow("days").days <= -5) {
+            await downloadRouteDirections()
+            this.lastUpdate = DateTime.now().set({hour: 2, minute: 0, second: 0, millisecond: 0})
+            writeFileSync(".update", DateTime.now().toISO()!)
+        }
+    }
+
+    constructor() {
+        super(async () => {
+            await this.checkPassengerUpdate()
+            return load_passenger_sources()
+        });
+    }
+}
+
+new PassengerFeeder().init()

@@ -155,7 +155,6 @@ export const GET: RequestHandler = async ({url}) => {
 
                     // Apply delay to all stops past the current stop
                     // (don't show 'Departed' if too close to the last stop - may be a GPS error)
-                    // TODO (also don't show if unrealistically early)
                     let includeLastStop = new LatLng(stops[currentStopIndex - 1].lat, stops[currentStopIndex - 1].long).distanceTo({lat: currentPos.latitude, lng: currentPos.longitude}) <= 25 ? 1 : 0
                     stops.slice(0, Math.max(currentStopIndex - includeLastStop, 0)).forEach(stop => stop.status = 'Departed')
                     let delays = stops.slice(Math.max(currentStopIndex - includeLastStop, 0), stops.length)

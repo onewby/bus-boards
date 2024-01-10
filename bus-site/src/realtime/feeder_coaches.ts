@@ -1,22 +1,24 @@
-import {db} from "../../../db.js";
+import {db} from "../db.js";
 import {
     type FeedEntity,
     TripDescriptor_ScheduleRelationship,
     VehiclePosition_CongestionLevel,
     VehiclePosition_OccupancyStatus,
     VehiclePosition_VehicleStopStatus
-} from "./gtfs-realtime.js";
-import type {MegabusVehicles} from "../../../api.type.js";
+} from "../routes/api/service/gtfs-realtime.js";
+import type {MegabusVehicles} from "../api.type.js";
 import {DateTime} from "luxon";
 import {
     addTimeNaive,
     dayDiff,
     format_gtfs_time, minIndex,
     type Position
-} from "./realtime_util.js";
+} from "../routes/api/service/realtime_util.js";
 import groupBy from "object.groupby";
-import {lineSegmentQuery} from "./passenger.js";
-import {Point, LineUtil} from "../../../leaflet/geometry/index.js"
+import {lineSegmentQuery} from "./feeder_util.js";
+import {Point, LineUtil} from "../leaflet/geometry/index.js"
+import type {ChronologicalDeparture} from "../api.type.js";
+import {Feeder} from "./feeder.js";
 
 const coachOperators = ["OP564", "OP545", "OP563", "OP567"]
 
@@ -62,7 +64,7 @@ export async function load_coaches(): Promise<FeedEntity[]> {
             lineSegmentQuery.all(route.route_id) as ({stop_id: string} & Position)[],
             ls => ls.stop_id)
 
-        return vehicles.routes[0].chronological_departures.map(dep => {
+        return vehicles.routes[0].chronological_departures.map((dep: ChronologicalDeparture) => {
             if(dep.trip.id.endsWith("S") || dep.trip.id.endsWith("E")) return undefined // positioning move
             if(dep.active_vehicle === null || dep.tracking.is_completed) return undefined
 
@@ -120,3 +122,5 @@ export async function load_coaches(): Promise<FeedEntity[]> {
         }).filter(d => d !== undefined) as FeedEntity[]
     }))).flat()
 }
+
+new Feeder(load_coaches).init()

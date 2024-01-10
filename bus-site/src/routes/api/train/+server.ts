@@ -48,7 +48,9 @@ export const GET: RequestHandler = async ({url}) => {
 
         const dest = cps[cps.length - 1].locationName
         const params = cps.map(cp => `'${cp.crs}'`).join(",")
-        const coordsQuery = db.prepare(`SELECT crs,lat,long,s.name as name,s.locality as locality FROM stances INNER JOIN main.stops s on s.id = stances.stop WHERE crs IN (${params})`).all()
+        const coordsQuery = db.prepare(
+            `SELECT crs,lat,long,s.name as name,s.locality as locality FROM stances INNER JOIN main.stops s on s.id = stances.stop WHERE crs IN (${params})`
+        ).all() as CRSResponse[]
         const coords: Record<string, Record<string, any>> = {}
         coordsQuery.forEach(result => coords[result['crs']] = result)
 
@@ -80,7 +82,7 @@ export const GET: RequestHandler = async ({url}) => {
             pct: currStop == -1 ? undefined : nextStop === cps.length ? 1
                 : Math.min(Math.abs(currTime.diffNow().milliseconds / (currTime.diff(getTime(cps[nextStop]))).milliseconds), 1)
         }
-        const route: [number, number][] = cps.filter(cp => coords[cp.crs]?.['stop']).map(cp => [coords[cp.crs]?.["long"] ?? UK_CTR_LONG, coords[cp.crs]?.["lat"] ?? UK_CTR_LAT])
+        const route: [number, number][] = cps.filter(cp => coords[cp.crs]?.['lat']).map(cp => [coords[cp.crs]?.["long"] ?? UK_CTR_LONG, coords[cp.crs]?.["lat"] ?? UK_CTR_LAT])
         branches.push({
             "dest": dest,
             "stops": stops,
@@ -102,3 +104,11 @@ function getTime(point: CallingPoint): DateTime {
 }
 
 const isNum = (c: string) => c >= '0' && c <= '9'
+
+type CRSResponse = {
+    crs: string,
+    lat: number,
+    long: number,
+    name: string,
+    locality: string
+}
