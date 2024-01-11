@@ -144,3 +144,11 @@ CREATE TABLE IF NOT EXISTS polar
     polar     TEXT,
     direction INT
 );
+
+CREATE TABLE IF NOT EXISTS lothian
+(
+    pattern TEXT,
+    route   TEXT
+        constraint lothian_routes_route_id_fk
+            references routes
+)
