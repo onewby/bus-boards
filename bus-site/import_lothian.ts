@@ -32,7 +32,7 @@ const patternInsertAll = db.transaction((patterns: string[], route: string) => {
     })
 })
 
-async function download_route_data() {
+export async function download_route_data() {
     db.exec("DELETE FROM polar WHERE direction IS NULL")
     const routesObj = await (await fetch("https://lothianapi.com/routes")).json() as LothianRoutes
     const currentDate = DateTime.now()

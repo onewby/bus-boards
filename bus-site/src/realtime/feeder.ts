@@ -1,6 +1,9 @@
 import {parentPort} from "worker_threads";
 import type {Alert, FeedEntity} from "../routes/api/service/gtfs-realtime.js";
 import {workerData} from "node:worker_threads";
+import {existsSync} from "node:fs";
+import {DateTime} from "luxon";
+import {readFileSync, writeFileSync} from "fs";
 
 export type StopAlerts = {
     alerts: Record<string, Alert[]>
@@ -39,5 +42,27 @@ export class Feeder {
             }
             this.run()
         }, initial ? 0 : 10000)
+    }
+}
+
+export class UpdateFeeder extends Feeder {
+
+    lastUpdate = existsSync(".update") ? DateTime.fromISO(readFileSync(".update", "utf-8")) : DateTime.now().minus({days: 5, hours: 1})
+    updateFunction: Function
+
+    async checkUpdate() {
+        if (this.lastUpdate.diffNow("days").days <= -5) {
+            await this.updateFunction()
+            this.lastUpdate = DateTime.now().set({hour: 2, minute: 0, second: 0, millisecond: 0})
+            writeFileSync(".update", DateTime.now().toISO()!)
+        }
+    }
+
+    constructor(downloadFunction: DownloadFunction, updateFunction: Function) {
+        super(async () => {
+            await this.checkUpdate()
+            return downloadFunction()
+        });
+        this.updateFunction = updateFunction
     }
 }

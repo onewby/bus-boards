@@ -1,6 +1,4 @@
 import {downloadRouteDirections} from "../../import_passenger.js";
-import {readFileSync, writeFileSync} from "fs";
-import {existsSync} from "node:fs";
 import {
     FeedEntity,
     TripDescriptor_ScheduleRelationship,
@@ -13,7 +11,7 @@ import type {Vehicles} from "../api.type";
 import sourceFile from "../routes/api/service/passenger-sources.json" assert {type: 'json'};
 import groupBy from "object.groupby";
 import {Point} from "../leaflet/geometry/index.js"
-import {type DownloadResponse, Feeder} from "./feeder.js";
+import {type DownloadResponse, UpdateFeeder} from "./feeder.js";
 import {
     assignVehicles,
     getPoints,
@@ -122,25 +120,4 @@ async function process_vehicles(vehicles: Vehicles, operators: (keyof typeof sou
     return gtfsRT
 }
 
-
-class PassengerFeeder extends Feeder {
-
-    lastUpdate = existsSync(".update") ? DateTime.fromISO(readFileSync(".update", "utf-8")) : DateTime.now().minus({days: 5, hours: 1})
-
-    async checkPassengerUpdate() {
-        if (this.lastUpdate.diffNow("days").days <= -5) {
-            await downloadRouteDirections()
-            this.lastUpdate = DateTime.now().set({hour: 2, minute: 0, second: 0, millisecond: 0})
-            writeFileSync(".update", DateTime.now().toISO()!)
-        }
-    }
-
-    constructor() {
-        super(async () => {
-            await this.checkPassengerUpdate()
-            return load_passenger_sources()
-        });
-    }
-}
-
-new PassengerFeeder().init()
+new UpdateFeeder(load_passenger_sources, downloadRouteDirections).init()

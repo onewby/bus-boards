@@ -1,4 +1,4 @@
-import {type DownloadResponse, Feeder} from "./feeder.js";
+import {type DownloadResponse, UpdateFeeder} from "./feeder.js";
 import {db} from "../db.js";
 import type {LothianEvent, LothianEvents, LothianLiveVehicles} from "../api.type.ts";
 import {DateTime} from "luxon";
@@ -22,6 +22,7 @@ import {
     VehiclePosition_VehicleStopStatus
 } from "../routes/api/service/gtfs-realtime.js";
 import groupBy from "object.groupby";
+import {download_route_data} from "../../import_lothian.ts";
 
 const getAllPatterns = () => db.prepare("SELECT * FROM lothian").all() as {pattern: string, route: string}[]
 
@@ -146,9 +147,9 @@ async function load_lothian_alerts(): Promise<Record<string, Alert>> {
                 end: DateTime.now().plus({year: 1}).toSeconds()
             },
             cause: Alert_Cause.OTHER_CAUSE,
-            descriptionText: {translation: events.map(event => ({text: event.description, language: "en"}))},
+            descriptionText: {translation: events.map(event => ({text: event.description.en, language: "en"}))},
             effect: Alert_Effect.OTHER_EFFECT,
-            headerText: {translation: events.map(event => ({text: event.title, language: "en"}))},
+            headerText: {translation: events.map(event => ({text: event.title.en, language: "en"}))},
             informedEntity: [],
             url: {translation: events.map(event => ({text: event.url ?? "", language: "en"}))}
         }]
@@ -171,4 +172,4 @@ async function fetchWithTimeout(resource: string, options: {timeout?: number} = 
     return response;
 }
 
-new Feeder(load_Lothian_vehicles).init()
+new UpdateFeeder(load_Lothian_vehicles, download_route_data).init()
