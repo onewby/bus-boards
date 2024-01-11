@@ -117,7 +117,6 @@ export async function load_Lothian_vehicles(): Promise<DownloadResponse> {
         })
     })
 
-    console.log("done")
     return {
         entities: gtfsRT,
         stopAlerts: {}
