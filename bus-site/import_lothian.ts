@@ -1,5 +1,5 @@
 import type {LothianPatterns, LothianRoutes, LothianTimetables} from "./src/api.type";
-import {db} from "./src/db";
+import {db} from "./src/db.js";
 import {DateTime} from "luxon";
 import {allRoutesQuery} from "./import_passenger.js";
 
