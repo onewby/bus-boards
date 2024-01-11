@@ -22,7 +22,7 @@ import {
     VehiclePosition_VehicleStopStatus
 } from "../routes/api/service/gtfs-realtime.js";
 import groupBy from "object.groupby";
-import {download_route_data} from "../../import_lothian.ts";
+import {download_route_data} from "../../import_lothian.js";
 
 const getAllPatterns = () => db.prepare("SELECT * FROM lothian").all() as {pattern: string, route: string}[]
 
