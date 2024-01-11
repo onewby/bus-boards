@@ -17,4 +17,4 @@ create index if not exists stances_stop_index
     on stances (stop);
 
 create index if not exists main.polar_polar_index
-    on main.polar (polar);
+    on polar (polar);
