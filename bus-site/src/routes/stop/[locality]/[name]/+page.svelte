@@ -5,7 +5,7 @@
 
     import Fa from "svelte-fa";
     import type {SearchResult, StopData} from "../../../../api.type";
-    import {faMap, faXmark} from "@fortawesome/free-solid-svg-icons";
+    import {faExclamationTriangle, faMap, faXmark} from "@fortawesome/free-solid-svg-icons";
     import {slide} from "svelte/transition";
 
     import Map from "../../../../map/Map.svelte";
@@ -33,7 +33,6 @@
             operators[time.operator_name].add(time.operator_id)
         })
     }
-    $: operatorNames = Object.keys(operators).sort((a, b) => a[1]?.localeCompare(b[1]) ?? 0)
     let collator = new Intl.Collator([], {numeric: true, sensitivity: 'base'})
 
     let operatorFilter = $page.url.searchParams.get("operator") ?? ""
@@ -48,7 +47,6 @@
         if(data.filter) {
             params.set("filterLoc", data.filter.locality)
             params.set("filterName", data.filter.name)
-            // TODO On cold load, load correct filter stuff into the box through stop - use page.server.ts
         }
         filterURL = `/stop/${$page.params.locality}/${$page.params.name}?${params.toString()}`
     }
@@ -222,6 +220,16 @@
         {/each}
     </div>
     {/if}
+
+    {#each data.alerts as alert}
+        <a class="panel w-full pl-8 pr-8 pt-4 pb-4 flex flex-row items-center mt-2 text-left" href={alert.url}>
+            <Fa icon={faExclamationTriangle} size="lg" class="mr-4" />
+            <div class="flex-grow">
+                {#if alert.header}<b>{alert.header}{#if alert.description}: {/if}</b>{/if}
+                {alert.description ?? ""}
+            </div>
+        </a>
+    {/each}
 
     <div class="panel w-full mt-2 flex flex-col">
         {#if filteredTimes.length === 0}

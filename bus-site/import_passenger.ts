@@ -5,7 +5,7 @@ import {db} from "./src/db.js";
 import sourceFile from "./src/routes/api/service/passenger-sources.json" assert {type: "json"}
 import { resolve } from "path";
 
-const allRoutesQuery = db.prepare("SELECT route_id,route_short_name FROM routes WHERE agency_id=?")
+export const allRoutesQuery = db.prepare("SELECT route_id,route_short_name FROM routes WHERE agency_id=?")
 const routeQuery = (date: string, route: string) => db.prepare(
     `SELECT start.departure_time as minss, finish.departure_time as maxss, trips.trip_id
             FROM trips
@@ -58,7 +58,7 @@ export async function downloadRouteDirections() {
     const currDate = DateTime.now()
     const days = [...new Array(7).keys()].map((i) => currDate.plus({'days': i}))
 
-    db.exec("DELETE FROM polar")
+    db.exec("DELETE FROM polar WHERE direction IS NOT NULL")
     for(let [baseURL, operators] of Object.entries(sourceFile.sources)) {
         const routeNamesResp = await fetch(`${baseURL}/network/lines`)
         if(!routeNamesResp.ok) {
@@ -152,6 +152,6 @@ export async function downloadRouteDirections() {
     }
 }
 
-if(resolve(process.argv[1]).endsWith("vite-node")) {
+if(process.argv[2] === 'passenger') {
     await downloadRouteDirections()
 }

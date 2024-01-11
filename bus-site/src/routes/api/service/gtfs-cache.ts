@@ -8,12 +8,15 @@ import {load_all_stagecoach_data} from "../../../realtime/feeder_stagecoach.ts";
 import {load_passenger_sources} from "../../../realtime/feeder_passenger.ts";
 import {load_first_vehicles} from "../../../realtime/feeder_first.ts";
 import {load_coaches} from "../../../realtime/feeder_coaches.ts";
+import {type DownloadResponse, emptyDownloadResponse, type StopAlerts} from "../../../realtime/feeder.ts";
+import {merge} from "./realtime_util.js";
+import {load_Lothian_vehicles} from "../../../realtime/feeder_lothian.ts";
 
 /*
  * Realtime data
  */
 
-export let gtfsCache: FeedMessage = {header: undefined, entity: []}
+export let gtfsCache: FeedMessage & StopAlerts = {header: undefined, entity: [], alerts: {}}
 // Caches /api/service outputs for tracking services to prevent latency from recalculating delay (cleared on GTFS update)
 let serviceCache: Record<string, ServiceData> = {}
 
@@ -41,28 +44,30 @@ export async function downloadGTFS() {
             await manualDownloadGTFS()
         }
     } catch (e) {
-        gtfsCache = {header: undefined, entity: []}
+        gtfsCache = {header: undefined, entity: [], alerts: {}}
     }
     serviceCache = {}
 }
 
 export async function manualDownloadGTFS() {
-    const sources = [load_gtfs_source(), load_ember(), load_all_stagecoach_data(), load_passenger_sources(), load_first_vehicles(), load_coaches()]
-    const newEntries = (await Promise.allSettled(sources)).map(p => {
+    const sources = [load_gtfs_source(), load_ember(), load_all_stagecoach_data(), load_passenger_sources(), load_first_vehicles(), load_coaches(), load_Lothian_vehicles()]
+    const newEntries: DownloadResponse[] = (await Promise.allSettled(sources)).map(p => {
         if(p.status === 'fulfilled') {
             return p.value
         } else {
             console.error(p.reason)
-            return []
+            return emptyDownloadResponse()
         }
-    }).flat()
+    })
 
     gtfsCache = {
         header: {
             gtfsRealtimeVersion: "2.0",
             incrementality: FeedHeader_Incrementality.FULL_DATASET,
             timestamp: Math.floor(Date.now() / 1000)
-        }, entity: newEntries
+        },
+        entity: newEntries.flatMap(e => e.entities),
+        alerts: merge(newEntries.map(e => e.stopAlerts))
     }
 }
 
@@ -80,4 +85,8 @@ export async function getRTServiceData(tripID: string): Promise<ServiceData> {
         })).json()
     }
     return serviceCache[tripID]
+}
+
+export function getStopAlerts(code: string) {
+    return gtfsCache.alerts[code]
 }

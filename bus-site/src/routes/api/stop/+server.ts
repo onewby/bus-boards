@@ -6,7 +6,7 @@ import {DateTime} from "luxon";
 import type {ServiceBoard} from "../../../darwin/darwin";
 import type {StopDeparture} from "../../../api.type";
 import {darwin} from "../darwin";
-import {findRealtimeTrip, getRTServiceData} from "../service/gtfs-cache";
+import {findRealtimeTrip, getRTServiceData, getStopAlerts} from "../service/gtfs-cache";
 
 // Number of hours to get bus services for
 const HOURS_TO_SHOW = 2
@@ -160,10 +160,20 @@ export const GET: RequestHandler = async ({url}) => {
     })
     stop_times.forEach(time => time.colour = routeOverrides[time.operator_name]?.[time.route_short_name] ?? routeOverridesPrefixes[time.operator_name]?.[time.route_short_name.match("(.*)[A-Z]")?.[1] ?? time.route_short_name] ?? colours[time.operator_name])
 
+    // Realtime alerts
+    let alerts = stance_info.map(stance => getStopAlerts(stance.code)).filter(alerts => alerts !== undefined).flat().map(alert => {
+        return {
+            header: alert.headerText?.translation[0].text,
+            description: alert.descriptionText?.translation[0].text,
+            url: alert.url?.translation[0].text
+        }
+    })
+
     return json({
         "stop": stop_info,
         "stances": stance_info,
-        "times": stop_times
+        "times": stop_times,
+        "alerts": alerts
     })
 }
 

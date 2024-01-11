@@ -58,3 +58,17 @@ export function minIndex(arr: any[]) {
     }
     return lowest
 }
+
+export function merge<T>(records: Record<string, T[]>[]): Record<string, T[]> {
+    let result: Record<string, T[]> = {}
+    for(let record of records) {
+        for(let [key, value] of Object.entries(record)) {
+            if(result[key] === undefined) {
+                result[key] = value.slice()
+            } else {
+                result[key].push(...value)
+            }
+        }
+    }
+    return result
+}

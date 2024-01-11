@@ -15,6 +15,12 @@ export type StopDeparture = {
     seq?: number
 }
 
+export type StopAlert = {
+    header?: string,
+    description?: string,
+    url?: string
+}
+
 export type StopData = {
     stop: {
         id: number,
@@ -30,6 +36,7 @@ export type StopData = {
         long: number
     }[],
     times: StopDeparture[],
+    alerts: StopAlert[],
     filter: SearchResult | undefined
 }
 
@@ -556,4 +563,142 @@ export type Metadata = {
     short_name:              string;
     departure_location_name: string;
     arrival_location_name:   string;
+}
+
+export type LothianRoutes = {
+    server:      string;
+    timeElapsed: number;
+    networkTime: string;
+    groups:      LothianGroup[];
+}
+
+export type LothianGroup = {
+    id:          string;
+    name:        string;
+    description: null | string;
+    routes:      LothianRoute[];
+}
+
+export type LothianRoute = {
+    id:          string;
+    name:        string;
+    description: string;
+    transitMode: null;
+    color:       string;
+    textColor:   string;
+}
+
+export type LothianPatterns = {
+    server:      string;
+    timeElapsed: number;
+    networkTime: string;
+    route:       LothianRoute;
+    patterns:    LothianPattern[];
+}
+
+export type LothianPattern = {
+    id:          string;
+    routeName:   string;
+    direction:   null;
+    origin:      string;
+    destination: string;
+    polyline:    string;
+    stops:       LothianStop[];
+}
+
+export type LothianStop = {
+    id:               string;
+    name:             string;
+    transitMode:      null;
+    coordinate:       Coordinate;
+    stopCode:         string;
+    compassDirection: null;
+    bearing:          number;
+    indicator:        null | string;
+    routes:           any[];
+}
+
+export type Coordinate = {
+    latitude:  number;
+    longitude: number;
+}
+
+export type LothianLiveVehicles = {
+    vehicles: LothianVehicle[];
+}
+
+export type LothianVehicle = {
+    vehicle_id:   string;
+    vehicle_type: string;
+    journey_id:   string;
+    latitude:     number;
+    longitude:    number;
+    destination:  string;
+    heading:      number;
+    service_name: string;
+    next_stop_id: string;
+}
+
+export type LothianTimetables = {
+    server:      string;
+    timeElapsed: number;
+    networkTime: string;
+    timetable:   LothianTimetable;
+}
+
+export type LothianTimetable = {
+    routePattern: LothianPattern;
+    trips:        LothianTrip[];
+}
+
+export type LothianTrip = {
+    tripID:     string;
+    departures: LothianDeparture[];
+}
+
+export type LothianDeparture = {
+    stopID:        string;
+    time:          string;
+    isTimingPoint: boolean;
+    scheduledFor:  ScheduledFor;
+    sequence:      string;
+}
+
+export type ScheduledFor = {
+    unixTime:    number;
+    isoTime:     string;
+    displayTime: string;
+}
+
+export type LothianEvents = {
+    events: LothianEvent[];
+}
+
+export type LothianEvent = {
+    id:              string;
+    created:         string;
+    last_updated:    null | string;
+    cause:           string;
+    effect:          string;
+    severity:        string;
+    title:           Description;
+    description:     Description;
+    time_ranges:     TimeRange[];
+    url:             string;
+    webarticle_html: string;
+    routes_affected: RoutesAffected[];
+}
+
+export type Description = {
+    en: string;
+}
+
+export type RoutesAffected = {
+    name:       string;
+    diversions: any[];
+}
+
+export type TimeRange = {
+    start:  string;
+    finish?: string;
 }

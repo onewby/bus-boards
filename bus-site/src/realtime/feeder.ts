@@ -1,8 +1,17 @@
 import {parentPort} from "worker_threads";
-import type {FeedEntity} from "../routes/api/service/gtfs-realtime.js";
+import type {Alert, FeedEntity} from "../routes/api/service/gtfs-realtime.js";
 import {workerData} from "node:worker_threads";
 
-type DownloadFunction = () => Promise<FeedEntity[]>
+export type StopAlerts = {
+    alerts: Record<string, Alert[]>
+}
+export type DownloadResponse = {
+    entities: FeedEntity[]
+    stopAlerts: Record<string, Alert[]>
+}
+type DownloadFunction = () => Promise<DownloadResponse>
+
+export const emptyDownloadResponse = () => ({entities: [], stopAlerts: {}})
 
 export class Feeder {
 
@@ -12,23 +21,23 @@ export class Feeder {
     }
 
     init() {
-        if(this.isMainFile()) this.run();
+        if(this.isMainFile()) this.run(true);
     }
 
     isMainFile() {
         return workerData === "run"
     }
 
-    run() {
+    run(initial = false) {
         setTimeout(async () => {
             if(parentPort !== null) {
-                let feed: FeedEntity[] = []
+                let feed: DownloadResponse = emptyDownloadResponse()
                 try {
                     feed = await this.downloadFunction()
                 } catch (e) {}
                 parentPort.postMessage(feed)
             }
             this.run()
-        }, 10000)
+        }, initial ? 0 : 10000)
     }
 }

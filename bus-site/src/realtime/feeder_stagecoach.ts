@@ -8,7 +8,7 @@ import {
 } from "../routes/api/service/gtfs-realtime.js";
 import {db} from "../db.js";
 import {format_gtfs_date, format_gtfs_time, notNull} from "../routes/api/service/realtime_util.js";
-import {Feeder} from "./feeder.js";
+import {type DownloadResponse, Feeder} from "./feeder.js";
 
 type StagecoachData = {
     "services": StagecoachService[]
@@ -153,8 +153,11 @@ function json_reviver(this: any, key: string, value: string) {
     }
 }
 
-export async function load_all_stagecoach_data() {
-    return (await Promise.all(SC_OPERATORS.map(load_stagecoach_data))).flat(1)
+export async function load_all_stagecoach_data(): Promise<DownloadResponse> {
+    return {
+        entities: (await Promise.all(SC_OPERATORS.map(load_stagecoach_data))).flat(1),
+        stopAlerts: {}
+    }
 }
 
 // Load Stagecoach bus data, convert to GTFS representation for use with existing realtime service

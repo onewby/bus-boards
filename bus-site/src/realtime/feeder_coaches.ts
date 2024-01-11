@@ -18,7 +18,7 @@ import groupBy from "object.groupby";
 import {lineSegmentQuery} from "./feeder_util.js";
 import {Point, LineUtil} from "../leaflet/geometry/index.js"
 import type {ChronologicalDeparture} from "../api.type.js";
-import {Feeder} from "./feeder.js";
+import {type DownloadResponse, Feeder} from "./feeder.js";
 
 const coachOperators = ["OP564", "OP545", "OP563", "OP567"]
 
@@ -50,10 +50,10 @@ const findTrip = (date: DateTime, route: string, startTime: string, endTime: str
                     AND NOT (exception_type IS NOT NULL AND exception_type = 2)`
 ).get({date: Number(date.toFormat("yyyyMMdd")), route, startTime, endTime, depWildcard: origin.split(" (")[0] + '%', arrWildcard: dest.split(" (")[0] + '%'}) as Trip | undefined
 
-export async function load_coaches(): Promise<FeedEntity[]> {
+export async function load_coaches(): Promise<DownloadResponse> {
     const timeFrom = DateTime.now().minus({hour: 24}).toSeconds()
     const timeTo = DateTime.now().plus({hour: 1}).toSeconds()
-    return (await Promise.all(routes.map(async route => {
+    let entities = (await Promise.all(routes.map(async route => {
         if(route.route_id === '71') route.route_short_name = 'M10N'
         const resp = await fetch(`${apiURL}/public-origin-departures-by-route-v1/${route.route_short_name}/${timeFrom}/${timeTo}?api_key=${apiKey}`)
         if(!resp.ok) return []
@@ -121,6 +121,9 @@ export async function load_coaches(): Promise<FeedEntity[]> {
             }
         }).filter(d => d !== undefined) as FeedEntity[]
     }))).flat()
+    return {
+        entities, stopAlerts: {}
+    }
 }
 
 new Feeder(load_coaches).init()

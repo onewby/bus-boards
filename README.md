@@ -114,7 +114,9 @@ There are better/clearer ways to organise this, so this may change.
    re-run this to regenerate locality and stance data at any point, or you 
    can use `./rebuildDB.sh` in subsequent rebuilds to only update timetable 
    data.
-5. Modify the file `bus-site/first.env` to insert an API key for the FirstBus API.
+5. Set the environment variable `DARWIN_API_KEY` to your [OpenLDBWS SOAP API key](https://realtime.nationalrail.co.uk/OpenLDBWSRegistration/)
+   for National Rail integration, and `FIRST_API_KEY` to a FirstBus API key
+   for FirstBus realtime data.
 
 
 ## Next steps

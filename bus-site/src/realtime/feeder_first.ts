@@ -11,10 +11,9 @@ import {db} from "../db.js";
 import {DateTime} from "luxon";
 import {readFileSync, writeFileSync} from "fs";
 import {existsSync} from "node:fs";
-import {Feeder} from "./feeder.js";
+import {type DownloadResponse, Feeder} from "./feeder.js";
 
-// Configure in first.env
-const apiKey = existsSync(new URL("../../first.env", import.meta.url)) ? readFileSync(new URL("../../first.env", import.meta.url), "utf-8") : ""
+const apiKey = process.env["FIRST_API_KEY"] ?? ""
 
 const operators: Record<string, string> = {
     "FGLA": "OP584",
@@ -61,7 +60,10 @@ export async function initialise_first() {
             "x-app-key": apiKey
         }
     })
-    if(!wsInfoResp.ok) return {jsonrpc: "", method: "", params: {resource: {member: []}}}
+    if(!wsInfoResp.ok) {
+        console.log(`Could not retrieve access token for FirstBus: configured API key is '${apiKey}'`)
+        return {jsonrpc: "", method: "", params: {resource: {member: []}}}
+    }
 
     const wsInfo: FirstWebSocketInfo = await wsInfoResp.json() as FirstWebSocketInfo
 
@@ -135,8 +137,8 @@ async function get_vehicles() {
     return vehicles.flat()
 }
 
-export async function load_first_vehicles(): Promise<FeedEntity[]> {
-    return (await get_vehicles()).map(vehicle => {
+export async function load_first_vehicles(): Promise<DownloadResponse> {
+    let entities = (await get_vehicles()).map(vehicle => {
         let gtfsTrip = tripQuery(DateTime.fromSQL(vehicle.stops[0].date), vehicle.line_name, operators[vehicle.operator], vehicle.origin_atcocode, vehicle.stops[0].time)
         if(gtfsTrip === undefined) return undefined
         return {
@@ -170,6 +172,10 @@ export async function load_first_vehicles(): Promise<FeedEntity[]> {
             }
         }
     }).filter(v => v !== undefined) as FeedEntity[]
+
+    return {
+        entities, stopAlerts: {}
+    }
 }
 
 async function divideRegions(ws: WebSocket, initialRegion: Region): Promise<[Region[], Member[][]]> {
@@ -247,7 +253,7 @@ class FirstFeeder extends Feeder {
     override async init() {
         if(this.isMainFile()) {
             await initialise_first()
-            this.run()
+            this.run(true)
         }
     }
 }

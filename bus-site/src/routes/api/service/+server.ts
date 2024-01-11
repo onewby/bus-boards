@@ -235,9 +235,4 @@ const getStopPositions = db.prepare(`SELECT stop_sequence,long,lat FROM stop_tim
                                                 INNER JOIN stances on stances.code = stop_times.stop_id
                                                 WHERE (stop_sequence=:seq - 1 OR stop_sequence=:seq) AND trip_id=:id`)
 
-const getShape = db.prepare(`SELECT shape_pt_lat as lat, shape_pt_lon as lon FROM shapes
-                             WHERE shape_pt_sequence >= (SELECT shape_pt_sequence FROM shapes WHERE shape_pt_lat=:min_lat AND shape_pt_lon=:min_lon)
-                                AND shape_pt_sequence <= (SELECT shape_pt_sequence FROM shapes WHERE shape_pt_lat=:max_lat AND shape_pt_lon=:max_lon)
-                             ORDER BY shape_pt_sequence`)
-
 const bngToWGS84 = proj4("EPSG:27700", "EPSG:4326")
