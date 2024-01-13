@@ -1,4 +1,4 @@
-import {db} from "../db.js";
+import {db} from "../db";
 import {DateTime} from "luxon";
 import {
     addTimeNaive,
@@ -6,8 +6,8 @@ import {
     minIndex,
     type Position,
     sqlToLuxon
-} from "../routes/api/service/realtime_util.js";
-import {LineUtil, Point} from "../leaflet/geometry/index.js";
+} from "../routes/api/service/realtime_util";
+import {LineUtil, Point} from "../leaflet/geometry/index";
 import groupBy from "object.groupby";
 
 export type TripCandidate = {trip_id: string, direction: number, route: string, times: string, seqs: string, date: number}

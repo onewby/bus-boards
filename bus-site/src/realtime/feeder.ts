@@ -1,5 +1,5 @@
 import {parentPort} from "worker_threads";
-import type {Alert, FeedEntity} from "../routes/api/service/gtfs-realtime.js";
+import type {Alert, FeedEntity} from "../routes/api/service/gtfs-realtime";
 import {workerData} from "node:worker_threads";
 import {existsSync} from "node:fs";
 import {DateTime} from "luxon";
@@ -28,7 +28,7 @@ export class Feeder {
     }
 
     isMainFile() {
-        return workerData === "run"
+        return workerData.data === "run"
     }
 
     run(initial = false) {
