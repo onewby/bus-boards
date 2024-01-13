@@ -6,10 +6,17 @@
 
     let results: SearchResult[] = []
     let pageNum = 0
+    enum QueryType { NONE, QUERY, LOCATION }
+    let queryType = $page.url.searchParams.get("query") ? QueryType.QUERY :
+        $page.url.searchParams.get("lat") && $page.url.searchParams.get("lon") ? QueryType.LOCATION : QueryType.NONE
 
     async function handle({detail: {loaded, complete, error}}) {
         const query = $page.url.searchParams.get("query")
-        const resp = await fetch(`/api/search?query=${query}&page=${pageNum}`)
+        const lat = $page.url.searchParams.get("lat")
+        const lon = $page.url.searchParams.get("lon")
+        const resp = await fetch(
+            queryType === QueryType.QUERY ? `/api/search?query=${query}&page=${pageNum}`
+                : `/api/search?lat=${lat}&lon=${lon}&page=${pageNum}`)
         if(resp.ok) {
             const newResults: SearchResult[] = await resp.json()
             if(newResults.length) {
@@ -33,7 +40,8 @@
 <div class="w-full h-fit flex flex-col justify-start items-center max-w-full pt-4 pb-8 dark:text-white">
     <Header>
         <div class="text-2xl">
-            Search {#if $page.url.searchParams.has("query")} for <span class="font-semibold">{$page.url.searchParams.get("query")}</span>{/if}
+            Search {#if queryType === QueryType.QUERY} for <span class="font-semibold">{$page.url.searchParams.get("query")}</span>
+            {:else if queryType === QueryType.LOCATION} for location <span class="font-semibold">{$page.url.searchParams.get("lat")}, {$page.url.searchParams.get("lon")}</span>{/if}
         </div>
     </Header>
 

@@ -1,9 +1,11 @@
 <script lang="ts">
     import Fa from "svelte-fa";
-    import {faBus} from "@fortawesome/free-solid-svg-icons";
+    import {faBus, faLocationCrosshairs} from "@fortawesome/free-solid-svg-icons";
     import SearchSuggestion from "./search_suggestion.svelte";
     import type {SearchResult} from "../api.type";
     import {starredStops} from "../stores";
+    import {browser} from "$app/environment";
+    import {goto} from "$app/navigation";
 
     let input = ""
     let results: SearchResult[] = []
@@ -20,7 +22,28 @@
 
     function onSubmit() {
         if(input !== "") {
-            window.location.href = `/search?query=${encodeURIComponent(input.trim())}`
+            goto(`/search?query=${encodeURIComponent(input.trim())}`)
+        }
+    }
+
+    function geolocate() {
+        return new Promise<GeolocationPosition>((resolve, reject) => {
+            navigator.geolocation.getCurrentPosition(resolve, reject, {enableHighAccuracy: true})
+        })
+    }
+
+    async function onGeolocate() {
+        try {
+            let result = await geolocate()
+            goto(`/search?lat=${result.coords.latitude}&lon=${result.coords.longitude}`)
+        } catch (e) {
+            if(e instanceof GeolocationPositionError) {
+                if(e.PERMISSION_DENIED) {
+                    alert("Please allow finding your current location to enable geolocation.")
+                } else {
+                    alert("Could not find current location. Please try again!")
+                }
+            }
         }
     }
 </script>
@@ -28,9 +51,15 @@
 <div class="w-full h-full overflow-scroll prose dark:prose-invert flex flex-col justify-center items-center self-center text-center max-w-full pt-16 pb-16">
     <h1 class="text-5xl text-gray-50/90 drop-shadow"><Fa icon={faBus} class="inline-block mr-2" /> Bus Boards</h1>
     <div class="panel w-full mt-2 p-8">
-        <form on:submit={onSubmit}>
+        <form on:submit|preventDefault={onSubmit}>
             <label class="lead dark:text-gray-100 w-full" for="input-from">Where are you travelling from?</label>
-            <input required bind:value={input} on:input={onInput} type="text" autocomplete="street-address" class="w-full mt-4 p-4 bg-gray-50/75 dark:bg-slate-900/75" placeholder="Search for a location..." id="input-from">
+            <div class="relative mt-4">
+                <input required bind:value={input} on:input={onInput} type="text" autocomplete="street-address" class="w-full p-4 bg-gray-50/75 dark:bg-slate-900/75" placeholder="Search for a location..." id="input-from">
+                <button class="absolute right-4 top-[calc(1rem+1px)]" class:hidden={!browser || !navigator?.geolocation}
+                        on:click={onGeolocate} title="Search by current location">
+                    <Fa icon={faLocationCrosshairs} size="lg" class="hover:text-amber-500" style="font-size: 1.5em;"></Fa>
+                </button>
+            </div>
             <table class="bg-white dark:bg-slate-800 border dark:border-gray-500 text-left m-0 border-collapse">
                 <tbody>
                 {#each results as result}

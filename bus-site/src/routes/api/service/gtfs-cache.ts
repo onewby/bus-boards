@@ -37,11 +37,11 @@ function gtfsUpdateLoop() {
 // Download GTFS data
 export async function downloadGTFS() {
     try {
-        if((env.GTFS ?? 'svelte') === 'microservice') {
+        if((env.GTFS ?? 'disabled') === 'microservice') {
             const gtfsResp = await fetch(env.GTFS_URL ?? "http://localhost:3948")
             if(!gtfsResp.ok || !gtfsResp.body) return gtfsCache // Fail nicely - provide previous cache
             gtfsCache = await gtfsResp.json()
-        } else {
+        } else if((env.GTFS ?? 'disabled') === 'svelte') {
             await manualDownloadGTFS()
         }
     } catch (e) {

@@ -4,6 +4,7 @@
     import Fa from "svelte-fa";
     import type {SearchResult} from "../api.type";
     import {starredStops} from "../stores";
+    import {goto} from "$app/navigation";
 
     export let result: SearchResult;
     $: pinned = $starredStops.indexOf(result) !== -1
@@ -46,27 +47,27 @@
 <tr class="cursor-pointer transition-colors hover:bg-gray-50 dark:hover:bg-slate-900"
     class:border-b-gray-400={moveable} class:dark:border-b-white={moveable}
     class:hover-bg-amber-700-5={moveable} class:dark-hover-bg-gray-500-20={moveable}
-    on:click={() => window.location.href=`/stop/${result.locality}/${result.name}`}>
+    on:click={() => goto(`/stop/${result.locality}/${result.name}`)}>
     <td class="pl-4 pr-2 pt-2 pb-2 w-full">
         <div class="text-lg">{result.name}</div>
         <div class="text-sm">{result.parent}</div>
     </td>
     <td class="align-middle text-right text-xl pr-4">
-        <div on:mouseover={() => isHovered = true} on:focus={() => isHovered = true}
+        <button on:mouseover={() => isHovered = true} on:focus={() => isHovered = true}
              on:mouseout={() => isHovered = false} on:blur={() => isHovered = false}
-             on:click|stopPropagation={toggle_pin} on:keypress={toggle_pin} role="button" tabindex="0">
+             on:click|stopPropagation={toggle_pin} on:keypress={toggle_pin} title={(pinned ? "Unfavourite " : "Favourite ") + result.name} tabindex="0">
             <Fa icon={(pinned && !isHovered) || (!pinned && isHovered) ? faStarActive : faStarInactive} class="inline-block" />
-        </div>
+        </button>
     </td>
     {#if moveable}
     <td class="align-middle">
         <div class="flex flex-col items-center pr-4">
-            <div on:click|stopPropagation={move_up} on:keypress={move_up} role="button" tabindex="0" class="hover:text-amber-500">
+            <button on:click|stopPropagation={move_up} on:keypress={move_up} title={"Move up " + result.name} tabindex="0" class="hover:text-amber-500">
                 <Fa icon={faChevronUp} />
-            </div>
-            <div on:click|stopPropagation={move_down} on:keypress={move_down} role="button" tabindex="0" class="hover:text-amber-500">
+            </button>
+            <button on:click|stopPropagation={move_down} on:keypress={move_down} title={"Move down " + result.name} tabindex="0" class="hover:text-amber-500">
                 <Fa icon={faChevronDown} />
-            </div>
+            </button>
         </div>
     </td>
     {/if}
