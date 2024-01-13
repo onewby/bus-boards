@@ -1,6 +1,6 @@
 import {type DownloadResponse, UpdateFeeder} from "./feeder.js";
 import {db} from "../db.js";
-import type {LothianEvent, LothianEvents, LothianLiveVehicles} from "../api.type.ts";
+import type {LothianEvents, LothianLiveVehicles} from "../api.type.ts";
 import {DateTime} from "luxon";
 import {
     assignVehicles,
@@ -13,8 +13,8 @@ import {
 import {Point} from "../leaflet/geometry/index.js";
 import {
     type Alert,
-    Alert_Cause,
-    Alert_Effect,
+    alert_CauseFromJSON,
+    alert_EffectFromJSON,
     type FeedEntity,
     TripDescriptor_ScheduleRelationship,
     VehiclePosition_CongestionLevel,
@@ -22,7 +22,7 @@ import {
     VehiclePosition_VehicleStopStatus
 } from "../routes/api/service/gtfs-realtime.js";
 import groupBy from "object.groupby";
-import {download_route_data} from "../../import_lothian.js";
+import {download_route_data, lothianOpCodes} from "../../import_lothian.js";
 
 const getAllPatterns = () => db.prepare("SELECT * FROM lothian").all() as {pattern: string, route: string}[]
 
@@ -43,6 +43,9 @@ const currentTripsQuery = (date: DateTime, startTime: string, endTime: string, p
                    AND start.departure_time <= :startTime AND finish.departure_time >= :endTime`
 ).all({date: Number(date.toFormat("yyyyMMdd")), startTime, endTime, pattern}) as TripCandidate[]
 
+const getRouteInfoStmt = db.prepare("SELECT route_id, agency_id FROM routes WHERE route_short_name=? AND agency_id IN (?, ?, ?)")
+const getRouteInfo = (route: string) => getRouteInfoStmt.get(route, ...lothianOpCodes) as {route_id: string, agency_id: string}
+
 // Grouped to reduce parallelism a bit to lessen chance of rate limiting
 const patterns = groupBy(getAllPatterns(), p => p.route)
 
@@ -50,7 +53,6 @@ export async function load_Lothian_vehicles(): Promise<DownloadResponse> {
     let gtfsRT: FeedEntity[] = []
 
     const nowDate = DateTime.now()
-    const gtfsAlertsByRoute = await load_lothian_alerts()
 
     await Promise.allSettled(Object.values(patterns).map(async route => {
         for(const pattern of route) {
@@ -82,7 +84,7 @@ export async function load_Lothian_vehicles(): Promise<DownloadResponse> {
 
                 return {
                     id: vehicles.vehicles[vehicleIndex].vehicle_id,
-                    alert: gtfsAlertsByRoute[routeName],
+                    alert: undefined,
                     isDeleted: false,
                     tripUpdate: undefined,
                     vehicle: {
@@ -102,7 +104,7 @@ export async function load_Lothian_vehicles(): Promise<DownloadResponse> {
                             odometer: -1,
                             speed: -1
                         },
-                        currentStopSequence: Number(trip.candidate.seqs.split(",")[trip.stopIndex]),
+                        currentStopSequence: Number(trip.candidate.seqs.split(",")[trip.route.indexOf(vehicles.vehicles[vehicleIndex].next_stop_id)]) ?? Number(trip.candidate.seqs.split(",")[trip.stopIndex]),
                         stopId: trip.route[trip.stopIndex],
                         currentStatus: VehiclePosition_VehicleStopStatus.IN_TRANSIT_TO,
                         timestamp: updateTime,
@@ -120,40 +122,33 @@ export async function load_Lothian_vehicles(): Promise<DownloadResponse> {
 
     return {
         entities: gtfsRT,
-        stopAlerts: {}
+        alerts: await load_lothian_alerts()
     }
 }
 
-async function load_lothian_alerts(): Promise<Record<string, Alert>> {
+async function load_lothian_alerts(): Promise<Alert[]> {
     const serviceAlerts: LothianEvents = await (await fetch("https://lothianupdates.com/api/public/getServiceUpdates")).json()
-    const lothianAlertsByRoute: Record<string, LothianEvent[]> = {}
-    serviceAlerts.events.forEach((event) => {
-        event.routes_affected.forEach(route => {
-            if (!lothianAlertsByRoute[route.name]) lothianAlertsByRoute[route.name] = []
-            lothianAlertsByRoute[route.name].push(event)
-        });
-    })
-    return Object.fromEntries(Object.entries(lothianAlertsByRoute).map(([route, events]) => {
-        events = events.filter(event => event.time_ranges.findIndex((time) => {
-            let start = time.start ? DateTime.fromISO(time.start) : DateTime.fromSeconds(0)
-            let end = time.finish ? DateTime.fromISO(time.finish) : DateTime.now().plus({year: 1})
-            return DateTime.now() >= start && DateTime.now() <= end
-        }) > -1)
-        if(events.length === 0) return []
-        // GTFS alert semantics overridden to encode multiple alerts compactly
-        return [route, {
-            activePeriod: {
-                start: 0,
-                end: DateTime.now().plus({year: 1}).toSeconds()
-            },
-            cause: Alert_Cause.OTHER_CAUSE,
-            descriptionText: {translation: events.map(event => ({text: event.description.en, language: "en"}))},
-            effect: Alert_Effect.OTHER_EFFECT,
-            headerText: {translation: events.map(event => ({text: event.title.en, language: "en"}))},
-            informedEntity: [],
-            url: {translation: events.map(event => ({text: event.url ?? "", language: "en"}))}
-        }]
-    }).filter(entry => entry.length !== 0))
+    return serviceAlerts.events.map(event => ({
+        activePeriod: event.time_ranges.map(active => ({
+            start: active.start ? DateTime.fromISO(active.start).toSeconds() : 0,
+            end: active.finish ? DateTime.fromISO(active.finish).toSeconds() : DateTime.now().plus({year: 1}).toSeconds()
+        })),
+        cause: alert_CauseFromJSON(event.cause),
+        effect: alert_EffectFromJSON(event.effect),
+        descriptionText: {translation: [{text: event.description.en, language: "en"}]},
+        headerText: {translation: [{text: event.title.en, language: "en"}]},
+        informedEntity: event.routes_affected.map(entity => {
+            let route = getRouteInfo(entity.name)
+            return {
+                agencyId: route.agency_id,
+                routeId: route.route_id,
+                routeType: 0,
+                trip: undefined,
+                stopId: ""
+            };
+        }),
+        url: {translation: [{text: event.url ?? "", language: "en"}]}
+    }))
 }
 
 // https://dmitripavlutin.com/timeout-fetch-request/

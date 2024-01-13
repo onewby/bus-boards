@@ -276,6 +276,84 @@ function reset_polar() {
     rmSync(".update", {force: true})
 }
 
+type NOCRecord = {
+    code: string,
+    agencyID: string,
+    website: string
+}
+
+const getAgencyID = db.prepare("SELECT agency_id FROM agency WHERE agency_name=?").pluck()
+const insertTraveline = db.prepare("INSERT INTO traveline (code, agency_id, website) VALUES (:code, :agency_id, :website)")
+
+async function download_noc() {
+    await download_zip("https://www.travelinedata.org.uk/wp-content/themes/desktop/nocadvanced_download.php?reportFormat=csvFlatFile&submit=Submit", "gtfs/traveline_noc.zip")
+    const zip = await Open.file("gtfs/traveline.zip")
+
+    let file = zip.files.find(f => f.path.endsWith("PublicName.csv"))!
+    let publicNameRecords = await stream_csv(file).toArray()
+    file = zip.files.find(f => f.path.endsWith("NOCLines.csv"))!
+    let nocLines = await stream_csv(file).toArray()
+
+    file = zip.files.find(f => f.path.endsWith("NOCTable.csv"))!
+
+    let map: Record<string, NOCRecord[]> = {}
+
+    for await (const record of stream_csv(file)) {
+        if(!record.NOCCODE || !record.OperatorPublicName || !record.PubNmId) continue
+
+        let pnr = publicNameRecords.find(r => r.PubNmId === record.PubNmId)
+        let firstIndex = pnr.website.indexOf('#')
+        let lastIndex = pnr.website.lastIndexOf('#', firstIndex)
+        let website = firstIndex >= 0 && lastIndex >= 0 ? pnr.website.substring(firstIndex + 1, lastIndex) : pnr.website
+
+        if(map[record.OperatorPublicName] === undefined) map[record.OperatorPublicName] = []
+        map[record.OperatorPublicName].push({
+            code: record.NOCCODE,
+            agencyID: "",
+            website
+        })
+    }
+
+    for(let [name, entries] of Object.entries(map)) {
+        if(entries.length === 1) {
+            let aid = getAgencyID.get(name) as string | undefined
+            if(aid !== undefined) {
+                entries[0].agencyID = aid
+                //insertTraveline.run(entries[0])
+            } else {
+                console.log("Could not find agency: " + entries[0])
+            }
+        } else {
+            let possibilities = nocLines.filter(r => r["PubNm"] === name)
+            let agencyIDs = getAgencyID.all(name) as string[]
+            if(possibilities.length !== agencyIDs.length) {
+                possibilities = possibilities.filter(r => Object.entries(r).some(([name, val]) => name !== "NOCCODE" && val === r["NOCCODE"]))
+            }
+            if(possibilities.length === agencyIDs.length) {
+                // sort alphabetically, shift those with numbers to the end
+                possibilities.sort()
+                possibilities = [...possibilities.filter(p => !/\d/.test(p.OPCODE)), possibilities.filter(p => /\d/.test(p.OPCODE))]
+                let finalEntries: NOCRecord[] = []
+                let i = 0
+                for (const p of possibilities) {
+                    let entry = entries.find(r => r.code === p.OPCODE)
+                    if(entry) {
+                        entry.agencyID = agencyIDs[i]
+                        finalEntries.push(entry)
+                        i++
+                        if(i == entries.length) break
+                    }
+                }
+                /*db.transaction(record => {
+                    insertTraveline.run(record)
+                })(finalEntries)*/
+            } else {
+                console.log("Could not assign to agency:", entries)
+            }
+        }
+    }
+}
+
 await import_zips()
 create_indexes()
 clean_sequence_numbers()

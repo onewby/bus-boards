@@ -6,15 +6,15 @@ import {DateTime} from "luxon";
 import {readFileSync, writeFileSync} from "fs";
 
 export type StopAlerts = {
-    alerts: Record<string, Alert[]>
+    alerts: Alert[]
 }
 export type DownloadResponse = {
     entities: FeedEntity[]
-    stopAlerts: Record<string, Alert[]>
+    alerts?: Alert[]
 }
 type DownloadFunction = () => Promise<DownloadResponse>
 
-export const emptyDownloadResponse = () => ({entities: [], stopAlerts: {}})
+export const emptyDownloadResponse = () => ({entities: []})
 
 export class Feeder {
 

@@ -1,17 +1,18 @@
 import {downloadRouteDirections} from "../../import_passenger.js";
 import {
-    FeedEntity,
+    type Alert, Alert_Cause, alert_CauseFromJSON, Alert_Effect, alert_EffectFromJSON, EntitySelector,
+    FeedEntity, TimeRange, TranslatedString, type TripDescriptor,
     TripDescriptor_ScheduleRelationship,
     VehiclePosition_CongestionLevel, VehiclePosition_OccupancyStatus,
     VehiclePosition_VehicleStopStatus
 } from "../routes/api/service/gtfs-realtime.js";
 import {db} from "../db.js";
 import {DateTime} from "luxon";
-import type {Vehicles} from "../api.type";
+import type {PolarAlert, PolarDisruptions, Vehicles} from "../api.type";
 import sourceFile from "../routes/api/service/passenger-sources.json" assert {type: 'json'};
 import groupBy from "object.groupby";
 import {Point} from "../leaflet/geometry/index.js"
-import {type DownloadResponse, UpdateFeeder} from "./feeder.js";
+import {type DownloadResponse, emptyDownloadResponse, UpdateFeeder} from "./feeder.js";
 import {
     assignVehicles,
     getPoints,
@@ -19,8 +20,10 @@ import {
     type TripCandidate,
     type TripCandidateList
 } from "./feeder_util.js";
+import {merge} from "../routes/api/service/realtime_util.ts";
 
 const routeIDQuery = db.prepare("SELECT route_id FROM routes WHERE agency_id=? AND route_short_name=?").pluck()
+const allRoutesQuery = db.prepare("SELECT route_short_name, route_id, agency_id FROM routes WHERE agency_id=?")
 
 const currentTripsQuery = (date: DateTime, startTime: string, endTime: string, route: string) => db.prepare(
     `SELECT trips.trip_id, p.direction, :date as date,
@@ -41,14 +44,20 @@ const currentTripsQuery = (date: DateTime, startTime: string, endTime: string, r
 ).all({date: Number(date.toFormat("yyyyMMdd")), startTime, endTime, route}) as TripCandidate[]
 
 export async function load_passenger_sources(): Promise<DownloadResponse>  {
-    let entities = (await Promise.all(Object.keys(sourceFile.sources).map(baseURL => get_passenger_source(baseURL as (keyof typeof sourceFile.sources))))).flat()
-    return { entities, stopAlerts: {} }
+    let responses: DownloadResponse[] = await Promise.all(Object.keys(sourceFile.sources).map(baseURL => get_passenger_source(baseURL as (keyof typeof sourceFile.sources))))
+    return {
+        entities: responses.flatMap(e => e.entities),
+        alerts: responses.flatMap(e => e.alerts!)
+    }
 }
 
-export async function get_passenger_source(baseURL: keyof typeof sourceFile.sources) {
+export async function get_passenger_source(baseURL: keyof typeof sourceFile.sources): Promise<DownloadResponse> {
     let vehiclesResp = await fetch(`${baseURL}/network/vehicles`)
-    if(!vehiclesResp.ok) return []
-    return process_vehicles(await vehiclesResp.json() as Vehicles, sourceFile.sources[baseURL] as (keyof typeof sourceFile.operators)[])
+    if(!vehiclesResp.ok) return emptyDownloadResponse()
+    return {
+        entities: await process_vehicles(await vehiclesResp.json() as Vehicles, sourceFile.sources[baseURL] as (keyof typeof sourceFile.operators)[]),
+        alerts: await getAlerts(baseURL)
+    }
 }
 
 async function process_vehicles(vehicles: Vehicles, operators: (keyof typeof sourceFile.operators)[]): Promise<FeedEntity[]> {
@@ -118,6 +127,42 @@ async function process_vehicles(vehicles: Vehicles, operators: (keyof typeof sou
         }
     }
     return gtfsRT
+}
+
+const operatorsByCode: Record<string, {gtfs: string, opCode: string}[]> = groupBy(Object.values(sourceFile.operators), op => op.opCode)
+const routesByCode = Object.fromEntries(Object.entries(operatorsByCode).map(([opCode, ops]) => {
+    return [opCode, merge(ops.map(op => {
+        return groupBy(allRoutesQuery.all(op.gtfs) as {route_short_name: string, route_id: string, agency_id: string}[], r => r.route_short_name)
+    }))]
+}))
+
+async function getAlerts(baseURL: keyof typeof sourceFile.sources): Promise<Alert[]> {
+    const alertResp = await fetch(`${baseURL}/network/disruptions`)
+    if(!alertResp.ok) return []
+    const alerts: PolarDisruptions = await alertResp.json()
+    return alerts._embedded.alert.map(polarAlert => ({
+        activePeriod: polarAlert.activePeriods.map(polarPeriod => ({
+            start: polarPeriod.start ? DateTime.fromISO(polarPeriod.start).toSeconds() : 0,
+            end: polarPeriod.end ? DateTime.fromISO(polarPeriod.end).toSeconds() : DateTime.now().plus({year: 1}).toSeconds()
+        })),
+        informedEntity: polarAlert._embedded.line?.map(line => {
+            const operator = line._embedded["transmodel:operator"].code
+            const route = line.name
+            const locatedRoute = routesByCode[operator]?.[route]?.[0]
+            return {
+                agencyId: locatedRoute.agency_id,
+                routeId: locatedRoute.route_id,
+                routeType: 0,
+                trip: undefined,
+                stopId: ""
+            }
+        }) ?? [],
+        cause: alert_CauseFromJSON(polarAlert.cause),
+        effect: alert_EffectFromJSON(polarAlert.effect),
+        url: polarAlert._links?.info.href ? {translation: [{language: "en", text: polarAlert._links?.info.href}]} : undefined,
+        headerText: {translation: [{language: "en", text: polarAlert.header}]},
+        descriptionText: {translation: [{language: "en", text: polarAlert.description}]}
+    }))
 }
 
 new UpdateFeeder(load_passenger_sources, downloadRouteDirections).init()

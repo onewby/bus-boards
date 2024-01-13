@@ -76,7 +76,7 @@ export function getTripInfo(candidate: TripCandidate, points: Record<string, Poi
     let diff = Math.abs(nowDate.diff(current).toMillis())
 
     // get absolute time in seconds difference
-    return {candidate: candidate, diff, stopIndex: index, route, departureTimes}
+    return {candidate: candidate, diff, stopIndex: index + 1, route, departureTimes}
 }
 
 export function assignVehicles(closeness: TripCandidateList[]) {

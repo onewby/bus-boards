@@ -17,6 +17,7 @@
     import HTMLMarker from "./HTMLMarker.svelte";
     import {DateTime} from "luxon";
     import {browser} from "$app/environment";
+    import Alert from "../../../Alert.svelte";
 
     export let data: PageData
     let expand = false
@@ -131,12 +132,9 @@
         </div>
     </Header>
 
-    {#if data.service.message}
-        <div class="panel w-full pl-8 pr-8 pt-4 pb-4 flex flex-row items-center">
-            <Fa icon={data.service.cancelled ? faExclamationCircle : faExclamationTriangle} size="lg" class="mr-4" />
-            <div class="flex-grow">{data.service.message}</div>
-        </div>
-    {/if}
+    {#each data.alerts as alert}
+        <Alert alert={alert} major={data.service.cancelled} />
+    {/each}
 
     <a href={data.operator.url} class="w-full mt-2 max-w-2xl hover:bg-amber-700/5 dark:hover:bg-gray-500/20">
         <div class="panel w-full pl-8 pr-8 pt-4 pb-4 flex flex-row items-center">

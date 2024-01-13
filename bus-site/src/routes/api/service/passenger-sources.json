@@ -26,6 +26,10 @@
       "gtfs": "OP8781",
       "opCode": "MBLB"
     },
+    "Bright Bus": {
+      "gtfs": "OP11782",
+      "opCode": "MESC"
+    },
     "WCMO": {
       "gtfs": "OP528",
       "opCode": "WCMO"

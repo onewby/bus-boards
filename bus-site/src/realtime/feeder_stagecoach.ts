@@ -155,8 +155,7 @@ function json_reviver(this: any, key: string, value: string) {
 
 export async function load_all_stagecoach_data(): Promise<DownloadResponse> {
     return {
-        entities: (await Promise.all(SC_OPERATORS.map(load_stagecoach_data))).flat(1),
-        stopAlerts: {}
+        entities: (await Promise.all(SC_OPERATORS.map(load_stagecoach_data))).flat(1)
     }
 }
 

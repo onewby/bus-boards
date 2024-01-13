@@ -87,7 +87,8 @@ export type ServiceData = {
         name: string,
         url: string
     },
-    branches: ServiceBranch[]
+    branches: ServiceBranch[],
+    alerts: StopAlert[]
 }
 
 export type SearchResult = {
@@ -701,4 +702,240 @@ export type RoutesAffected = {
 export type TimeRange = {
     start:  string;
     finish?: string;
+}
+
+export type PolarDisruptions = {
+    _embedded: PolarDisruptionsEmbedded;
+}
+
+export type PolarDisruptionsEmbedded = {
+    alert: PolarAlert[];
+}
+
+export type PolarAlert = {
+    id:            string;
+    header:        string;
+    description:   string;
+    cause:         string;
+    effect:        string;
+    created:       string;
+    type:          string;
+    activePeriods: PolarActivePeriod[];
+    _embedded:     PolarAlertEmbedded;
+    _links?:       PolarAlertLinks;
+}
+
+export type PolarAlertEmbedded = {
+    operator?: PolarOperator[];
+    line?:     EmbeddedTransmodelLine[];
+}
+
+export type PolarActivePeriod = {
+    start:              string;
+    time_range_display: string;
+    end?:               string;
+}
+
+export type PolarOperator = {
+    id:     string;
+    code:   string;
+    name:   string;
+    _links: OperatorLinks;
+    tenant: string;
+}
+
+export type OperatorLinks = {
+    self: PolarInfo;
+}
+
+export type PolarAlertLinks = {
+    info: PolarInfo;
+}
+
+export type PolarInfo = {
+    href: string;
+}
+
+export type SiriSx = {
+    Siri: Siri;
+}
+
+export type Siri = {
+    ServiceDelivery: ServiceDelivery;
+}
+
+export type ServiceDelivery = {
+    ResponseTimestamp:         string;
+    ProducerRef:               string;
+    ResponseMessageIdentifier: string;
+    SituationExchangeDelivery: SituationExchangeDelivery;
+}
+
+export type SituationExchangeDelivery = {
+    ResponseTimestamp: string;
+    Situations:        Situations;
+}
+
+export type Situations = {
+    PtSituationElement: PtSituationElement[];
+}
+
+export type PtSituationElement = {
+    CreationTime:         string;
+    ParticipantRef:       string;
+    SituationNumber:      string;
+    Source:               SiriSource;
+    Progress:             string;
+    ValidityPeriod:       PublicationWindow[] | PublicationWindow;
+    PublicationWindow:    PublicationWindow;
+    MiscellaneousReason?: string;
+    Planned:              boolean;
+    Summary:              string;
+    Description:          string;
+    Consequences:         Consequences;
+    InfoLinks?:           SiriInfoLinks;
+    EquipmentReason?:     string;
+}
+
+export type Consequences = {
+    Consequence: PurpleConsequence[] | PurpleConsequence;
+}
+
+export type ConsequenceElement = {
+    Condition: string;
+    Severity:  string;
+    Affects:   PurpleAffects;
+    Advice:    Advice;
+    Blocking:  Blocking;
+}
+
+export type Advice = {
+    Details: string;
+}
+
+export type PurpleAffects = {
+    Networks:    PurpleNetworks;
+    StopPoints?: PurpleStopPoints;
+    Operators?:  SiriOperators;
+}
+
+export type PurpleNetworks = {
+    AffectedNetwork: PurpleAffectedNetwork;
+}
+
+export type PurpleAffectedNetwork = {
+    VehicleMode:   string;
+    AffectedLine?: PurpleAffectedLine[] | PurpleAffectedLine;
+    AllLines?:     string;
+}
+
+export type PurpleAffectedLine = {
+    AffectedOperator: SiriAffectedOperator;
+    LineRef:          number | string;
+}
+
+export type SiriAffectedOperator = {
+    OperatorRef:  string;
+    OperatorName: string;
+}
+
+export type SiriOperators = {
+    AllOperators: string;
+    AffectedOperators: SiriAffectedOperator | SiriAffectedOperator[] | undefined
+}
+
+export type PurpleStopPoints = {
+    AffectedStopPoint: PurpleAffectedStopPoint[] | PurpleAffectedStopPoint;
+}
+
+export type PurpleAffectedStopPoint = {
+    StopPointRef:  number;
+    StopPointName: string;
+    Location:      SiriLocation;
+    AffectedModes: AffectedModes;
+}
+
+export type AffectedModes = {
+    Mode: SiriMode;
+}
+
+export type SiriMode = {
+    VehicleMode: string;
+}
+
+export type SiriLocation = {
+    Longitude: number;
+    Latitude:  number;
+}
+
+export type Blocking = {
+    JourneyPlanner: boolean;
+}
+
+export type PurpleConsequence = {
+    Condition: string;
+    Severity:  string;
+    Affects:   FluffyAffects;
+    Advice?:   Advice;
+    Blocking?: Blocking;
+    Delays?:   Delays;
+}
+
+export type FluffyAffects = {
+    Networks:    FluffyNetworks;
+    StopPoints?: FluffyStopPoints;
+    Operators?:  SiriOperators;
+}
+
+export type FluffyNetworks = {
+    AffectedNetwork: FluffyAffectedNetwork;
+}
+
+export type FluffyAffectedNetwork = {
+    VehicleMode:   string;
+    AffectedLine?: FluffyAffectedLine[] | FluffyAffectedLine;
+    AllLines?:     string;
+}
+
+export type FluffyAffectedLine = {
+    AffectedOperator: SiriAffectedOperator;
+    LineRef:          number | string;
+    Direction?:       SiriDirection;
+}
+
+export type SiriDirection = {
+    DirectionRef: string;
+}
+
+export type FluffyStopPoints = {
+    AffectedStopPoint: FluffyAffectedStopPoint[] | FluffyAffectedStopPoint;
+}
+
+export type FluffyAffectedStopPoint = {
+    StopPointRef:   number | string;
+    StopPointName:  string;
+    Location:       SiriLocation;
+    AffectedModes?: AffectedModes;
+}
+
+export type Delays = {
+    Delay: string;
+}
+
+export type SiriInfoLinks = {
+    InfoLink: SiriInfoLink;
+}
+
+export type SiriInfoLink = {
+    Uri: string;
+}
+
+export type PublicationWindow = {
+    StartTime: string;
+    EndTime?:  string;
+}
+
+export type SiriSource = {
+    SourceType:          string;
+    TimeOfCommunication: string;
 }

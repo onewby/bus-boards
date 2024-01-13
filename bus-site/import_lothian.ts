@@ -6,6 +6,7 @@ import {allRoutesQuery} from "./import_passenger.js";
 const lothian = 'OP596'
 const lothianCountry = 'OP597'
 const ecb = 'OP598'
+export const lothianOpCodes = [lothian, lothianCountry, ecb]
 
 const routeQuery = (date: string, route: string) => db.prepare(
     `SELECT substr(start.departure_time, 1, 5) as minss, start.stop_id as startStop, substr(finish.departure_time, 1, 5) as maxss, finish.stop_id as finishStop, trips.trip_id

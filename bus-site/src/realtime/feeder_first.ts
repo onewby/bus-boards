@@ -173,9 +173,7 @@ export async function load_first_vehicles(): Promise<DownloadResponse> {
         }
     }).filter(v => v !== undefined) as FeedEntity[]
 
-    return {
-        entities, stopAlerts: {}
-    }
+    return { entities }
 }
 
 async function divideRegions(ws: WebSocket, initialRegion: Region): Promise<[Region[], Member[][]]> {

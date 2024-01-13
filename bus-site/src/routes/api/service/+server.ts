@@ -4,9 +4,13 @@ import {db} from "../../../db";
 import {DateTime, Duration} from "luxon";
 import proj4 from "proj4";
 import {intercityOperators} from "../stop/operators";
-import type {ServiceData, ServiceStopData} from "../../../api.type";
-import {findRealtimeTrip} from "./gtfs-cache";
-import {TripDescriptor_ScheduleRelationship, TripUpdate_StopTimeUpdate_ScheduleRelationship} from "./gtfs-realtime";
+import type {ServiceData, ServiceStopData, StopAlert} from "../../../api.type";
+import {findRealtimeTrip, getAgencyAlerts, getRouteAlerts, getTripAlerts} from "./gtfs-cache";
+import {
+    type TranslatedString,
+    TripDescriptor_ScheduleRelationship,
+    TripUpdate_StopTimeUpdate_ScheduleRelationship
+} from "./gtfs-realtime";
 import {findPctBetween, sqlToLuxon} from "./realtime_util";
 import { LatLng } from "../../../leaflet/geo/LatLng.js";
 
@@ -15,7 +19,7 @@ proj4.defs("EPSG:27700","+proj=tmerc +lat_0=49 +lon_0=-2 +k=0.9996012717 +x_0=40
 export const GET: RequestHandler = async ({url}) => {
     const id = url.searchParams.get("id")
     if(id === null) error(400, "ID not provided.");
-    const service: any = db.prepare(`SELECT route_short_name as code, trip_headsign as dest, max_stop_seq as mss FROM trips
+    const service: any = db.prepare(`SELECT r.route_id as routeID, route_short_name as code, trip_headsign as dest, max_stop_seq as mss FROM trips
                                             INNER JOIN main.routes r on r.route_id = trips.route_id
                                             WHERE trip_id=?`).get(id)
     if(service === undefined) error(404, "Service not found.");
@@ -27,13 +31,18 @@ export const GET: RequestHandler = async ({url}) => {
                                             INNER JOIN stops on stops.id = stances.stop
                                             INNER JOIN localities l on l.code = stops.locality
                                         WHERE trip_id=? ORDER BY stop_sequence`).all(id) as ServiceStopData[]
-    const operator: any = db.prepare(`SELECT agency_name as name, agency_url as url FROM trips
+    const operator: any = db.prepare(`SELECT a.agency_id as id, agency_name as name, agency_url as url FROM trips
                                             INNER JOIN main.routes r on r.route_id = trips.route_id
                                             INNER JOIN main.agency a on r.agency_id = a.agency_id
                                             WHERE trip_id = ?`).get(id)
     const shape: any[] = db.prepare(`SELECT shape_pt_lat as lat, shape_pt_lon as long
                                         FROM shapes INNER JOIN trips t on shapes.shape_id = t.shape_id
                                         WHERE trip_id=? ORDER BY shape_pt_sequence`).all(id)
+
+    let routeID = service.routeID
+    delete service.routeID
+    let agencyID = operator.id
+    delete operator.id
 
     // Better coach listings - show root locality name
     if(intercityOperators.includes(operator.name)) {
@@ -93,7 +102,6 @@ export const GET: RequestHandler = async ({url}) => {
         let currentPos = trip.vehicle?.position
 
         // Ember (and other better GTFS sources) delay calculation
-        service.message = trip.alert?.descriptionText?.translation[0].text
         if(trip.tripUpdate) {
             let scheduledTimes = stops.map(stop => {
                 return DateTime.fromFormat(trip.vehicle?.trip?.startDate + stop.dep, "yyyyMMddHH:mm:ss")
@@ -204,6 +212,12 @@ export const GET: RequestHandler = async ({url}) => {
     })
     delete service.mss
 
+    let alerts: StopAlert[] = [...getTripAlerts(id), ...getRouteAlerts(routeID), ...getAgencyAlerts(routeID)].map(alert => ({
+        header: findBestMatch(alert.headerText),
+        description: findBestMatch(alert.descriptionText),
+        url: findBestMatch(alert.url)
+    }))
+
     const data: ServiceData = {
         "service": service,
         "operator": operator,
@@ -212,7 +226,8 @@ export const GET: RequestHandler = async ({url}) => {
             "stops": stops,
             "realtime": realtime,
             "route": route
-        }]
+        }],
+        "alerts": alerts
     }
 
     return json(data)
@@ -236,3 +251,5 @@ const getStopPositions = db.prepare(`SELECT stop_sequence,long,lat FROM stop_tim
                                                 WHERE (stop_sequence=:seq - 1 OR stop_sequence=:seq) AND trip_id=:id`)
 
 const bngToWGS84 = proj4("EPSG:27700", "EPSG:4326")
+
+const findBestMatch = (str?: TranslatedString) => str ? str.translation.find(t => t.language == "en")?.text ?? str.translation[0].text! : undefined

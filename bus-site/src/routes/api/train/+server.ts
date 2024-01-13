@@ -26,9 +26,13 @@ export const GET: RequestHandler = async ({url}) => {
     const service = {
         code: details.std ?? details.sta,
         dest: subsequentCalls.map(list => list.callingPoint[list.callingPoint.length - 1].locationName).join(' & '),
-        cancelled: details.isCancelled || details.etd === "Cancelled",
-        message: details.isCancelled ? (details.cancelReason ?? details.delayReason) : (details.delayReason ?? details.cancelReason)
+        cancelled: details.isCancelled || details.etd === "Cancelled"
     }
+    const alerts = [{
+        header: undefined,
+        description: details.isCancelled ? (details.cancelReason ?? details.delayReason) : (details.delayReason ?? details.cancelReason),
+        url: undefined
+    }]
     const operator = {
         name: details.operator,
         url: "https://www.nationalrail.co.uk/"
@@ -94,7 +98,8 @@ export const GET: RequestHandler = async ({url}) => {
     return json({
         "service": service,
         "operator": operator,
-        "branches": branches
+        "branches": branches,
+        "alerts": alerts
     })
 }
 

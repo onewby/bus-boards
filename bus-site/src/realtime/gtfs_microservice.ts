@@ -2,7 +2,6 @@ import {createServer} from 'http';
 import {FeedHeader_Incrementality, FeedMessage} from "../routes/api/service/gtfs-realtime.js";
 import { Worker } from 'worker_threads';
 import {type DownloadResponse, emptyDownloadResponse, type StopAlerts} from "./feeder.js";
-import {merge} from "../routes/api/service/realtime_util.js";
 
 const PORT = 3948
 
@@ -18,15 +17,17 @@ const workers = feeds.map(feed => {
 })
 
 createServer((req, res) => {
+    let nowDate = Date.now() / 1000
     let cacheValues = Object.values(caches)
     let msg: FeedMessage & StopAlerts = {
-        entity: cacheValues.map(e => e.entities).flat(),
+        entity: cacheValues.flatMap(e => e.entities),
         header: {
             gtfsRealtimeVersion: "2.0",
             incrementality: FeedHeader_Incrementality.FULL_DATASET,
             timestamp: Math.floor(Date.now() / 1000)
         },
-        alerts: merge(cacheValues.map(e => e.stopAlerts))
+        alerts: cacheValues.flatMap(e => e.alerts ?? [])
+            .filter(a => a.activePeriod.find(ap => ap.start <= nowDate && ap.end >= nowDate))
     }
     res.writeHead(200, {'Content-Type': 'application/json'})
     res.write(JSON.stringify(msg))

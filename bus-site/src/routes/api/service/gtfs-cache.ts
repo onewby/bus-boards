@@ -1,4 +1,4 @@
-import {FeedHeader_Incrementality, FeedMessage} from "./gtfs-realtime";
+import {type Alert, FeedHeader_Incrementality, FeedMessage} from "./gtfs-realtime";
 import type {ServiceData} from "../../../api.type";
 import {GET as serviceGet} from "./+server";
 import {env} from "$env/dynamic/private";
@@ -16,9 +16,10 @@ import {load_Lothian_vehicles} from "../../../realtime/feeder_lothian.ts";
  * Realtime data
  */
 
-export let gtfsCache: FeedMessage & StopAlerts = {header: undefined, entity: [], alerts: {}}
+export let gtfsCache: FeedMessage & StopAlerts = {header: undefined, entity: [], alerts: []}
 // Caches /api/service outputs for tracking services to prevent latency from recalculating delay (cleared on GTFS update)
 let serviceCache: Record<string, ServiceData> = {}
+let alertCache: AlertCaches = {route: {}, stop: {}, trip: {}, agency: {}}
 
 // Download GTFS data and update it every 10s
 export async function initGTFS() {
@@ -44,7 +45,7 @@ export async function downloadGTFS() {
             await manualDownloadGTFS()
         }
     } catch (e) {
-        gtfsCache = {header: undefined, entity: [], alerts: {}}
+        gtfsCache = {header: undefined, entity: [], alerts: []}
     }
     serviceCache = {}
 }
@@ -60,6 +61,7 @@ export async function manualDownloadGTFS() {
         }
     })
 
+    let nowDate = Date.now() / 1000
     gtfsCache = {
         header: {
             gtfsRealtimeVersion: "2.0",
@@ -67,7 +69,8 @@ export async function manualDownloadGTFS() {
             timestamp: Math.floor(Date.now() / 1000)
         },
         entity: newEntries.flatMap(e => e.entities),
-        alerts: merge(newEntries.map(e => e.stopAlerts))
+        alerts: newEntries.flatMap(e => e.alerts ?? [])
+            .filter(a => a.activePeriod.find(ap => ap.start <= nowDate && ap.end >= nowDate))
     }
 }
 
@@ -87,6 +90,44 @@ export async function getRTServiceData(tripID: string): Promise<ServiceData> {
     return serviceCache[tripID]
 }
 
+type AlertCache = Record<string, Alert[]>
+type AlertCaches = {
+    route: AlertCache,
+    stop: AlertCache,
+    trip: AlertCache,
+    agency: AlertCache
+}
+function createAlertCaches(alerts: Alert[]) {
+    let route: AlertCache = {}
+    let stop: AlertCache = {}
+    let trip: AlertCache = {}
+    let agency: AlertCache = {}
+    alerts.forEach(alert => alert.informedEntity.forEach(entity => {
+        if(entity.trip?.tripId) insertIntoCache(trip, entity.trip.tripId, alert)
+        if(entity.stopId) insertIntoCache(stop, entity.stopId, alert)
+        if(entity.routeId) insertIntoCache(trip, entity.routeId, alert)
+        if(entity.agencyId && !entity.routeId) insertIntoCache(agency, entity.agencyId, alert)
+    }))
+    return {route, stop, trip, agency}
+}
+
+function insertIntoCache(cache: AlertCache, id: string, alert: Alert) {
+    if(cache[id] === undefined) cache[id] = []
+    cache[id].push(alert)
+}
+
 export function getStopAlerts(code: string) {
-    return gtfsCache.alerts[code]
+    return alertCache.stop[code] ?? []
+}
+
+export function getTripAlerts(trip: string) {
+    return alertCache.trip[trip] ?? []
+}
+
+export function getRouteAlerts(routeID: string) {
+    return alertCache.route[routeID] ?? []
+}
+
+export function getAgencyAlerts(agency: string) {
+    return alertCache.route[agency] ?? []
 }

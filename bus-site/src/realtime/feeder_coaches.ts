@@ -121,9 +121,7 @@ export async function load_coaches(): Promise<DownloadResponse> {
             }
         }).filter(d => d !== undefined) as FeedEntity[]
     }))).flat()
-    return {
-        entities, stopAlerts: {}
-    }
+    return { entities }
 }
 
 new Feeder(load_coaches).init()
