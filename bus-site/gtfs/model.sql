@@ -160,7 +160,7 @@ CREATE TABLE IF NOT EXISTS traveline
             primary key,
     agency_id TEXT
         constraint traveline_agency_agency_id_fk
-            references main.agency,
+            references agency,
     website   TEXT
 );
 

@@ -20,4 +20,4 @@ create index if not exists polar_polar_index
     on polar (polar);
 
 create unique index if not exists traveline_agency_id_uindex
-    on main.traveline (agency_id);
+    on traveline (agency_id);
