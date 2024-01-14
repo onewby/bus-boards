@@ -22,7 +22,8 @@ export async function load_gtfs_source(): Promise<DownloadResponse> {
     entries.entity = entries.entity.filter(e => e.vehicle?.trip?.tripId !== "")
 
     return {
-        entities: entries.entity
+        entities: entries.entity,
+        alerts: await load_disruptions()
     }
 }
 
@@ -61,6 +62,7 @@ export async function load_disruptions(): Promise<Alert[]> {
                     }).filter(obj => obj !== undefined),
                     ...compact(con.Affects.Operators?.AffectedOperators).map(op => {
                         let agency = getAgency.get(op.OperatorRef)
+                        if(agency === undefined) return undefined
                         return {
                             agencyId: agency, routeId: "", routeType: 0, trip: undefined, stopId: ""
                         };

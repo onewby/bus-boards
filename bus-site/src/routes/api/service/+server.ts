@@ -31,9 +31,10 @@ export const GET: RequestHandler = async ({url}) => {
                                             INNER JOIN stops on stops.id = stances.stop
                                             INNER JOIN localities l on l.code = stops.locality
                                         WHERE trip_id=? ORDER BY stop_sequence`).all(id) as ServiceStopData[]
-    const operator: any = db.prepare(`SELECT a.agency_id as id, agency_name as name, agency_url as url FROM trips
+    const operator: any = db.prepare(`SELECT a.agency_id as id, agency_name as name, COALESCE(website, agency_url) as url FROM trips
                                             INNER JOIN main.routes r on r.route_id = trips.route_id
                                             INNER JOIN main.agency a on r.agency_id = a.agency_id
+                                            LEFT OUTER JOIN main.traveline t on a.agency_id = t.agency_id
                                             WHERE trip_id = ?`).get(id)
     const shape: any[] = db.prepare(`SELECT shape_pt_lat as lat, shape_pt_lon as long
                                         FROM shapes INNER JOIN trips t on shapes.shape_id = t.shape_id

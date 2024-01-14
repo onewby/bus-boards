@@ -25,7 +25,7 @@ export const lineSegmentQuery = db.prepare(
 const minTripInfo = (c1: TripInfo, c2: TripInfo) => c1.diff < c2.diff
 const minTripCand = (c1: FinalTripCandidate, c2: FinalTripCandidate) => c1.trip.diff < c2.trip.diff
 
-function minPredicate<T>(arr: T[], comparator: (i1: T, i2: T) => boolean) {
+export function minPredicate<T>(arr: T[], comparator: (i1: T, i2: T) => boolean) {
     let lowest = 0
     for(let i = 0; i < arr.length; i++) {
         if(comparator(arr[i], arr[lowest])) lowest = i

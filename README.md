@@ -117,6 +117,9 @@ There are better/clearer ways to organise this, so this may change.
 5. Set the environment variable `DARWIN_API_KEY` to your [OpenLDBWS SOAP API key](https://realtime.nationalrail.co.uk/OpenLDBWSRegistration/)
    for National Rail integration, and `FIRST_API_KEY` to a FirstBus API key
    for FirstBus realtime data.
+6. Set the environment variables `TNDS_USERNAME` and `TNDS_PASSWORD` to your FTP
+   username and password for the [Traveline National Dataset](https://www.travelinedata.org.uk/traveline-open-data/traveline-national-dataset/).
+7. Run using `npm run all` from `bus-site/`.
 
 
 ## Next steps

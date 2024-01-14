@@ -1,16 +1,20 @@
-import Database from "better-sqlite3";
 import type {Statement} from "better-sqlite3";
+import Database from "better-sqlite3";
 import {parse as parsePath} from "node:path";
 import {fileURLToPath} from "node:url";
-import {readFileSync, writeFileSync, createWriteStream} from "fs";
-import { Readable } from 'stream';
-import { finished } from 'stream/promises';
-import {Open} from "unzipper";
+import {createWriteStream, readFileSync, writeFileSync} from "fs";
+import {Readable} from 'stream';
+import {finished} from 'stream/promises';
 import type {CentralDirectory, File} from "unzipper";
+import {Open} from "unzipper";
 import {parse} from "csv-parse";
 import hasha from "hasha";
 import JSON5 from "json5";
 import {existsSync, rmSync} from "node:fs";
+import groupBy from "object.groupby";
+import compare from "string-comparison"
+import {minPredicate} from "./src/realtime/feeder_util";
+import {Client} from "basic-ftp";
 
 const sourceFiles: { name: string, url: string, path: string, prefix: string }[] = [
     {
@@ -276,82 +280,111 @@ function reset_polar() {
     rmSync(".update", {force: true})
 }
 
-type NOCRecord = {
-    code: string,
-    agencyID: string,
-    website: string
+const TRAVELINE_FILE = "gtfs/traveline_noc.zip"
+const TNDS_USERNAME = process.env["TNDS_USERNAME"] ?? ""
+const TNDS_PASSWORD = process.env["TNDS_PASSWORD"] ?? ""
+
+const insertTraveline = db.prepare("INSERT INTO traveline (code, agency_id, website) VALUES (:code, :agency_id, :website)")
+const getAgencyInfo = db.prepare(
+    `SELECT agency.agency_id, agency.agency_name, (SELECT group_concat(route_short_name) FROM routes WHERE routes.agency_id=agency.agency_id ORDER BY route_short_name) as routes FROM agency`
+)
+
+type ServiceReportRecord = {
+    RowId: number,
+    RegionCode: string,
+    RegionOperatorCode: string,
+    ServiceCode: string,
+    LineName: string,
+    Description: string,
+    StartDate: string,
+    NationalOperatorCode: string,
+    DataSource: string
 }
 
-const getAgencyID = db.prepare("SELECT agency_id FROM agency WHERE agency_name=?").pluck()
-const insertTraveline = db.prepare("INSERT INTO traveline (code, agency_id, website) VALUES (:code, :agency_id, :website)")
+type AgencyInfo = {agency_id: string, agency_name: string, routes: string}
+type InsertInfo = AgencyInfo & {code?: string, website: string | null}
 
 async function download_noc() {
-    await download_zip("https://www.travelinedata.org.uk/wp-content/themes/desktop/nocadvanced_download.php?reportFormat=csvFlatFile&submit=Submit", "gtfs/traveline_noc.zip")
-    const zip = await Open.file("gtfs/traveline.zip")
+    const ftp = new Client()
+    let resp = await ftp.access({
+        host: "ftp.tnds.basemap.co.uk",
+        user: TNDS_USERNAME,
+        password: TNDS_PASSWORD,
+        secure: true,
+        secureOptions: {
+            rejectUnauthorized: false
+        }
+    })
+    if(resp.code < 200 || resp.code >= 300) {
+        console.log(resp.message)
+        ftp.close()
+        return
+    }
+    console.log("Connected to FTP")
+    await ftp.downloadTo("gtfs/traveline.csv", "servicereport.csv")
+    console.log("Downloaded TNDS service report")
+    ftp.close()
 
+    await download_zip("https://www.travelinedata.org.uk/wp-content/themes/desktop/nocadvanced_download.php?reportFormat=csvFlatFile&allTable%5B%5D=table_noc_table&allTable%5B%5D=table_public_name&submit=Submit", TRAVELINE_FILE)
+
+    const zip = await Open.file(TRAVELINE_FILE)
     let file = zip.files.find(f => f.path.endsWith("PublicName.csv"))!
-    let publicNameRecords = await stream_csv(file).toArray()
-    file = zip.files.find(f => f.path.endsWith("NOCLines.csv"))!
-    let nocLines = await stream_csv(file).toArray()
+    // ordered by PubNmId
+    let publicNameRecords: {PubNmId: string, Website: string}[] = await stream_csv(file).toArray()
 
     file = zip.files.find(f => f.path.endsWith("NOCTable.csv"))!
+    // ordered alphabetically
+    let nocTable: Record<string, {NOCCODE: string, PubNmId: string, OperatorPublicName: string, VOSA_PSVLicenseName: string}> = Object.fromEntries(Object.entries(groupBy(await stream_csv(file).toArray(), r => r.NOCCODE)).map(([k, v]) => [k, v[0]]))
 
-    let map: Record<string, NOCRecord[]> = {}
+    let records: ServiceReportRecord[] = await parse(readFileSync("gtfs/traveline.csv"), {encoding: "utf-8", cast: false, cast_date: false, columns: true}).toArray()
+    let nocs = groupBy(records, record => record.NationalOperatorCode)
+    let routeNOCs = Object.fromEntries(Object.entries(nocs).map(([key, values]) => [values.map(srr => srr.LineName).sort().join(','), key]))
 
-    for await (const record of stream_csv(file)) {
-        if(!record.NOCCODE || !record.OperatorPublicName || !record.PubNmId) continue
+    let agencyInfo = getAgencyInfo.all() as AgencyInfo[]
+    let assignedCodes: InsertInfo[] = agencyInfo.map(info => ({...info, code: routeNOCs[info.routes], website: null}))
 
-        let pnr = publicNameRecords.find(r => r.PubNmId === record.PubNmId)
-        let firstIndex = pnr.website.indexOf('#')
-        let lastIndex = pnr.website.lastIndexOf('#', firstIndex)
-        let website = firstIndex >= 0 && lastIndex >= 0 ? pnr.website.substring(firstIndex + 1, lastIndex) : pnr.website
+    let assignedCodeStrs = new Set(assignedCodes.filter(a => a.code).map(a => a.code))
+    let remainingAgencies = assignedCodes.filter(a => !a.code)
+    let remainingTraveline: [string, string][] = Object.entries(nocs).filter(([k, v]) => !assignedCodeStrs.has(k))
+        .map(([k,v]) => [k, v.map(r => r.LineName).sort().join(',')])
 
-        if(map[record.OperatorPublicName] === undefined) map[record.OperatorPublicName] = []
-        map[record.OperatorPublicName].push({
-            code: record.NOCCODE,
-            agencyID: "",
-            website
-        })
-    }
-
-    for(let [name, entries] of Object.entries(map)) {
-        if(entries.length === 1) {
-            let aid = getAgencyID.get(name) as string | undefined
-            if(aid !== undefined) {
-                entries[0].agencyID = aid
-                //insertTraveline.run(entries[0])
+    for(let agency of remainingAgencies) {
+        let cands = remainingTraveline.filter(([tK, tV]) => agency.agency_name === nocTable[tK]?.OperatorPublicName)
+        if(cands.length === 0) {
+            let lastDitchCands = Object.values(nocTable).filter(t => agency.agency_name === t.OperatorPublicName)
+            if(lastDitchCands.length > 1) lastDitchCands = lastDitchCands.filter(t => t.VOSA_PSVLicenseName)
+            if(lastDitchCands.length === 1) {
+                agency.code = lastDitchCands[0].NOCCODE
             } else {
-                console.log("Could not find agency: " + entries[0])
+                console.log("Could not map", agency.agency_name, "to Traveline data")
             }
-        } else {
-            let possibilities = nocLines.filter(r => r["PubNm"] === name)
-            let agencyIDs = getAgencyID.all(name) as string[]
-            if(possibilities.length !== agencyIDs.length) {
-                possibilities = possibilities.filter(r => Object.entries(r).some(([name, val]) => name !== "NOCCODE" && val === r["NOCCODE"]))
-            }
-            if(possibilities.length === agencyIDs.length) {
-                // sort alphabetically, shift those with numbers to the end
-                possibilities.sort()
-                possibilities = [...possibilities.filter(p => !/\d/.test(p.OPCODE)), possibilities.filter(p => /\d/.test(p.OPCODE))]
-                let finalEntries: NOCRecord[] = []
-                let i = 0
-                for (const p of possibilities) {
-                    let entry = entries.find(r => r.code === p.OPCODE)
-                    if(entry) {
-                        entry.agencyID = agencyIDs[i]
-                        finalEntries.push(entry)
-                        i++
-                        if(i == entries.length) break
-                    }
-                }
-                /*db.transaction(record => {
-                    insertTraveline.run(record)
-                })(finalEntries)*/
-            } else {
-                console.log("Could not assign to agency:", entries)
-            }
+            continue
         }
+        let closest = minPredicate(cands.map(([tK, tV]): [string, number] => [tK, compare.diceCoefficient.similarity(agency.routes, tV)]), (a1, a2) => a1[1] > a2[1])
+        agency.code = closest[0]
     }
+
+    // Remove duplicates, map websites
+    let finalInfo = Object.values(groupBy(assignedCodes.filter(a => a.code), a => a.code!)).map(as => {
+        let assignment = as[0]
+        // Binary searches possible here, but the tables are small so it's not worth bothering
+        let noc = nocTable[assignment.code!]
+        if(!noc) return assignment
+        let pnr = publicNameRecords.find(t => t.PubNmId === noc!.PubNmId)
+        if(!pnr) return assignment
+
+        let firstIndex = pnr?.Website?.indexOf('#')
+        let lastIndex = pnr?.Website?.lastIndexOf('#')
+        assignment.website = pnr?.Website && firstIndex >= 0 && lastIndex >= 0 && firstIndex !== lastIndex ? pnr.Website.substring(firstIndex + 1, lastIndex) : pnr.Website
+        return assignment
+    })
+
+    db.exec("DELETE FROM traveline")
+    db.transaction(records => {
+        records.forEach((record: any) => {
+            insertTraveline.run(record)
+        })
+    })(finalInfo)
 }
 
 await import_zips()
@@ -361,4 +394,5 @@ clean_arrivals()
 clean_stops()
 reset_polar()
 patch_display_names()
+await download_noc()
 db.close()
