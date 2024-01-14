@@ -1,9 +1,8 @@
 import {DateTime} from "luxon";
 import type {PolarLines, PolarTimetable} from "./src/api.type";
-import {addTimeNaive, dayDiff, format_gtfs_time} from "./src/routes/api/service/realtime_util.js";
-import {db} from "./src/db.js";
+import {addTimeNaive, dayDiff, format_gtfs_time} from "./src/routes/api/service/realtime_util";
+import {db} from "./src/db";
 import sourceFile from "./src/routes/api/service/passenger-sources.json" assert {type: "json"}
-import { resolve } from "path";
 
 export const allRoutesQuery = db.prepare("SELECT route_id,route_short_name FROM routes WHERE agency_id=?")
 const routeQuery = (date: string, route: string) => db.prepare(

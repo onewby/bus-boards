@@ -1,7 +1,7 @@
 import type {LothianPatterns, LothianRoutes, LothianTimetables} from "./src/api.type";
-import {db} from "./src/db.js";
+import {db} from "./src/db";
 import {DateTime} from "luxon";
-import {allRoutesQuery} from "./import_passenger.js";
+import {allRoutesQuery} from "./import_passenger";
 
 const lothian = 'OP596'
 const lothianCountry = 'OP597'
