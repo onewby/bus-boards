@@ -47,7 +47,8 @@
 <tr class="cursor-pointer transition-colors hover:bg-gray-50 dark:hover:bg-slate-900"
     class:border-b-gray-400={moveable} class:dark:border-b-white={moveable}
     class:hover-bg-amber-700-5={moveable} class:dark-hover-bg-gray-500-20={moveable}
-    on:click={() => goto(`/stop/${result.locality}/${result.name}`)}>
+    role="link"
+    on:click={() => goto(`/stop/${result.locality}/${encodeURIComponent(result.name)}`)}>
     <td class="pl-4 pr-2 pt-2 pb-2 w-full">
         <div class="text-lg">{result.name}</div>
         <div class="text-sm">{result.parent}</div>

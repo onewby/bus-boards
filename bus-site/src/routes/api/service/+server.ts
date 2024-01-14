@@ -213,7 +213,7 @@ export const GET: RequestHandler = async ({url}) => {
     })
     delete service.mss
 
-    let alerts: StopAlert[] = [...getTripAlerts(id), ...getRouteAlerts(routeID), ...getAgencyAlerts(routeID)].map(alert => ({
+    let alerts: StopAlert[] = [...getTripAlerts(id), ...getRouteAlerts(routeID), ...getAgencyAlerts(agencyID)].map(alert => ({
         header: findBestMatch(alert.headerText),
         description: findBestMatch(alert.descriptionText),
         url: findBestMatch(alert.url)

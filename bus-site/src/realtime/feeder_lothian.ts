@@ -139,13 +139,7 @@ async function load_lothian_alerts(): Promise<Alert[]> {
         headerText: {translation: [{text: event.title.en, language: "en"}]},
         informedEntity: event.routes_affected.map(entity => {
             let route = getRouteInfo(entity.name)
-            return {
-                agencyId: route.agency_id,
-                routeId: route.route_id,
-                routeType: 0,
-                trip: undefined,
-                stopId: ""
-            };
+            return { routeId: route.route_id };
         }),
         url: {translation: [{text: event.url ?? "", language: "en"}]}
     }))

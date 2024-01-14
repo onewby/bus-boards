@@ -946,12 +946,12 @@ export interface EntitySelector {
    * At least one specifier must be given. If several are given, then the
    * matching has to apply to all the given specifiers.
    */
-  agencyId: string;
-  routeId: string;
+  agencyId?: string;
+  routeId?: string;
   /** corresponds to route_type in GTFS. */
-  routeType: number;
-  trip: TripDescriptor | undefined;
-  stopId: string;
+  routeType?: number;
+  trip?: TripDescriptor;
+  stopId?: string;
 }
 
 /**
@@ -2043,24 +2043,24 @@ export const VehicleDescriptor = {
 };
 
 function createBaseEntitySelector(): EntitySelector {
-  return { agencyId: "", routeId: "", routeType: 0, trip: undefined, stopId: "" };
+  return { agencyId: undefined, routeId: undefined, routeType: undefined, trip: undefined, stopId: undefined };
 }
 
 export const EntitySelector = {
   encode(message: EntitySelector, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
-    if (message.agencyId !== "") {
+    if (message.agencyId && message.agencyId !== "") {
       writer.uint32(10).string(message.agencyId);
     }
-    if (message.routeId !== "") {
+    if (message.routeId && message.routeId !== "") {
       writer.uint32(18).string(message.routeId);
     }
-    if (message.routeType !== 0) {
+    if (message.routeType && message.routeType !== 0) {
       writer.uint32(24).int32(message.routeType);
     }
     if (message.trip !== undefined) {
       TripDescriptor.encode(message.trip, writer.uint32(34).fork()).ldelim();
     }
-    if (message.stopId !== "") {
+    if (message.stopId && message.stopId !== "") {
       writer.uint32(42).string(message.stopId);
     }
     return writer;
@@ -2098,11 +2098,11 @@ export const EntitySelector = {
 
   fromJSON(object: any): EntitySelector {
     return {
-      agencyId: isSet(object.agencyId) ? String(object.agencyId) : "",
-      routeId: isSet(object.routeId) ? String(object.routeId) : "",
-      routeType: isSet(object.routeType) ? Number(object.routeType) : 0,
+      agencyId: isSet(object.agencyId) ? String(object.agencyId) : undefined,
+      routeId: isSet(object.routeId) ? String(object.routeId) : undefined,
+      routeType: isSet(object.routeType) ? Number(object.routeType) : undefined,
       trip: isSet(object.trip) ? TripDescriptor.fromJSON(object.trip) : undefined,
-      stopId: isSet(object.stopId) ? String(object.stopId) : "",
+      stopId: isSet(object.stopId) ? String(object.stopId) : undefined,
     };
   },
 
@@ -2118,13 +2118,13 @@ export const EntitySelector = {
 
   fromPartial<I extends Exact<DeepPartial<EntitySelector>, I>>(object: I): EntitySelector {
     const message = createBaseEntitySelector();
-    message.agencyId = object.agencyId ?? "";
-    message.routeId = object.routeId ?? "";
-    message.routeType = object.routeType ?? 0;
+    message.agencyId = object.agencyId;
+    message.routeId = object.routeId;
+    message.routeType = object.routeType;
     message.trip = (object.trip !== undefined && object.trip !== null)
       ? TripDescriptor.fromPartial(object.trip)
       : undefined;
-    message.stopId = object.stopId ?? "";
+    message.stopId = object.stopId;
     return message;
   },
 };

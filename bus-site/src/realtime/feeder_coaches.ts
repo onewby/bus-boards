@@ -22,10 +22,6 @@ import {type DownloadResponse, Feeder} from "./feeder.js";
 
 const coachOperators = ["OP564", "OP545", "OP563", "OP567"]
 
-let config = await (await fetch("https://coachtracker.uk.megabus.com/configs/global.js")).text()
-let apiURL = config.match(/\s*API_URL: '(.*)',/)?.[1] ?? ""
-let apiKey = config.match(/\s*API_KEY: '(.*)',/)?.[1] ?? ""
-
 type Route = {agency_id: string, route_id: string, route_short_name: string}
 let routes = db.prepare(
     `SELECT agency_id, route_id, route_short_name FROM routes WHERE agency_id IN (${coachOperators.map(_ => "?").join(",")})`
@@ -51,6 +47,10 @@ const findTrip = (date: DateTime, route: string, startTime: string, endTime: str
 ).get({date: Number(date.toFormat("yyyyMMdd")), route, startTime, endTime, depWildcard: origin.split(" (")[0] + '%', arrWildcard: dest.split(" (")[0] + '%'}) as Trip | undefined
 
 export async function load_coaches(): Promise<DownloadResponse> {
+    let config = await (await fetch("https://coachtracker.uk.megabus.com/configs/global.js")).text()
+    let apiURL = config.match(/\s*API_URL: '(.*)',/)?.[1] ?? ""
+    let apiKey = config.match(/\s*API_KEY: '(.*)',/)?.[1] ?? ""
+
     const timeFrom = DateTime.now().minus({hour: 24}).toSeconds()
     const timeTo = DateTime.now().plus({hour: 1}).toSeconds()
     let entities = (await Promise.all(routes.map(async route => {

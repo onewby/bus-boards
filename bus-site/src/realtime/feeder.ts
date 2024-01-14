@@ -28,7 +28,7 @@ export class Feeder {
     }
 
     isMainFile() {
-        return workerData.data === "run"
+        return workerData?.data === "run"
     }
 
     run(initial = false) {

@@ -1,26 +1,26 @@
-import {downloadRouteDirections} from "../../import_passenger.js";
+import {downloadRouteDirections} from "../../import_passenger";
 import {
-    type Alert, Alert_Cause, alert_CauseFromJSON, Alert_Effect, alert_EffectFromJSON, EntitySelector,
-    FeedEntity, TimeRange, TranslatedString, type TripDescriptor,
+    type Alert, alert_CauseFromJSON,alert_EffectFromJSON,
+    FeedEntity,
     TripDescriptor_ScheduleRelationship,
     VehiclePosition_CongestionLevel, VehiclePosition_OccupancyStatus,
     VehiclePosition_VehicleStopStatus
-} from "../routes/api/service/gtfs-realtime.js";
+} from "../routes/api/service/gtfs-realtime";
 import {db} from "../db.js";
 import {DateTime} from "luxon";
-import type {PolarAlert, PolarDisruptions, Vehicles} from "../api.type";
+import type {PolarDisruptions, Vehicles} from "../api.type";
 import sourceFile from "../routes/api/service/passenger-sources.json" assert {type: 'json'};
 import groupBy from "object.groupby";
 import {Point} from "../leaflet/geometry/index.js"
-import {type DownloadResponse, emptyDownloadResponse, UpdateFeeder} from "./feeder.js";
+import {type DownloadResponse, emptyDownloadResponse, UpdateFeeder} from "./feeder";
 import {
     assignVehicles,
     getPoints,
     getTripCandidates, getTripInfo,
     type TripCandidate,
     type TripCandidateList
-} from "./feeder_util.js";
-import {merge} from "../routes/api/service/realtime_util.ts";
+} from "./feeder_util";
+import {merge} from "../routes/api/service/realtime_util";
 
 const routeIDQuery = db.prepare("SELECT route_id FROM routes WHERE agency_id=? AND route_short_name=?").pluck()
 const allRoutesQuery = db.prepare("SELECT route_short_name, route_id, agency_id FROM routes WHERE agency_id=?")
@@ -149,13 +149,7 @@ async function getAlerts(baseURL: keyof typeof sourceFile.sources): Promise<Aler
             const operator = line._embedded["transmodel:operator"].code
             const route = line.name
             const locatedRoute = routesByCode[operator]?.[route]?.[0]
-            return {
-                agencyId: locatedRoute.agency_id,
-                routeId: locatedRoute.route_id,
-                routeType: 0,
-                trip: undefined,
-                stopId: ""
-            }
+            return { routeId: locatedRoute.route_id }
         }) ?? [],
         cause: alert_CauseFromJSON(polarAlert.cause),
         effect: alert_EffectFromJSON(polarAlert.effect),

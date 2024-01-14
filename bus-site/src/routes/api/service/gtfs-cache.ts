@@ -48,6 +48,7 @@ export async function downloadGTFS() {
         gtfsCache = {header: undefined, entity: [], alerts: []}
     }
     serviceCache = {}
+    createAlertCaches()
 }
 
 export async function manualDownloadGTFS() {
@@ -97,18 +98,18 @@ type AlertCaches = {
     trip: AlertCache,
     agency: AlertCache
 }
-function createAlertCaches(alerts: Alert[]) {
+function createAlertCaches() {
     let route: AlertCache = {}
     let stop: AlertCache = {}
     let trip: AlertCache = {}
     let agency: AlertCache = {}
-    alerts.forEach(alert => alert.informedEntity.forEach(entity => {
+    gtfsCache.alerts.forEach(alert => alert.informedEntity.forEach(entity => {
         if(entity.trip?.tripId) insertIntoCache(trip, entity.trip.tripId, alert)
         if(entity.stopId) insertIntoCache(stop, entity.stopId, alert)
-        if(entity.routeId) insertIntoCache(trip, entity.routeId, alert)
+        if(entity.routeId) insertIntoCache(route, entity.routeId, alert)
         if(entity.agencyId && !entity.routeId) insertIntoCache(agency, entity.agencyId, alert)
     }))
-    return {route, stop, trip, agency}
+    alertCache = {route, stop, trip, agency}
 }
 
 function insertIntoCache(cache: AlertCache, id: string, alert: Alert) {

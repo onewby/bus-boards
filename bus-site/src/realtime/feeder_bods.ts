@@ -8,6 +8,7 @@ import {XMLParser} from "fast-xml-parser"
 import type {SiriSx} from "../api.type.ts";
 import {DateTime} from "luxon";
 import {db} from "../db.js";
+import {readFileSync} from "fs";
 
 export async function load_gtfs_source(): Promise<DownloadResponse> {
     const gtfsResp = await fetch("https://data.bus-data.dft.gov.uk/avl/download/gtfsrt")
@@ -54,23 +55,19 @@ export async function load_disruptions(): Promise<Alert[]> {
                     ...compact(con.Affects.Networks.AffectedNetwork.AffectedLine).map(line => {
                         let opCode = line.AffectedOperator.OperatorRef
                         let routeName = line.LineRef
-                        let route = getRoute.get(opCode, routeName)
+                        let route = getRoute.get(opCode, String(routeName))
                         if(route === undefined) return undefined
-                        return {
-                            agencyId: "", routeId: route, routeType: 0, trip: undefined, stopId: ""
-                        };
+                        return { routeId: route }
                     }).filter(obj => obj !== undefined),
                     ...compact(con.Affects.Operators?.AffectedOperators).map(op => {
                         let agency = getAgency.get(op.OperatorRef)
                         if(agency === undefined) return undefined
-                        return {
-                            agencyId: agency, routeId: "", routeType: 0, trip: undefined, stopId: ""
-                        };
+                        return { agencyId: agency }
                     }).filter(obj => obj !== undefined)
                 ] as EntitySelector[],
                 url: situation.InfoLinks?.InfoLink.Uri ? {translation: [{text: situation.InfoLinks?.InfoLink.Uri, language: "en"}]} : undefined
             }
-        })
+        }).filter(alert => alert.informedEntity.length > 0)
         let stopPoints = consequences.flatMap(con => compact(con.Affects.StopPoints?.AffectedStopPoint))
         if(stopPoints.length > 0) {
             alerts.push({
@@ -81,7 +78,6 @@ export async function load_disruptions(): Promise<Alert[]> {
                 headerText: {translation: [{text: situation.Summary, language: "en"}]},
                 informedEntity: stopPoints.map(sp => {
                     return {
-                        agencyId: "", routeId: "", routeType: 0, trip: undefined,
                         stopId: String(sp.StopPointRef)
                     };
                 }),
