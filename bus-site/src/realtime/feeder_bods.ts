@@ -1,14 +1,13 @@
 import {
     type Alert, Alert_Cause, Alert_Effect, type EntitySelector,
     FeedMessage, type TimeRange
-} from "../routes/api/service/gtfs-realtime.js";
+} from "../routes/api/service/gtfs-realtime";
 import {Uint8ArrayWriter, ZipReader} from "@zip.js/zip.js";
-import {type DownloadResponse, Feeder, emptyDownloadResponse} from "./feeder.js";
+import {type DownloadResponse, Feeder, emptyDownloadResponse} from "./feeder";
 import {XMLParser} from "fast-xml-parser"
 import type {SiriSx} from "../api.type.ts";
 import {DateTime} from "luxon";
-import {db} from "../db.js";
-import {readFileSync} from "fs";
+import {db} from "../db";
 
 export async function load_gtfs_source(): Promise<DownloadResponse> {
     const gtfsResp = await fetch("https://data.bus-data.dft.gov.uk/avl/download/gtfsrt")

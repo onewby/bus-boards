@@ -1,6 +1,6 @@
-import {type DownloadResponse, UpdateFeeder} from "./feeder.js";
-import {db} from "../db.js";
-import type {LothianEvents, LothianLiveVehicles} from "../api.type.ts";
+import {type DownloadResponse, UpdateFeeder} from "./feeder";
+import {db} from "../db";
+import type {LothianEvents, LothianLiveVehicles} from "../api.type";
 import {DateTime} from "luxon";
 import {
     assignVehicles,
@@ -9,7 +9,7 @@ import {
     getTripInfo,
     type TripCandidate,
     type TripCandidateList
-} from "./feeder_util.js";
+} from "./feeder_util";
 import {Point} from "../leaflet/geometry/index.js";
 import {
     type Alert,
@@ -20,9 +20,9 @@ import {
     VehiclePosition_CongestionLevel,
     VehiclePosition_OccupancyStatus,
     VehiclePosition_VehicleStopStatus
-} from "../routes/api/service/gtfs-realtime.js";
+} from "../routes/api/service/gtfs-realtime";
 import groupBy from "object.groupby";
-import {download_route_data, lothianOpCodes} from "../../import_lothian.js";
+import {download_route_data, lothianOpCodes} from "../../import_lothian";
 
 const getAllPatterns = () => db.prepare("SELECT * FROM lothian").all() as {pattern: string, route: string}[]
 

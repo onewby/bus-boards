@@ -6,12 +6,12 @@ import {
     TripDescriptor_ScheduleRelationship,
     VehiclePosition_CongestionLevel, VehiclePosition_OccupancyStatus,
     VehiclePosition_VehicleStopStatus
-} from "../routes/api/service/gtfs-realtime.js";
-import {db} from "../db.js";
+} from "../routes/api/service/gtfs-realtime";
+import {db} from "../db";
 import {DateTime} from "luxon";
 import {readFileSync, writeFileSync} from "fs";
 import {existsSync} from "node:fs";
-import {type DownloadResponse, Feeder} from "./feeder.js";
+import {type DownloadResponse, Feeder} from "./feeder";
 
 const apiKey = process.env["FIRST_API_KEY"] ?? ""
 

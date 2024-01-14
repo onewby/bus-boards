@@ -1,4 +1,4 @@
-import type {FeedEntity} from "./gtfs-realtime.js";
+import type {FeedEntity} from "./gtfs-realtime";
 import {DateTime} from "luxon";
 
 export type Position = {

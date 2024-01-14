@@ -1,14 +1,14 @@
 import {DateTime} from "luxon";
-import type {FeedEntity} from "../routes/api/service/gtfs-realtime.js";
+import type {FeedEntity} from "../routes/api/service/gtfs-realtime";
 import {
     TripDescriptor_ScheduleRelationship,
     VehiclePosition_CongestionLevel,
     VehiclePosition_OccupancyStatus,
     VehiclePosition_VehicleStopStatus
-} from "../routes/api/service/gtfs-realtime.js";
-import {db} from "../db.js";
-import {format_gtfs_date, format_gtfs_time, notNull} from "../routes/api/service/realtime_util.js";
-import {type DownloadResponse, Feeder} from "./feeder.js";
+} from "../routes/api/service/gtfs-realtime";
+import {db} from "../db";
+import {format_gtfs_date, format_gtfs_time, notNull} from "../routes/api/service/realtime_util";
+import {type DownloadResponse, Feeder} from "./feeder";
 
 type StagecoachData = {
     "services": StagecoachService[]

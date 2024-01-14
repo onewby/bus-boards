@@ -9,7 +9,6 @@ import {load_passenger_sources} from "../../../realtime/feeder_passenger.ts";
 import {load_first_vehicles} from "../../../realtime/feeder_first.ts";
 import {load_coaches} from "../../../realtime/feeder_coaches.ts";
 import {type DownloadResponse, emptyDownloadResponse, type StopAlerts} from "../../../realtime/feeder.ts";
-import {merge} from "./realtime_util.js";
 import {load_Lothian_vehicles} from "../../../realtime/feeder_lothian.ts";
 
 /*

@@ -1,24 +1,24 @@
-import {db} from "../db.js";
+import {db} from "../db";
 import {
     type FeedEntity,
     TripDescriptor_ScheduleRelationship,
     VehiclePosition_CongestionLevel,
     VehiclePosition_OccupancyStatus,
     VehiclePosition_VehicleStopStatus
-} from "../routes/api/service/gtfs-realtime.js";
-import type {MegabusVehicles} from "../api.type.js";
+} from "../routes/api/service/gtfs-realtime";
+import type {MegabusVehicles} from "../api.type";
 import {DateTime} from "luxon";
 import {
     addTimeNaive,
     dayDiff,
     format_gtfs_time, minIndex,
     type Position
-} from "../routes/api/service/realtime_util.js";
+} from "../routes/api/service/realtime_util";
 import groupBy from "object.groupby";
-import {lineSegmentQuery} from "./feeder_util.js";
+import {lineSegmentQuery} from "./feeder_util";
 import {Point, LineUtil} from "../leaflet/geometry/index.js"
-import type {ChronologicalDeparture} from "../api.type.js";
-import {type DownloadResponse, Feeder} from "./feeder.js";
+import type {ChronologicalDeparture} from "../api.type";
+import {type DownloadResponse, Feeder} from "./feeder";
 
 const coachOperators = ["OP564", "OP545", "OP563", "OP567"]
 

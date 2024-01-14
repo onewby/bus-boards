@@ -1,5 +1,5 @@
-import {type Alert, FeedEntity, FeedMessage} from "../routes/api/service/gtfs-realtime.js";
-import {type DownloadResponse, Feeder, emptyDownloadResponse} from "./feeder.js";
+import {FeedMessage} from "../routes/api/service/gtfs-realtime";
+import {type DownloadResponse, Feeder, emptyDownloadResponse} from "./feeder";
 
 export async function load_ember(): Promise<DownloadResponse> {
     const resp = await fetch("https://api.ember.to/v1/gtfs/realtime/")

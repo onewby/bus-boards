@@ -6,7 +6,7 @@ import {
     VehiclePosition_CongestionLevel, VehiclePosition_OccupancyStatus,
     VehiclePosition_VehicleStopStatus
 } from "../routes/api/service/gtfs-realtime";
-import {db} from "../db.js";
+import {db} from "../db";
 import {DateTime} from "luxon";
 import type {PolarDisruptions, Vehicles} from "../api.type";
 import sourceFile from "../routes/api/service/passenger-sources.json" assert {type: 'json'};
