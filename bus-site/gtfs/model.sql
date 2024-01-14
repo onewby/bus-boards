@@ -151,4 +151,16 @@ CREATE TABLE IF NOT EXISTS lothian
     route   TEXT
         constraint lothian_routes_route_id_fk
             references routes
-)
+);
+
+CREATE TABLE IF NOT EXISTS traveline
+(
+    code      TEXT
+        constraint traveline_pk
+            primary key,
+    agency_id TEXT
+        constraint traveline_agency_agency_id_fk
+            references main.agency,
+    website   TEXT
+);
+

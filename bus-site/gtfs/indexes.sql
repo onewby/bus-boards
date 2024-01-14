@@ -16,5 +16,8 @@ create index if not exists shapes_shape_id_index
 create index if not exists stances_stop_index
     on stances (stop);
 
-create index if not exists main.polar_polar_index
+create index if not exists polar_polar_index
     on polar (polar);
+
+create unique index if not exists traveline_agency_id_uindex
+    on main.traveline (agency_id);
