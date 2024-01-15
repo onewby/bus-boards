@@ -28,11 +28,11 @@ export const GET: RequestHandler = async ({url}) => {
         dest: subsequentCalls.map(list => list.callingPoint[list.callingPoint.length - 1].locationName).join(' & '),
         cancelled: details.isCancelled || details.etd === "Cancelled"
     }
-    const alerts = [{
+    const alerts = details.cancelReason || details.delayReason ? [{
         header: undefined,
         description: details.isCancelled ? (details.cancelReason ?? details.delayReason) : (details.delayReason ?? details.cancelReason),
         url: undefined
-    }]
+    }] : []
     const operator = {
         name: details.operator,
         url: "https://www.nationalrail.co.uk/"
