@@ -62,9 +62,8 @@ export async function load_passenger_sources(): Promise<DownloadResponse>  {
 
 export async function get_passenger_source(baseURL: keyof typeof sourceFile.sources): Promise<DownloadResponse> {
     let vehiclesResp = await fetch(`${baseURL}/network/vehicles`)
-    if(!vehiclesResp.ok) return emptyDownloadResponse()
     return {
-        entities: await process_vehicles(await vehiclesResp.json() as Vehicles, sourceFile.sources[baseURL] as (keyof typeof sourceFile.operators)[]),
+        entities: vehiclesResp.ok ? await process_vehicles(await vehiclesResp.json() as Vehicles, sourceFile.sources[baseURL] as (keyof typeof sourceFile.operators)[]) : [],
         alerts: await getAlerts(baseURL)
     }
 }
@@ -146,26 +145,31 @@ const routesByCode = Object.fromEntries(Object.entries(operatorsByCode).map(([op
 }))
 
 async function getAlerts(baseURL: keyof typeof sourceFile.sources): Promise<Alert[]> {
-    const alertResp = await fetch(`${baseURL}/network/disruptions`)
-    if(!alertResp.ok) return []
-    const alerts: PolarDisruptions = await alertResp.json()
-    return alerts._embedded.alert.map(polarAlert => ({
-        activePeriod: polarAlert.activePeriods.map(polarPeriod => ({
-            start: polarPeriod.start ? DateTime.fromISO(polarPeriod.start).toSeconds() : 0,
-            end: polarPeriod.end ? DateTime.fromISO(polarPeriod.end).toSeconds() : DateTime.now().plus({year: 1}).toSeconds()
-        })),
-        informedEntity: polarAlert._embedded.line?.map(line => {
-            const operator = line._embedded["transmodel:operator"].code
-            const route = line.name
-            const locatedRoute = routesByCode[operator]?.[route.toUpperCase()]?.[0]
-            return { routeId: locatedRoute?.route_id }
-        }).filter(e => e.routeId !== undefined) ?? [],
-        cause: alert_CauseFromJSON(polarAlert.cause),
-        effect: alert_EffectFromJSON(polarAlert.effect),
-        url: polarAlert._links?.info.href ? {translation: [{language: "en", text: polarAlert._links?.info.href}]} : undefined,
-        headerText: {translation: [{language: "en", text: polarAlert.header}]},
-        descriptionText: {translation: [{language: "en", text: polarAlert.description}]}
-    })).filter(a => a.informedEntity.length > 0)
+    try {
+        const alertResp = await fetch(`${baseURL}/network/disruptions`)
+        if(!alertResp.ok) return []
+        const alerts: PolarDisruptions = await alertResp.json()
+        return alerts._embedded.alert.map(polarAlert => ({
+            activePeriod: polarAlert.activePeriods.map(polarPeriod => ({
+                start: polarPeriod.start ? DateTime.fromISO(polarPeriod.start).toSeconds() : 0,
+                end: polarPeriod.end ? DateTime.fromISO(polarPeriod.end).toSeconds() : DateTime.now().plus({year: 1}).toSeconds()
+            })),
+            informedEntity: polarAlert._embedded.line?.map(line => {
+                const operator = line._embedded["transmodel:operator"].code
+                const route = line.name
+                const locatedRoute = routesByCode[operator]?.[route.toUpperCase()]?.[0]
+                return { routeId: locatedRoute?.route_id }
+            }).filter(e => e.routeId !== undefined) ?? [],
+            cause: alert_CauseFromJSON(polarAlert.cause),
+            effect: alert_EffectFromJSON(polarAlert.effect),
+            url: polarAlert._links?.info.href ? {translation: [{language: "en", text: polarAlert._links?.info.href}]} : undefined,
+            headerText: {translation: [{language: "en", text: polarAlert.header}]},
+            descriptionText: {translation: [{language: "en", text: polarAlert.description}]}
+        })).filter(a => a.informedEntity.length > 0)
+    } catch (e) {
+        console.error(e)
+        return []
+    }
 }
 
 new UpdateFeeder(load_passenger_sources, downloadRouteDirections).init()
