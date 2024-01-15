@@ -92,7 +92,7 @@ export async function load_Lothian_vehicles(): Promise<DownloadResponse> {
                             tripId: trip.candidate.trip_id,
                             routeId: pattern.route,
                             directionId: -1,
-                            startTime: trip.departureTimes[trip.stopIndex],
+                            startTime: trip.departureTimes[0],
                             startDate: DateTime.fromFormat(String(trip.candidate.date), "yyyyMMdd").toISODate()!,
                             scheduleRelationship: TripDescriptor_ScheduleRelationship.SCHEDULED
                         },
@@ -104,7 +104,7 @@ export async function load_Lothian_vehicles(): Promise<DownloadResponse> {
                             odometer: -1,
                             speed: -1
                         },
-                        currentStopSequence: Number(trip.candidate.seqs.split(",")[trip.route.indexOf(vehicles.vehicles[vehicleIndex].next_stop_id)]) ?? Number(trip.candidate.seqs.split(",")[trip.stopIndex]),
+                        currentStopSequence: Number(trip.candidate.seqs.split(",")[trip.stopIndex]),
                         stopId: trip.route[trip.stopIndex],
                         currentStatus: VehiclePosition_VehicleStopStatus.IN_TRANSIT_TO,
                         timestamp: updateTime,

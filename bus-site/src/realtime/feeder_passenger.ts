@@ -23,7 +23,7 @@ import {
 import {merge} from "../routes/api/service/realtime_util";
 
 const routeIDQuery = db.prepare("SELECT route_id FROM routes WHERE agency_id=? AND route_short_name=?").pluck()
-const allRoutesQuery = db.prepare("SELECT route_short_name, route_id, agency_id FROM routes WHERE agency_id=?")
+const allRoutesQuery = db.prepare("SELECT UPPER(route_short_name) as route_short_name, route_id, agency_id FROM routes WHERE agency_id=?")
 
 const currentTripsQuery = (date: DateTime, startTime: string, endTime: string, route: string) => db.prepare(
     `SELECT trips.trip_id, p.direction, :date as date,
@@ -44,10 +44,19 @@ const currentTripsQuery = (date: DateTime, startTime: string, endTime: string, r
 ).all({date: Number(date.toFormat("yyyyMMdd")), startTime, endTime, route}) as TripCandidate[]
 
 export async function load_passenger_sources(): Promise<DownloadResponse>  {
-    let responses: DownloadResponse[] = await Promise.all(Object.keys(sourceFile.sources).map(baseURL => get_passenger_source(baseURL as (keyof typeof sourceFile.sources))))
+    let responses: DownloadResponse[] = (await Promise.allSettled(Object.keys(sourceFile.sources).map(baseURL => get_passenger_source(baseURL as (keyof typeof sourceFile.sources)))))
+        .map(result => {
+            if(result.status === "fulfilled") {
+                return result.value;
+            } else {
+                console.error(result.reason)
+                return undefined
+            }
+        }).filter((obj): obj is DownloadResponse => obj !== undefined)
     return {
         entities: responses.flatMap(e => e.entities),
-        alerts: responses.flatMap(e => e.alerts!)
+        alerts: responses.flatMap(e => e.alerts)
+            .filter((obj): obj is Alert => obj !== undefined)
     }
 }
 
@@ -103,7 +112,7 @@ async function process_vehicles(vehicles: Vehicles, operators: (keyof typeof sou
                             tripId: trip.candidate.trip_id,
                             routeId: routeID,
                             directionId: -1,
-                            startTime: trip.departureTimes[trip.stopIndex],
+                            startTime: trip.departureTimes[0],
                             startDate: DateTime.fromFormat(String(trip.candidate.date), "yyyyMMdd").toISODate()!,
                             scheduleRelationship: TripDescriptor_ScheduleRelationship.SCHEDULED
                         },
@@ -148,15 +157,15 @@ async function getAlerts(baseURL: keyof typeof sourceFile.sources): Promise<Aler
         informedEntity: polarAlert._embedded.line?.map(line => {
             const operator = line._embedded["transmodel:operator"].code
             const route = line.name
-            const locatedRoute = routesByCode[operator]?.[route]?.[0]
-            return { routeId: locatedRoute.route_id }
-        }) ?? [],
+            const locatedRoute = routesByCode[operator]?.[route.toUpperCase()]?.[0]
+            return { routeId: locatedRoute?.route_id }
+        }).filter(e => e.routeId !== undefined) ?? [],
         cause: alert_CauseFromJSON(polarAlert.cause),
         effect: alert_EffectFromJSON(polarAlert.effect),
         url: polarAlert._links?.info.href ? {translation: [{language: "en", text: polarAlert._links?.info.href}]} : undefined,
         headerText: {translation: [{language: "en", text: polarAlert.header}]},
         descriptionText: {translation: [{language: "en", text: polarAlert.description}]}
-    }))
+    })).filter(a => a.informedEntity.length > 0)
 }
 
 new UpdateFeeder(load_passenger_sources, downloadRouteDirections).init()
