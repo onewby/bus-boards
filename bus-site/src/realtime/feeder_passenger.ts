@@ -143,13 +143,14 @@ const routesByCode = Object.fromEntries(Object.entries(operatorsByCode).map(([op
         return groupBy(allRoutesQuery.all(op.gtfs) as {route_short_name: string, route_id: string, agency_id: string}[], r => r.route_short_name)
     }))]
 }))
+const alertCache: Map<string, Alert[]> = new Map()
 
 async function getAlerts(baseURL: keyof typeof sourceFile.sources): Promise<Alert[]> {
     try {
         const alertResp = await fetch(`${baseURL}/network/disruptions`)
         if(!alertResp.ok) return []
         const alerts: PolarDisruptions = await alertResp.json()
-        return alerts._embedded.alert.map(polarAlert => ({
+        alertCache.set(baseURL, alerts._embedded.alert.map(polarAlert => ({
             activePeriod: polarAlert.activePeriods.map(polarPeriod => ({
                 start: polarPeriod.start ? DateTime.fromISO(polarPeriod.start).toSeconds() : 0,
                 end: polarPeriod.end ? DateTime.fromISO(polarPeriod.end).toSeconds() : DateTime.now().plus({year: 1}).toSeconds()
@@ -165,10 +166,12 @@ async function getAlerts(baseURL: keyof typeof sourceFile.sources): Promise<Aler
             url: polarAlert._links?.info.href ? {translation: [{language: "en", text: polarAlert._links?.info.href}]} : undefined,
             headerText: {translation: [{language: "en", text: polarAlert.header}]},
             descriptionText: {translation: [{language: "en", text: polarAlert.description}]}
-        })).filter(a => a.informedEntity.length > 0)
+        })).filter(a => a.informedEntity.length > 0))
+        return alertCache.get(baseURL) ?? []
     } catch (e) {
-        console.error(e)
-        return []
+        console.error(baseURL, e)
+        let dateNow = Date.now() / 1000
+        return alertCache.get(baseURL)?.filter(a => a.activePeriod.some(p => p.start <= dateNow && p.end >= dateNow)) ?? []
     }
 }
 
