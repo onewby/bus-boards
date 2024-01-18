@@ -74,15 +74,9 @@ create table if not exists routes
 create table if not exists calendar
 (
     service_id TEXT,
-    monday     integer,
-    tuesday    integer,
-    wednesday  integer,
-    thursday   integer,
-    friday     integer,
-    saturday   integer,
-    sunday     integer,
-    start_date  integer,
-    end_date    integer,
+    start_date integer,
+    end_date   integer,
+    validity   integer,
     constraint calendar_pk
         primary key (service_id)
 );

@@ -25,16 +25,18 @@ const bounds: Record<string, Region> = {
     "FABD": [57.0891, -2.2834, 57.2250, -2.0376]
 }
 
-const tripQuery = (date: DateTime, route: string, op: string, startStop: string, startTime: string) => db.prepare(
+const tripQueryStmt = db.prepare(
     `SELECT trips.trip_id, trips.route_id FROM trips
                 INNER JOIN main.routes r on r.route_id = trips.route_id
                 INNER JOIN main.stop_times st on (trips.trip_id = st.trip_id AND stop_sequence=min_stop_seq)
                 LEFT OUTER JOIN main.calendar c on c.service_id = trips.service_id
                 LEFT OUTER JOIN main.calendar_dates d on (d.service_id = c.service_id AND d.date=:date)
             WHERE route_short_name=:route AND agency_id=:op AND st.stop_id=:startStop AND SUBSTR(st.departure_time, 1, 5)=:startTime
-                AND ((start_date <= :date AND end_date >= :date AND ${date.weekdayLong!.toLowerCase()}=1) OR exception_type=1)
+                AND ((start_date <= :date AND end_date >= :date AND (validity & (1 << :day)) <> 0) OR exception_type=1)
                     AND NOT (exception_type IS NOT NULL AND exception_type = 2)`
-).get({date: Number(date.toFormat("yyyyMMdd")), route, op, startStop, startTime}) as {trip_id: string, route_id: string}
+)
+const tripQuery = (date: DateTime, route: string, op: string, startStop: string, startTime: string) =>
+    tripQueryStmt.get({date: Number(date.toFormat("yyyyMMdd")), day: date.weekday - 1, route, op, startStop, startTime}) as {trip_id: string, route_id: string}
 
 let activeWS: WebSocket | undefined = undefined
 let backoff = 1

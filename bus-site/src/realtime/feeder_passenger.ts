@@ -25,7 +25,7 @@ import {merge} from "../routes/api/service/realtime_util";
 const routeIDQuery = db.prepare("SELECT route_id FROM routes WHERE agency_id=? AND route_short_name=?").pluck()
 const allRoutesQuery = db.prepare("SELECT UPPER(route_short_name) as route_short_name, route_id, agency_id FROM routes WHERE agency_id=?")
 
-const currentTripsQuery = (date: DateTime, startTime: string, endTime: string, route: string) => db.prepare(
+const currentTripsQueryStmt = db.prepare(
     `SELECT trips.trip_id, p.direction, :date as date,
                 (SELECT group_concat(stop_id) FROM (SELECT stop_id FROM stop_times WHERE trip_id=trips.trip_id ORDER BY stop_sequence)) as route,
                 (SELECT group_concat(departure_time) FROM (SELECT departure_time FROM stop_times WHERE trip_id=trips.trip_id ORDER BY stop_sequence)) as times,
@@ -38,10 +38,11 @@ const currentTripsQuery = (date: DateTime, startTime: string, endTime: string, r
                           INNER JOIN main.stop_times start on (start.trip_id=trips.trip_id AND start.stop_sequence=trips.min_stop_seq)
                           INNER JOIN main.stop_times finish on (finish.trip_id=trips.trip_id AND finish.stop_sequence=trips.max_stop_seq)
                  WHERE r.route_id=:route
-                   AND ((start_date <= :date AND end_date >= :date AND ${date.weekdayLong!.toLowerCase()}=1) OR exception_type=1)
+                   AND ((start_date <= :date AND end_date >= :date AND (validity & (1 << :day)) <> 0) OR exception_type=1)
                    AND NOT (exception_type IS NOT NULL AND exception_type = 2)
                    AND start.departure_time <= :startTime AND finish.departure_time >= :endTime`
-).all({date: Number(date.toFormat("yyyyMMdd")), startTime, endTime, route}) as TripCandidate[]
+)
+const currentTripsQuery = (date: DateTime, startTime: string, endTime: string, route: string) => currentTripsQueryStmt.all({date: Number(date.toFormat("yyyyMMdd")), day: date.weekday - 1, startTime, endTime, route}) as TripCandidate[]
 
 export async function load_passenger_sources(): Promise<DownloadResponse>  {
     let responses: DownloadResponse[] = (await Promise.allSettled(Object.keys(sourceFile.sources).map(baseURL => get_passenger_source(baseURL as (keyof typeof sourceFile.sources)))))
@@ -169,7 +170,11 @@ async function getAlerts(baseURL: keyof typeof sourceFile.sources): Promise<Aler
         })).filter(a => a.informedEntity.length > 0))
         return alertCache.get(baseURL) ?? []
     } catch (e) {
-        console.error(baseURL, e)
+        if(e instanceof TypeError) {
+            console.error("Failed to fetch alerts for " + baseURL)
+        } else {
+            console.error(baseURL, e)
+        }
         let dateNow = Date.now() / 1000
         return alertCache.get(baseURL)?.filter(a => a.activePeriod.some(p => p.start <= dateNow && p.end >= dateNow)) ?? []
     }

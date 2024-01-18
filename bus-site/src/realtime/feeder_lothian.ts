@@ -26,7 +26,7 @@ import {download_route_data, lothianOpCodes} from "../../import_lothian";
 
 const getAllPatterns = () => db.prepare("SELECT * FROM lothian").all() as {pattern: string, route: string}[]
 
-const currentTripsQuery = (date: DateTime, startTime: string, endTime: string, pattern: string) => db.prepare(
+const currentTripsQueryStmt = db.prepare(
     `SELECT trips.trip_id, :date as date,
                 (SELECT group_concat(stop_id) FROM (SELECT stop_id FROM stop_times WHERE trip_id=trips.trip_id ORDER BY stop_sequence)) as route,
                 (SELECT group_concat(departure_time) FROM (SELECT departure_time FROM stop_times WHERE trip_id=trips.trip_id ORDER BY stop_sequence)) as times,
@@ -38,10 +38,12 @@ const currentTripsQuery = (date: DateTime, startTime: string, endTime: string, p
                    INNER JOIN main.stop_times start on (start.trip_id=trips.trip_id AND start.stop_sequence=trips.min_stop_seq)
                    INNER JOIN main.stop_times finish on (finish.trip_id=trips.trip_id AND finish.stop_sequence=trips.max_stop_seq)
                  WHERE direction IS NULL AND polar=:pattern
-                   AND ((start_date <= :date AND end_date >= :date AND ${date.weekdayLong!.toLowerCase()}=1) OR exception_type=1)
+                   AND ((start_date <= :date AND end_date >= :date AND (validity & (1 << :day)) <> 0) OR exception_type=1)
                    AND NOT (exception_type IS NOT NULL AND exception_type = 2)
                    AND start.departure_time <= :startTime AND finish.departure_time >= :endTime`
-).all({date: Number(date.toFormat("yyyyMMdd")), startTime, endTime, pattern}) as TripCandidate[]
+)
+const currentTripsQuery = (date: DateTime, startTime: string, endTime: string, pattern: string) =>
+    currentTripsQueryStmt.all({date: Number(date.toFormat("yyyyMMdd")), day: date.weekday - 1, startTime, endTime, pattern}) as TripCandidate[]
 
 const getRouteInfoStmt = db.prepare("SELECT route_id, agency_id FROM routes WHERE route_short_name=? AND agency_id IN (?, ?, ?)")
 const getRouteInfo = (route: string) => getRouteInfoStmt.get(route, ...lothianOpCodes) as {route_id: string, agency_id: string}

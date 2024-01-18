@@ -28,7 +28,7 @@ let routes = db.prepare(
 ).all(...coachOperators) as Route[]
 
 type Trip = {trip_id: string, route: string, times: string, seqs: string}
-const findTrip = (date: DateTime, route: string, startTime: string, endTime: string, origin: string, dest: string) => db.prepare(
+const findTripQuery = db.prepare(
     `SELECT trips.trip_id,
             (SELECT group_concat(stop_id) FROM (SELECT stop_id FROM stop_times WHERE trip_id=trips.trip_id ORDER BY stop_sequence)) as route,
             (SELECT group_concat(departure_time) FROM (SELECT departure_time FROM stop_times WHERE trip_id=trips.trip_id ORDER BY stop_sequence)) as times,
@@ -42,9 +42,10 @@ const findTrip = (date: DateTime, route: string, startTime: string, endTime: str
                 LEFT OUTER JOIN main.calendar_dates d on (d.service_id = c.service_id AND d.date=:date)
             WHERE route_id=:route AND SUBSTR(std.departure_time, 1, 5)=:startTime AND SUBSTR(sta.departure_time, 1, 5)=:endTime
                 AND stdLoc LIKE :depWildcard AND staLoc LIKE :arrWildcard
-                AND ((start_date <= :date AND end_date >= :date AND ${date.weekdayLong!.toLowerCase()}=1) OR exception_type=1)
+                AND ((start_date <= :date AND end_date >= :date AND (validity & (1 << :day)) <> 0) OR exception_type=1)
                     AND NOT (exception_type IS NOT NULL AND exception_type = 2)`
-).get({date: Number(date.toFormat("yyyyMMdd")), route, startTime, endTime, depWildcard: origin.split(" (")[0] + '%', arrWildcard: dest.split(" (")[0] + '%'}) as Trip | undefined
+)
+const findTrip = (date: DateTime, route: string, startTime: string, endTime: string, origin: string, dest: string) => findTripQuery.get({date: Number(date.toFormat("yyyyMMdd")), route, startTime, endTime, depWildcard: origin.split(" (")[0] + '%', arrWildcard: dest.split(" (")[0] + '%', day: date.weekday - 1}) as Trip | undefined
 
 export async function load_coaches(): Promise<DownloadResponse> {
     let config = await (await fetch("https://coachtracker.uk.megabus.com/configs/global.js")).text()

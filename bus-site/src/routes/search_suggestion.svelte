@@ -7,7 +7,8 @@
     import {goto} from "$app/navigation";
 
     export let result: SearchResult;
-    $: pinned = $starredStops.indexOf(result) !== -1
+    $: pinned = $starredStops.some((stop: SearchResult) =>
+        stop.name === result.name && stop.parent === result.parent && stop.locality === result.locality && stop.qualifier === result.qualifier)
     export let moveable = false;
 
     let isHovered = false;
@@ -46,9 +47,9 @@
 
 <tr class="cursor-pointer transition-colors hover:bg-gray-50 dark:hover:bg-slate-900"
     class:border-b-gray-400={moveable} class:dark:border-b-white={moveable}
-    class:hover-bg-amber-700-5={moveable} class:dark-hover-bg-gray-500-20={moveable}
+    class:hover-bg-amber-700-5={true} class:dark-hover-bg-gray-500-20={true}
     role="link"
-    on:click={() => goto(`/stop/${result.locality}/${encodeURIComponent(result.name)}`)}>
+    on:click|stopPropagation={() => goto(`/stop/${result.locality}/${encodeURIComponent(result.name)}`)}>
     <td class="pl-4 pr-2 pt-2 pb-2 w-full">
         <div class="text-lg">{result.name}</div>
         <div class="text-sm">{result.parent}</div>
@@ -56,7 +57,7 @@
     <td class="align-middle text-right text-xl pr-4">
         <button on:mouseover={() => isHovered = true} on:focus={() => isHovered = true}
              on:mouseout={() => isHovered = false} on:blur={() => isHovered = false}
-             on:click|stopPropagation={toggle_pin} on:keypress={toggle_pin} title={(pinned ? "Unfavourite " : "Favourite ") + result.name} tabindex="0">
+             on:click|stopPropagation|preventDefault={toggle_pin} on:keypress={toggle_pin} title={(pinned ? "Unfavourite " : "Favourite ") + result.name} tabindex="0">
             <Fa icon={(pinned && !isHovered) || (!pinned && isHovered) ? faStarActive : faStarInactive} class="inline-block" />
         </button>
     </td>

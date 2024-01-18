@@ -5,7 +5,7 @@ import {db} from "./src/db";
 import sourceFile from "./src/routes/api/service/passenger-sources.json" assert {type: "json"}
 
 export const allRoutesQuery = db.prepare("SELECT route_id,route_short_name FROM routes WHERE agency_id=?")
-const routeQuery = (date: string, route: string) => db.prepare(
+const routeQueryStmt = db.prepare(
     `SELECT start.departure_time as minss, finish.departure_time as maxss, trips.trip_id
             FROM trips
                 LEFT OUTER JOIN main.calendar c on trips.service_id = c.service_id
@@ -13,9 +13,10 @@ const routeQuery = (date: string, route: string) => db.prepare(
                 INNER JOIN main.stop_times start on (start.trip_id=trips.trip_id AND start.stop_sequence=trips.min_stop_seq)
                 INNER JOIN main.stop_times finish on (finish.trip_id=trips.trip_id AND finish.stop_sequence=trips.max_stop_seq)
             WHERE route_id=:route
-              AND ((start_date <= :date AND end_date >= :date AND ${DateTime.fromFormat(date, "yyyyMMdd").weekdayLong!.toLowerCase()}=1) OR exception_type=1)
+              AND ((start_date <= :date AND end_date >= :date AND (validity & (1 << :day)) <> 0) OR exception_type=1)
               AND NOT (exception_type IS NOT NULL AND exception_type = 2)`
-).all({date: Number(date), route}) as {minss: string, maxss: string, trip_id: string}[]
+)
+const routeQuery = (date: string, route: string) => routeQueryStmt.all({date: Number(date), route, day: DateTime.fromFormat(date, "yyyyMMdd").weekday - 1}) as {minss: string, maxss: string, trip_id: string}[]
 
 // direction+0 and ORDER BY needed to trick SQLite query optimiser into in-memory sorting rather than building an index
 const inboundOutbounds = db.prepare(

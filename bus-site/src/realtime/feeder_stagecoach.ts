@@ -169,18 +169,8 @@ async function load_stagecoach_data(operator: typeof SC_OPERATORS[number]): Prom
         if(sc[JOURNEY_DONE] && !sc[CANCELLED]) return null // journey is done, stop tracking
         let timeWithoutMins = DateTime.fromSeconds(Math.floor(sc[ORIGIN_STD].toSeconds() / 60) * 60)
         // Locate trip ID from origin std and stop
-        const stop: TripStop | undefined = db.prepare(`
-            SELECT t.trip_id, r.route_id, stop_times.stop_sequence as stop_seq, stop_times.stop_id FROM stop_times
-                INNER JOIN trips t on t.trip_id = stop_times.trip_id
-                INNER JOIN main.routes r on t.route_id = r.route_id
-                INNER JOIN stop_times origin on (origin.trip_id=t.trip_id AND origin.stop_sequence=t.min_stop_seq)
-                LEFT OUTER JOIN main.calendar c on c.service_id = t.service_id
-                LEFT OUTER JOIN main.calendar_dates d on (d.service_id = c.service_id AND d.date=:date)
-            WHERE agency_id = ? AND route_short_name = ? AND stop_times.stop_id=?
-              AND substr(origin.departure_time, 1, 5) = ?
-              AND ((start_date <= :date AND end_date >= :date AND ${timeWithoutMins.weekdayLong!.toLowerCase()}=1) OR exception_type=1)
-              AND NOT (exception_type IS NOT NULL AND exception_type = 2)
-        `).get({date: Number(timeWithoutMins.toISODate({format: 'basic'}))}, SC_LOCAL_OPERATORS[sc[LOCAL_OPERATOR]], sc[ROUTE_NUMBER], sc[NEXT_STOP_CODE], format_gtfs_time(timeWithoutMins).substring(0, 5)) as TripStop | undefined
+        const stop: TripStop | undefined = findStop.get({date: Number(timeWithoutMins.toISODate({format: 'basic'})), day: timeWithoutMins.weekday - 1},
+            SC_LOCAL_OPERATORS[sc[LOCAL_OPERATOR]], sc[ROUTE_NUMBER], sc[NEXT_STOP_CODE], format_gtfs_time(timeWithoutMins).substring(0, 5)) as TripStop | undefined
         if(!stop) return null
         // Locate current stop from next std and stop
         return {
@@ -215,5 +205,17 @@ async function load_stagecoach_data(operator: typeof SC_OPERATORS[number]): Prom
         }
     }).filter(notNull)
 }
+
+const findStop = db.prepare(
+`SELECT t.trip_id, r.route_id, stop_times.stop_sequence as stop_seq, stop_times.stop_id FROM stop_times
+            INNER JOIN trips t on t.trip_id = stop_times.trip_id
+            INNER JOIN main.routes r on t.route_id = r.route_id
+            INNER JOIN stop_times origin on (origin.trip_id=t.trip_id AND origin.stop_sequence=t.min_stop_seq)
+            LEFT OUTER JOIN main.calendar c on c.service_id = t.service_id
+            LEFT OUTER JOIN main.calendar_dates d on (d.service_id = c.service_id AND d.date=:date)
+        WHERE agency_id = ? AND route_short_name = ? AND stop_times.stop_id=?
+          AND substr(origin.departure_time, 1, 5) = ?
+          AND ((start_date <= :date AND end_date >= :date AND (validity & (1 << :day)) <> 0) OR exception_type=1)
+          AND NOT (exception_type IS NOT NULL AND exception_type = 2)`)
 
 new Feeder(load_all_stagecoach_data).init()

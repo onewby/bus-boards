@@ -16,29 +16,39 @@ import { LatLng } from "../../../leaflet/geo/LatLng.js";
 
 proj4.defs("EPSG:27700","+proj=tmerc +lat_0=49 +lon_0=-2 +k=0.9996012717 +x_0=400000 +y_0=-100000 +ellps=airy +datum=OSGB36 +units=m +no_defs");
 
+const serviceQuery = db.prepare(
+    `SELECT r.route_id as routeID, route_short_name as code, trip_headsign as dest, max_stop_seq as mss FROM trips
+                INNER JOIN main.routes r on r.route_id = trips.route_id
+                WHERE trip_id=?`)
+const stopsQuery = db.prepare(
+    `SELECT stops.name, stops.name as display_name, stops.locality, indicator as ind, arrival_time as arr, 
+                departure_time as dep, l.name as loc, timepoint as major, drop_off_type as doo, pickup_type as puo,
+                stances.lat as lat, stances.long as long, stop_sequence as seq, stops.locality_name AS full_loc
+            FROM stop_times
+                INNER JOIN stances on stances.code = stop_times.stop_id
+                INNER JOIN stops on stops.id = stances.stop
+                INNER JOIN localities l on l.code = stops.locality
+            WHERE trip_id=? ORDER BY stop_sequence`)
+const operatorQuery = db.prepare(
+    `SELECT a.agency_id as id, agency_name as name, COALESCE(website, agency_url) as url FROM trips
+                INNER JOIN main.routes r on r.route_id = trips.route_id
+                INNER JOIN main.agency a on r.agency_id = a.agency_id
+                LEFT OUTER JOIN main.traveline t on a.agency_id = t.agency_id
+            WHERE trip_id = ?`)
+const shapeQuery = db.prepare(
+    `SELECT shape_pt_lat as lat, shape_pt_lon as long
+                FROM shapes INNER JOIN trips t on shapes.shape_id = t.shape_id
+            WHERE trip_id=? ORDER BY shape_pt_sequence`)
+
 export const GET: RequestHandler = async ({url}) => {
     const id = url.searchParams.get("id")
     if(id === null) error(400, "ID not provided.");
-    const service: any = db.prepare(`SELECT r.route_id as routeID, route_short_name as code, trip_headsign as dest, max_stop_seq as mss FROM trips
-                                            INNER JOIN main.routes r on r.route_id = trips.route_id
-                                            WHERE trip_id=?`).get(id)
+
+    const service: any = serviceQuery.get(id)
     if(service === undefined) error(404, "Service not found.");
-    const stops: ServiceStopData[] = db.prepare(`SELECT stops.name, stops.name as display_name, stops.locality, indicator as ind, arrival_time as arr,departure_time as dep, l.name as loc,
-                                            timepoint as major, drop_off_type as doo, pickup_type as puo, stances.lat as lat, stances.long as long,
-                                            stop_sequence as seq, stops.locality_name AS full_loc
-                                        FROM stop_times
-                                            INNER JOIN stances on stances.code = stop_times.stop_id
-                                            INNER JOIN stops on stops.id = stances.stop
-                                            INNER JOIN localities l on l.code = stops.locality
-                                        WHERE trip_id=? ORDER BY stop_sequence`).all(id) as ServiceStopData[]
-    const operator: any = db.prepare(`SELECT a.agency_id as id, agency_name as name, COALESCE(website, agency_url) as url FROM trips
-                                            INNER JOIN main.routes r on r.route_id = trips.route_id
-                                            INNER JOIN main.agency a on r.agency_id = a.agency_id
-                                            LEFT OUTER JOIN main.traveline t on a.agency_id = t.agency_id
-                                            WHERE trip_id = ?`).get(id)
-    const shape: any[] = db.prepare(`SELECT shape_pt_lat as lat, shape_pt_lon as long
-                                        FROM shapes INNER JOIN trips t on shapes.shape_id = t.shape_id
-                                        WHERE trip_id=? ORDER BY shape_pt_sequence`).all(id)
+    const stops: ServiceStopData[] = stopsQuery.all(id) as ServiceStopData[]
+    const operator: any = operatorQuery.get(id)
+    const shape: any[] = shapeQuery.all(id)
 
     let routeID = service.routeID
     delete service.routeID
@@ -55,6 +65,8 @@ export const GET: RequestHandler = async ({url}) => {
             stop.loc = stop.full_loc.split(" › ")[0];
             if((stop.name == "Park and Ride" || stop.name == "Rail Station") && existingLoc != stop.loc) {
                 stop.display_name = existingLoc + " " + stop.name
+            } else if(stop.loc === "Centenary Square") {
+                stop.loc = "Birmingham"
             }
         })
     }

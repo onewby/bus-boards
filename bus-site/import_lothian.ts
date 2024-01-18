@@ -8,7 +8,7 @@ const lothianCountry = 'OP597'
 const ecb = 'OP598'
 export const lothianOpCodes = [lothian, lothianCountry, ecb]
 
-const routeQuery = (date: string, route: string) => db.prepare(
+const routeQueryStmt = db.prepare(
     `SELECT substr(start.departure_time, 1, 5) as minss, start.stop_id as startStop, substr(finish.departure_time, 1, 5) as maxss, finish.stop_id as finishStop, trips.trip_id
             FROM trips
                 LEFT OUTER JOIN main.calendar c on trips.service_id = c.service_id
@@ -16,9 +16,11 @@ const routeQuery = (date: string, route: string) => db.prepare(
                 INNER JOIN main.stop_times start on (start.trip_id=trips.trip_id AND start.stop_sequence=trips.min_stop_seq)
                 INNER JOIN main.stop_times finish on (finish.trip_id=trips.trip_id AND finish.stop_sequence=trips.max_stop_seq)
             WHERE route_id=:route
-              AND ((start_date <= :date AND end_date >= :date AND ${DateTime.fromFormat(date, "yyyyMMdd").weekdayLong!.toLowerCase()}=1) OR exception_type=1)
+              AND ((start_date <= :date AND end_date >= :date AND (validity & (1 << :day)) <> 0) OR exception_type=1)
               AND NOT (exception_type IS NOT NULL AND exception_type = 2)`
-).all({date: Number(date), route}) as {minss: string, startStop: string, maxss: string, finishStop: string, trip_id: string}[]
+)
+const routeQuery = (date: string, route: string) => routeQueryStmt.all(
+    {date: Number(date), route, day: DateTime.fromFormat(date, "yyyyMMdd").weekday - 1}) as {minss: string, startStop: string, maxss: string, finishStop: string, trip_id: string}[]
 
 const routeInsert = db.prepare("INSERT INTO polar (gtfs, polar) VALUES (?,?)")
 const routeInsertAll = db.transaction((trips: Set<string>, lothianRoute: string) => {

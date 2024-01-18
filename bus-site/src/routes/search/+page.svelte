@@ -3,6 +3,7 @@
     import {page} from "$app/stores";
     import InfiniteLoading from "svelte-infinite-loading";
     import type {SearchResult} from "../../api.type";
+    import SearchSuggestion from "../search_suggestion.svelte";
 
     let results: SearchResult[] = []
     let pageNum = 0
@@ -47,12 +48,7 @@
 
     <div class="panel w-full mt-2 flex flex-col">
         {#each results as result, i}
-            <a class="pl-4 pr-4 pt-2.5 pb-2.5 transition-colors hover:bg-gray-50 dark:hover:bg-slate-900" href="/stop/{result.locality}/{encodeURIComponent(result.name)}">
-                <p class="text-lg">{result.name}</p>
-                {#if result.parent}
-                    <p class="text-sm">{result.parent}</p>
-                {/if}
-            </a>
+            <SearchSuggestion result={result}/>
             {#if i !== results.length - 1}
                 <hr class="mt-0 mb-0 ml-2 mr-2 border-gray-400 dark:border-white">
             {/if}

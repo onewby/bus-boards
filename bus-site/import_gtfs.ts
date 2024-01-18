@@ -44,7 +44,7 @@ db.exec(tableCreateScript)
 const gtfsTables = ["stop_times", "trips", "calendar_dates", "calendar", "routes", "agency"]
 let addAgency = db.prepare("REPLACE INTO agency (agency_id, agency_name, agency_url, agency_timezone, agency_lang) VALUES (:agency_id, :agency_name, :agency_url, :agency_timezone, :agency_lang)")
 let addRoutes = db.prepare("REPLACE INTO routes (route_id, agency_id, route_short_name, route_long_name, route_type) VALUES (:route_id, :agency_id, :route_short_name, :route_long_name, :route_type)")
-let addCalendar = db.prepare("REPLACE INTO calendar (service_id, monday, tuesday, wednesday, thursday, friday, saturday, sunday, start_date, end_date) VALUES (:service_id, :monday, :tuesday, :wednesday, :thursday, :friday, :saturday, :sunday, :start_date, :end_date)")
+let addCalendar = db.prepare("REPLACE INTO calendar (service_id, start_date, end_date, validity) VALUES (:service_id, :start_date, :end_date, ((:monday & 1) + (:tuesday & 2) + (:wednesday & 4) + (:thursday & 8) + (:friday & 16) + (:saturday & 32) + (:sunday & 64)))")
 let addCalendarDates = db.prepare("REPLACE INTO calendar_dates (service_id, date, exception_type) VALUES (:service_id, :date, :exception_type)")
 let addShapes = db.prepare("REPLACE INTO shapes (shape_id, shape_pt_lat, shape_pt_lon, shape_pt_sequence) VALUES (:shape_id, :shape_pt_lat, :shape_pt_lon, :shape_pt_sequence)")
 let addTrips = db.prepare("REPLACE INTO trips (route_id, service_id, trip_id, trip_headsign, shape_id) VALUES (:route_id, :service_id, :trip_id, :trip_headsign, :shape_id)")
