@@ -196,8 +196,10 @@ const toLuxon = (date: DateTime, time: string, addDays = 0) => {
 
 const stopTimesStmt2 = db.prepare(
     `SELECT stop_times.trip_id,coalesce(stop_headsign,t.trip_headsign) as trip_headsign,
-                iif(:addDay=1, printf('%02d', (substring(departure_time, 0, 3) + 24)) || substring(departure_time, 3),
-                    iif(:addDay=-1, printf('%02d', (substring(departure_time, 0, 3) - 24)) || substring(departure_time, 3), departure_time)) as departure_time,
+                    (CASE :addDay
+                        WHEN 1 THEN printf('%02d', (substring(departure_time, 0, 3) + 24)) || substring(departure_time, 3)
+                        WHEN -1 THEN printf('%02d', (substring(departure_time, 0, 3) - 24)) || substring(departure_time, 3)
+                        ELSE departure_time END) as departure_time,
                     s.indicator,r.route_short_name,a.agency_id as operator_id,a.agency_name as operator_name,stop_sequence as seq
                 FROM stop_times
                     INNER JOIN trips t on stop_times.trip_id = t.trip_id
