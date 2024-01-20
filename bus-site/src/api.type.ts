@@ -71,7 +71,7 @@ export type ServiceBranch = {
         },
         pct?: number
     },
-    route: [number, number][]
+    route: string
 }
 
 export type ServiceInfo = {

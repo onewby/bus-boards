@@ -15,6 +15,7 @@ import groupBy from "object.groupby";
 import compare from "string-comparison"
 import {minPredicate} from "./src/realtime/feeder_util";
 import {Client} from "basic-ftp";
+import polyline from "google-polyline"
 
 const sourceFiles: { name: string, url: string, path: string, prefix: string }[] = [
     {
@@ -46,7 +47,6 @@ let addAgency = db.prepare("REPLACE INTO agency (agency_id, agency_name, agency_
 let addRoutes = db.prepare("REPLACE INTO routes (route_id, agency_id, route_short_name, route_long_name, route_type) VALUES (:route_id, :agency_id, :route_short_name, :route_long_name, :route_type)")
 let addCalendar = db.prepare("REPLACE INTO calendar (service_id, start_date, end_date, validity) VALUES (:service_id, :start_date, :end_date, ((:monday & 1) + (:tuesday & 2) + (:wednesday & 4) + (:thursday & 8) + (:friday & 16) + (:saturday & 32) + (:sunday & 64)))")
 let addCalendarDates = db.prepare("REPLACE INTO calendar_dates (service_id, date, exception_type) VALUES (:service_id, :date, :exception_type)")
-let addShapes = db.prepare("REPLACE INTO shapes (shape_id, shape_pt_lat, shape_pt_lon, shape_pt_sequence) VALUES (:shape_id, :shape_pt_lat, :shape_pt_lon, :shape_pt_sequence)")
 let addTrips = db.prepare("REPLACE INTO trips (route_id, service_id, trip_id, trip_headsign, shape_id) VALUES (:route_id, :service_id, :trip_id, :trip_headsign, :shape_id)")
 let addStopTimes = db.prepare("REPLACE INTO stop_times (trip_id, arrival_time, departure_time, stop_id, stop_sequence, timepoint, stop_headsign, pickup_type, drop_off_type) VALUES (:trip_id, :arrival_time, :departure_time, :stop_id, :stop_sequence, :timepoint, NULLIF(:stop_headsign, ''), :pickup_type, :drop_off_type)")
 let dropAllSource = db.transaction(() => {
@@ -118,13 +118,16 @@ async function import_zip(zip: CentralDirectory, prefix: string = "") {
         ["routes.txt", addRoutes, {"agency_id": "Ember"}],
         ["calendar.txt", addCalendar, {}, prefixable],
         ["calendar_dates.txt", addCalendarDates, {}, prefixable],
-        ["shapes.txt", addShapes],
         ["trips.txt", addTrips, {"trip_headsign": null, "shape_id": null}, prefixable],
         ["stop_times.txt", addStopTimes, {"stop_headsign": null}]
     ]
     let startTime = Date.now()
     for(const tuple of files) {
         await import_txt_file(zip, tuple[0], tuple[1], tuple?.[2], tuple?.[3], prefix)
+    }
+    let shapeFile: File | undefined = zip.files.find(f => f.path === "shapes.txt")
+    if(shapeFile) {
+        await import_shapes(shapeFile)
     }
     console.log(`Insertions completed in ${(Date.now() - startTime) / 1000} seconds`)
 }
@@ -171,6 +174,37 @@ async function insertSource(file: File, sql: Statement, defaults: Object = {}, p
 
 function stream_csv(file: File) {
     return file.stream().pipe(parse({encoding: "utf-8", cast: false, cast_date: false, columns: true}))
+}
+
+const storeShape = db.prepare("INSERT INTO shapes (shape_id, polyline) VALUES (?, ?)")
+const storeShapes = db.transaction((shapes: [string, string][]) => {
+    for(let shape of shapes) {
+        storeShape.run(...shape)
+    }
+})
+
+// Encoded then imported
+async function import_shapes(shapeFile: File) {
+    let currentShapeID = ""
+    let currentShapePoints: [number, number][] = []
+    let shapesToWrite: [string, string][] = []
+    for await (const row of stream_csv(shapeFile)) {
+        if(row.shape_id !== currentShapeID) {
+            if(currentShapeID !== "") {
+                shapesToWrite.push([currentShapeID, polyline.encode(currentShapePoints)])
+                if(shapesToWrite.length === 1000) {
+                    storeShapes(shapesToWrite)
+                    shapesToWrite = []
+                }
+            }
+            currentShapeID = row.shape_id
+            currentShapePoints = [[Number(row.shape_pt_lat), Number(row.shape_pt_lon)]]
+        } else {
+            currentShapePoints.push([Number(row.shape_pt_lat), Number(row.shape_pt_lon)])
+        }
+    }
+    shapesToWrite.push([currentShapeID, polyline.encode(currentShapePoints)])
+    storeShapes(shapesToWrite)
 }
 
 type LocalityCode = string

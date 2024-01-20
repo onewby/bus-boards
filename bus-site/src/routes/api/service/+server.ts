@@ -13,6 +13,7 @@ import {
 } from "./gtfs-realtime";
 import {findPctBetween, sqlToLuxon} from "./realtime_util";
 import { LatLng } from "../../../leaflet/geo/LatLng.js";
+import polyline from "google-polyline";
 
 proj4.defs("EPSG:27700","+proj=tmerc +lat_0=49 +lon_0=-2 +k=0.9996012717 +x_0=400000 +y_0=-100000 +ellps=airy +datum=OSGB36 +units=m +no_defs");
 
@@ -35,10 +36,7 @@ const operatorQuery = db.prepare(
                 INNER JOIN main.agency a on r.agency_id = a.agency_id
                 LEFT OUTER JOIN main.traveline t on a.agency_id = t.agency_id
             WHERE trip_id = ?`)
-const shapeQuery = db.prepare(
-    `SELECT shape_pt_lat as lat, shape_pt_lon as long
-                FROM shapes INNER JOIN trips t on shapes.shape_id = t.shape_id
-            WHERE trip_id=? ORDER BY shape_pt_sequence`)
+const shapeQuery = db.prepare(`SELECT polyline FROM shapes INNER JOIN trips t on shapes.shape_id = t.shape_id WHERE trip_id=?`).pluck()
 
 export const GET: RequestHandler = async ({url}) => {
     const id = url.searchParams.get("id")
@@ -48,7 +46,7 @@ export const GET: RequestHandler = async ({url}) => {
     if(service === undefined) error(404, "Service not found.");
     const stops: ServiceStopData[] = stopsQuery.all(id) as ServiceStopData[]
     const operator: any = operatorQuery.get(id)
-    const shape: any[] = shapeQuery.all(id)
+    const shape = shapeQuery.get(id) as string
 
     let routeID = service.routeID
     delete service.routeID
@@ -95,11 +93,11 @@ export const GET: RequestHandler = async ({url}) => {
     }
 
     // Route line shape for map
-    let route: [number, number][]
-    if(shape && shape.length > 0) {
-        route = shape.map(s => [s.long, s.lat])
+    let route: string
+    if(shape) {
+        route = shape
     } else {
-        route = stops.map(s => [s.long, s.lat])
+        route = polyline.encode(stops.map(s => [s.lat, s.long]))
     }
 
     let realtime = undefined

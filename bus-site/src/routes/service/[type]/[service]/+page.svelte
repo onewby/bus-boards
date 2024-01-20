@@ -18,6 +18,7 @@
     import {DateTime} from "luxon";
     import {browser} from "$app/environment";
     import Alert from "../../../Alert.svelte";
+    import polyline from "google-polyline";
 
     export let data: PageData
     let expand = false
@@ -35,12 +36,12 @@
         if(branch.stops.length < 20) branch.stops.forEach(stop => stop.major = true)
     }
 
-    let realtimeData
+    let realtimeData: any
     $: expand, branch.realtime, realtimeData = getRealtimePct()
 
     let train = $page.params.type === "train"
 
-    let tickerNumber
+    let tickerNumber: ReturnType<typeof setInterval>
     onMount(() => {
         if(branch.realtime) {
             tickerNumber = setInterval(async () => {
@@ -61,7 +62,7 @@
             "type": "Feature",
             "properties": {},
             "geometry": {
-                "coordinates": branch.route,
+                "coordinates": polyline.decode(branch.route).map(([lat, lng]) => [lng, lat]),
                 "type": "LineString"
             }
         }))
@@ -104,7 +105,7 @@
                 const nextMajorTime = toLuxon(branch.stops[nextMajorStop].dep)
 
                 // get current time elapsed = (time elapsed previousMajorStop to last stop) + (pct elapsed * time elapsed from last stop to the upcoming stop)
-                let elapsedTime = prevStopTime.diff(prevMajorTime, "milliseconds").milliseconds + (branch.realtime.pct * stopTime.diff(prevStopTime, "milliseconds").milliseconds)
+                let elapsedTime = prevStopTime.diff(prevMajorTime, "milliseconds").milliseconds + (branch.realtime.pct! * stopTime.diff(prevStopTime, "milliseconds").milliseconds)
 
                 // get time nextMajorStop - previousMajorStop
                 let totalTime = nextMajorTime.diff(prevMajorTime, "milliseconds").milliseconds

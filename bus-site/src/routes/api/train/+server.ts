@@ -5,6 +5,7 @@ import type {CallingPoint, ServiceDetails} from "../../../darwin/darwin";
 import type {ServiceBranch, ServiceStopData} from "../../../api.type";
 import {DateTime} from "luxon";
 import {db} from "../../../db";
+import polyline from "google-polyline";
 
 const UK_CTR_LONG = -2.547855
 const UK_CTR_LAT = 54.00366
@@ -86,7 +87,7 @@ export const GET: RequestHandler = async ({url}) => {
             pct: currStop == -1 ? undefined : nextStop === cps.length ? 1
                 : Math.min(Math.abs(currTime.diffNow().milliseconds / (currTime.diff(getTime(cps[nextStop]))).milliseconds), 1)
         }
-        const route: [number, number][] = cps.filter(cp => coords[cp.crs]?.['lat']).map(cp => [coords[cp.crs]?.["long"] ?? UK_CTR_LONG, coords[cp.crs]?.["lat"] ?? UK_CTR_LAT])
+        const route: string = polyline.encode(cps.filter(cp => coords[cp.crs]?.['lat']).map(cp => [coords[cp.crs]?.["lat"] ?? UK_CTR_LAT, coords[cp.crs]?.["long"] ?? UK_CTR_LONG]))
         branches.push({
             "dest": dest,
             "stops": stops,

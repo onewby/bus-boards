@@ -41,10 +41,8 @@ create table if not exists stances
 
 create table if not exists shapes
 (
-    shape_id          TEXT,
-    shape_pt_lat      REAL,
-    shape_pt_lon      REAL,
-    shape_pt_sequence integer
+    shape_id          TEXT PRIMARY KEY,
+    polyline          TEXT
 );
 
 create table if not exists agency
