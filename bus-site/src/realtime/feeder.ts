@@ -52,9 +52,9 @@ export class UpdateFeeder extends Feeder {
 
     async checkUpdate() {
         if (this.lastUpdate.diffNow("days").days <= -5) {
-            await this.updateFunction()
             this.lastUpdate = DateTime.now().set({hour: 2, minute: 0, second: 0, millisecond: 0})
-            writeFileSync(".update", DateTime.now().toISO()!)
+            await this.updateFunction()
+            writeFileSync(".update", this.lastUpdate.toISO()!)
         }
     }
 

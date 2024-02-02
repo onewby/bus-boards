@@ -7,7 +7,7 @@ import {
     VehiclePosition_VehicleStopStatus
 } from "../routes/api/service/gtfs-realtime";
 import {db} from "../db";
-import {format_gtfs_date, format_gtfs_time, notNull} from "../routes/api/service/realtime_util";
+import {format_gtfs_date, format_gtfs_time, notNull, relativeTo, ZERO_DAY} from "../routes/api/service/realtime_util";
 import {type DownloadResponse, Feeder} from "./feeder";
 
 type StagecoachData = {
@@ -144,7 +144,7 @@ function json_reviver(this: any, key: string, value: string) {
         case "ex":
         case "af":
         case "ef":
-            return DateTime.fromSeconds(Number(value) / 1000)
+            return DateTime.fromSeconds(Number(value) / 1000, {zone: "GMT"})
         case "cd":
         case "jc":
             return value === "True"
@@ -167,10 +167,10 @@ async function load_stagecoach_data(operator: typeof SC_OPERATORS[number]): Prom
     // load data here
     return srcJson.services.map((sc): FeedEntity | null => {
         if(sc[JOURNEY_DONE] && !sc[CANCELLED]) return null // journey is done, stop tracking
-        let timeWithoutMins = DateTime.fromSeconds(Math.floor(sc[ORIGIN_STD].toSeconds() / 60) * 60)
+        let timeWithoutMins = sc[ORIGIN_STD].set({second: 0, millisecond: 0})
         // Locate trip ID from origin std and stop
         const stop: TripStop | undefined = findStop.get({date: Number(timeWithoutMins.toISODate({format: 'basic'})), day: timeWithoutMins.weekday - 1},
-            SC_LOCAL_OPERATORS[sc[LOCAL_OPERATOR]], sc[ROUTE_NUMBER], sc[NEXT_STOP_CODE], format_gtfs_time(timeWithoutMins).substring(0, 5)) as TripStop | undefined
+            SC_LOCAL_OPERATORS[sc[LOCAL_OPERATOR]], sc[ROUTE_NUMBER], sc[NEXT_STOP_CODE], timeWithoutMins.set(ZERO_DAY).toSeconds()) as TripStop | undefined
         if(!stop) return null
         // Locate current stop from next std and stop
         return {
@@ -214,7 +214,7 @@ const findStop = db.prepare(
             LEFT OUTER JOIN main.calendar c on c.service_id = t.service_id
             LEFT OUTER JOIN main.calendar_dates d on (d.service_id = c.service_id AND d.date=:date)
         WHERE agency_id = ? AND route_short_name = ? AND stop_times.stop_id=?
-          AND substr(origin.departure_time, 1, 5) = ?
+          AND origin.departure_time = ?
           AND ((start_date <= :date AND end_date >= :date AND (validity & (1 << :day)) <> 0) OR exception_type=1)
           AND NOT (exception_type IS NOT NULL AND exception_type = 2)`)
 

@@ -106,8 +106,8 @@ create table if not exists trips
 create table if not exists stop_times
 (
     trip_id        TEXT,
-    arrival_time   DATETIME,
-    departure_time DATETIME,
+    arrival_time   integer,
+    departure_time integer,
     stop_id        TEXT,
     stop_headsign  TEXT,
     stop_sequence  integer,

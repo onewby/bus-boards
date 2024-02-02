@@ -2,9 +2,8 @@
     import type {StopDeparture} from "../../../../api.type.js";
     import Fa from "svelte-fa";
     import {faTrain} from "@fortawesome/free-solid-svg-icons";
-    export let service: StopDeparture
 
-    export const timeFmt = (time: string) => (Number(time.substring(0, 2)) % 24).toString().padStart(2, "0") + time.substring(2, 5)
+    export let service: StopDeparture
 </script>
 
 <a href="/service/{service.type}/{service.trip_id}">

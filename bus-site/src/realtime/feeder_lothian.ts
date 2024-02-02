@@ -6,7 +6,7 @@ import {
     assignVehicles,
     getPoints,
     getTripCandidates,
-    getTripInfo,
+    getTripInfo, mapSQLTripCandidate,
     type TripCandidate,
     type TripCandidateList
 } from "./feeder_util";
@@ -23,6 +23,7 @@ import {
 } from "../routes/api/service/gtfs-realtime";
 import groupBy from "object.groupby";
 import {download_route_data, lothianOpCodes} from "../../import_lothian";
+import {format_gtfs_time, ZERO_TIME} from "../routes/api/service/realtime_util.ts";
 
 const getAllPatterns = () => db.prepare("SELECT * FROM lothian").all() as {pattern: string, route: string}[]
 
@@ -42,8 +43,16 @@ const currentTripsQueryStmt = db.prepare(
                    AND NOT (exception_type IS NOT NULL AND exception_type = 2)
                    AND start.departure_time <= :startTime AND finish.departure_time >= :endTime`
 )
-const currentTripsQuery = (date: DateTime, startTime: string, endTime: string, pattern: string) =>
-    currentTripsQueryStmt.all({date: Number(date.toFormat("yyyyMMdd")), day: date.weekday - 1, startTime, endTime, pattern}) as TripCandidate[]
+const currentTripsQuery = (date: DateTime, startTime: number, endTime: number, pattern: string) => {
+    let dateSecs = date.set(ZERO_TIME).toSeconds()
+    return currentTripsQueryStmt.all({
+        date: Number(date.toFormat("yyyyMMdd")),
+        day: date.weekday - 1,
+        startTime,
+        endTime,
+        pattern
+    }).map(obj => mapSQLTripCandidate(obj, dateSecs));
+}
 
 const getRouteInfoStmt = db.prepare("SELECT route_id, agency_id FROM routes WHERE route_short_name=? AND agency_id IN (?, ?, ?)")
 const getRouteInfo = (route: string) => getRouteInfoStmt.get(route, ...lothianOpCodes) as {route_id: string, agency_id: string}
@@ -58,7 +67,6 @@ export async function load_Lothian_vehicles(): Promise<DownloadResponse> {
 
     await Promise.allSettled(Object.values(patterns).map(async route => {
         for(const pattern of route) {
-            const routeName = pattern.pattern.split(':')[0]
             let vehicles: LothianLiveVehicles
             try {
                 vehicles = await (await fetchWithTimeout(`https://tfeapp.com/api/website/vehicles_on_route.php?route_id=${pattern.pattern}`, {timeout: 10000})).json() as LothianLiveVehicles
@@ -94,7 +102,7 @@ export async function load_Lothian_vehicles(): Promise<DownloadResponse> {
                             tripId: trip.candidate.trip_id,
                             routeId: pattern.route,
                             directionId: -1,
-                            startTime: trip.departureTimes[0],
+                            startTime: format_gtfs_time(trip.departureTimes[0]),
                             startDate: DateTime.fromFormat(String(trip.candidate.date), "yyyyMMdd").toISODate()!,
                             scheduleRelationship: TripDescriptor_ScheduleRelationship.SCHEDULED
                         },
@@ -106,7 +114,7 @@ export async function load_Lothian_vehicles(): Promise<DownloadResponse> {
                             odometer: -1,
                             speed: -1
                         },
-                        currentStopSequence: Number(trip.candidate.seqs.split(",")[trip.stopIndex]),
+                        currentStopSequence: Number(trip.candidate.seqs[trip.stopIndex]),
                         stopId: trip.route[trip.stopIndex],
                         currentStatus: VehiclePosition_VehicleStopStatus.IN_TRANSIT_TO,
                         timestamp: updateTime,

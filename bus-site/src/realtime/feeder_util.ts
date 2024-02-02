@@ -1,17 +1,15 @@
 import {db} from "../db";
 import {DateTime} from "luxon";
 import {
-    addTimeNaive,
-    format_gtfs_time,
     minIndex,
     type Position,
-    sqlToLuxon
+    sqlToLuxon, ZERO_DAY, ZERO_TIME
 } from "../routes/api/service/realtime_util";
 import {LineUtil, Point} from "../leaflet/geometry/index";
 import groupBy from "object.groupby";
 
-export type TripCandidate = {trip_id: string, direction: number, route: string, times: string, seqs: string, date: number}
-export type TripInfo = {candidate: TripCandidate, diff: number, stopIndex: number, route: string[], departureTimes: string[]}
+export type TripCandidate = {trip_id: string, direction: number, route: string[], times: DateTime[], seqs: string[], date: number}
+export type TripInfo = {candidate: TripCandidate, diff: number, stopIndex: number, route: string[], departureTimes: DateTime[]}
 export type FinalTripCandidate = {vehicle: number, trip: TripInfo}
 export type TripCandidateList = {vehicle: number, cands: TripInfo[]}
 
@@ -33,18 +31,38 @@ export function minPredicate<T>(arr: T[], comparator: (i1: T, i2: T) => boolean)
     return arr[lowest]
 }
 
-export function getTripCandidates<T>(tripQuery: (date: DateTime, startTime: string, endTime: string, route: string) => T[], routeID: string) {
+export function mapSQLTripCandidate(sql: any, dateSecs: number): TripCandidate {
+    return {
+        ...sql,
+        route: sql.route.split(','),
+        times: (sql.times as string).split(',').map(t => sqlToLuxon(dateSecs + Number(t))),
+        seqs: sql.seqs.split(',')
+    }
+}
+
+export function getTripCandidates<T>(tripQuery: (date: DateTime, startBefore: number, endAfter: number, route: string) => T[], routeID: string) {
     let candidates: T[]
     let nowDate = DateTime.now()
+    let nowDateSecs = nowDate.set(ZERO_DAY).toSeconds()
     let nowDateMinus1hr = nowDate.minus({hour: 1})
-    if(nowDateMinus1hr.hour > DateTime.now().hour) {
+    let nowDateMinus1hrSecs = nowDateMinus1hr.set(ZERO_DAY).toSeconds()
+    let nowDatePlus1hr = nowDate.minus({hour: 1})
+    let nowDatePlus1hrSecs = nowDatePlus1hr.set(ZERO_DAY).toSeconds()
+    // find everything 1hr before now, 1hr after
+    if(nowDateMinus1hr.hour > nowDate.hour) {
         // underflow into previous day
         candidates = [
-            ...tripQuery(nowDateMinus1hr, addTimeNaive(format_gtfs_time(nowDate), 25), format_gtfs_time(nowDateMinus1hr), routeID),
-            ...tripQuery(nowDate, addTimeNaive(format_gtfs_time(nowDate), 1), "00:00:00", routeID)
+            ...tripQuery(nowDateMinus1hr, nowDateMinus1hrSecs + 7200, nowDateMinus1hrSecs, routeID),
+            ...tripQuery(nowDate, nowDateSecs + 3600, 0, routeID)
+        ]
+    } else if(nowDatePlus1hr.hour < nowDate.hour) {
+        // overflow into the next day
+        candidates = [
+            ...tripQuery(nowDate, nowDateSecs + 3600, nowDateSecs - 3600, routeID),
+            ...tripQuery(nowDatePlus1hr, nowDatePlus1hrSecs, nowDatePlus1hrSecs - 7200, routeID),
         ]
     } else {
-        candidates = tripQuery(nowDate, addTimeNaive(format_gtfs_time(nowDate), 1), format_gtfs_time(nowDateMinus1hr), routeID)
+        candidates = tripQuery(nowDate, nowDatePlus1hrSecs, nowDateMinus1hrSecs, routeID)
     }
     return candidates
 }
@@ -58,8 +76,8 @@ export function getPoints(routeID: string): Record<string, Point> {
 
 export function getTripInfo(candidate: TripCandidate, points: Record<string, Point>, loc: Point, nowDate: DateTime): TripInfo {
     // out of all line segments for this candidate, find the closest one
-    let route = candidate.route.split(",")
-    let departureTimes = candidate.times.split(",")
+    let route = candidate.route
+    let departureTimes = candidate.times
     let segments = [...Array(route.length - 1).keys()].map(i => {
         // default to a very large distance away if something missing
         if(points[route[i]] === undefined || points[route[i+1]] === undefined) return new Point(0, 0)
@@ -69,9 +87,9 @@ export function getTripInfo(candidate: TripCandidate, points: Record<string, Poi
     let index = minIndex(segmentDistances)
 
     // figure out where the vehicle *would* be right now (min/max at start/end)
-    let pct = points[route[index]].distanceTo(segments[index]) / points[route[index]].distanceTo(points[route[index+1]])
-    let fromTime = sqlToLuxon(departureTimes[index])
-    let toTime = sqlToLuxon(departureTimes[index + 1])
+    let pct = (points[route[index]]?.distanceTo(segments[index]) ?? 0) / (points[route[index]]?.distanceTo(points[route[index+1]]) ?? 1)
+    let fromTime = departureTimes[index]
+    let toTime = departureTimes[index + 1]
     let current = fromTime.plus({milliseconds: toTime.diff(fromTime).toMillis() * pct})
     let diff = Math.abs(nowDate.diff(current).toMillis())
 

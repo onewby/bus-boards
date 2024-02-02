@@ -1,6 +1,6 @@
 import {DateTime} from "luxon";
 import type {PolarLines, PolarTimetable} from "./src/api.type";
-import {addTimeNaive, dayDiff, format_gtfs_time} from "./src/routes/api/service/realtime_util";
+import {dayDiff, relativeTo} from "./src/routes/api/service/realtime_util";
 import {db} from "./src/db";
 import sourceFile from "./src/routes/api/service/passenger-sources.json" assert {type: "json"}
 
@@ -16,7 +16,7 @@ const routeQueryStmt = db.prepare(
               AND ((start_date <= :date AND end_date >= :date AND (validity & (1 << :day)) <> 0) OR exception_type=1)
               AND NOT (exception_type IS NOT NULL AND exception_type = 2)`
 )
-const routeQuery = (date: string, route: string) => routeQueryStmt.all({date: Number(date), route, day: DateTime.fromFormat(date, "yyyyMMdd").weekday - 1}) as {minss: string, maxss: string, trip_id: string}[]
+const routeQuery = (date: string, route: string) => routeQueryStmt.all({date: Number(date), route, day: DateTime.fromFormat(date, "yyyyMMdd").weekday - 1}) as {minss: number, maxss: number, trip_id: string}[]
 
 // direction+0 and ORDER BY needed to trick SQLite query optimiser into in-memory sorting rather than building an index
 const inboundOutbounds = db.prepare(
@@ -94,21 +94,18 @@ export async function downloadRouteDirections() {
                         return lineTimetable?._embedded?.["timetable:journey"]
                             ?.filter(tj => tj._links["transmodel:line"].name === timetableName)
                             .map(tj => {
-                                let oTime = DateTime.fromISO(tj._embedded["timetable:visit"][0].aimedDepartureTime!)
-                                let dTime = DateTime.fromISO(tj._embedded["timetable:visit"][tj._embedded["timetable:visit"].length - 1].aimedArrivalTime)
-                                let oTimeStr = format_gtfs_time(oTime)
-                                let dTimeStr = format_gtfs_time(dTime)
+                                let oTime = DateTime.fromISO(tj._embedded["timetable:visit"][0].aimedDepartureTime!).set({second: 0, millisecond: 0})
+                                let dTime = DateTime.fromISO(tj._embedded["timetable:visit"][tj._embedded["timetable:visit"].length - 1].aimedArrivalTime).set({second: 0, millisecond: 0})
                                 let daysDiff = dayDiff(oTime, dTime)
-                                if (daysDiff >= 1) dTimeStr = addTimeNaive(dTimeStr, 24 * daysDiff)
+                                if (daysDiff >= 1) dTime = dTime.plus({days: daysDiff})
 
                                 let trip = routes.find(r =>
-                                    r.minss === oTimeStr && r.maxss === dTimeStr)
+                                    r.minss === relativeTo(oTime, oTime) && r.maxss === relativeTo(oTime, dTime))
                                 if(trip === undefined) {
                                     // Some misses seem to be due to rounding
-                                    dTimeStr = format_gtfs_time(dTime.minus({minute: 1}))
-                                    if (daysDiff >= 1) dTimeStr = addTimeNaive(dTimeStr, 24 * daysDiff)
+                                    dTime = dTime.minus({minute: 1})
                                     trip = routes.find(r =>
-                                        r.minss === oTimeStr && r.maxss === dTimeStr)
+                                        r.minss === relativeTo(oTime, oTime) && r.maxss === relativeTo(oTime, dTime))
                                 }
 
                                 return trip?.trip_id ? {

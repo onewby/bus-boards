@@ -11,7 +11,7 @@ export type StopDeparture = {
     operator_name: string,
     type: "bus" | "train",
     status?: string,
-    _timestamp?: DateTime,
+    _timestamp: DateTime,
     seq?: number
 }
 
@@ -77,8 +77,7 @@ export type ServiceBranch = {
 export type ServiceInfo = {
     code: string,
     dest: string,
-    cancelled: boolean,
-    message: string
+    cancelled: boolean
 }
 
 export type ServiceData = {
@@ -939,3 +938,24 @@ export type SiriSource = {
     SourceType:          string;
     TimeOfCommunication: string;
 }
+
+export type StopsQuery = {
+    name: string,
+    display_name: string,
+    locality: string,
+    ind?: string,
+    arr: number,
+    dep: number,
+    loc?: string,
+    major: boolean,
+    puo: boolean,
+    doo: boolean,
+    long: number,
+    lat: number,
+    seq: number,
+    full_loc: string
+}
+
+// stops.name, stops.name as display_name, stops.locality, indicator as ind, arrival_time as arr,
+//                 departure_time as dep, l.name as loc, timepoint as major, drop_off_type as doo, pickup_type as puo,
+//                 stances.lat as lat, stances.long as long, stop_sequence as seq, stops.locality_name AS full_loc

@@ -9,10 +9,9 @@ import {
 import type {MegabusVehicles} from "../api.type";
 import {DateTime} from "luxon";
 import {
-    addTimeNaive,
     dayDiff,
     format_gtfs_time, minIndex,
-    type Position
+    type Position, relativeTo, ZERO_DAY
 } from "../routes/api/service/realtime_util";
 import groupBy from "object.groupby";
 import {lineSegmentQuery} from "./feeder_util";
@@ -40,12 +39,12 @@ const findTripQuery = db.prepare(
                 INNER JOIN main.stop_times sta on (trips.trip_id = sta.trip_id AND sta.stop_sequence=max_stop_seq)
                 LEFT OUTER JOIN main.calendar c on c.service_id = trips.service_id
                 LEFT OUTER JOIN main.calendar_dates d on (d.service_id = c.service_id AND d.date=:date)
-            WHERE route_id=:route AND SUBSTR(std.departure_time, 1, 5)=:startTime AND SUBSTR(sta.departure_time, 1, 5)=:endTime
+            WHERE route_id=:route AND std.departure_time=:startTime AND sta.departure_time=:endTime
                 AND stdLoc LIKE :depWildcard AND staLoc LIKE :arrWildcard
                 AND ((start_date <= :date AND end_date >= :date AND (validity & (1 << :day)) <> 0) OR exception_type=1)
                     AND NOT (exception_type IS NOT NULL AND exception_type = 2)`
 )
-const findTrip = (date: DateTime, route: string, startTime: string, endTime: string, origin: string, dest: string) => findTripQuery.get({date: Number(date.toFormat("yyyyMMdd")), route, startTime, endTime, depWildcard: origin.split(" (")[0] + '%', arrWildcard: dest.split(" (")[0] + '%', day: date.weekday - 1}) as Trip | undefined
+const findTrip = (date: DateTime, route: string, startTime: number, endTime: number, origin: string, dest: string) => findTripQuery.get({date: Number(date.toFormat("yyyyMMdd")), route, startTime, endTime, depWildcard: origin.split(" (")[0] + '%', arrWildcard: dest.split(" (")[0] + '%', day: date.weekday - 1}) as Trip | undefined
 
 export async function load_coaches(): Promise<DownloadResponse> {
     let config = await (await fetch("https://coachtracker.uk.megabus.com/configs/global.js")).text()
@@ -69,12 +68,10 @@ export async function load_coaches(): Promise<DownloadResponse> {
             if(dep.trip.id.endsWith("S") || dep.trip.id.endsWith("E")) return undefined // positioning move
             if(dep.active_vehicle === null || dep.tracking.is_completed) return undefined
 
-            const depTime = DateTime.fromSeconds(dep.trip.departure_time_unix)
-            const arrTime = DateTime.fromSeconds(dep.trip.arrival_time_unix)
-            const daysDiff = dayDiff(depTime, arrTime)
-            const naiveArrTime = addTimeNaive(format_gtfs_time(arrTime), daysDiff).substring(0, 5)
+            const depTime = DateTime.fromSeconds(dep.trip.departure_time_unix, {zone: "GMT"})
+            const arrTime = DateTime.fromSeconds(dep.trip.arrival_time_unix, {zone: "GMT"})
 
-            const trip = findTrip(depTime, route.route_id, depTime.toFormat("HH:mm"), naiveArrTime, dep.trip.departure_location_name, dep.trip.arrival_location_name)
+            const trip = findTrip(depTime, route.route_id, relativeTo(depTime, depTime), relativeTo(depTime, arrTime), dep.trip.departure_location_name, dep.trip.arrival_location_name)
             if(trip === undefined) return undefined
 
             // out of all line segments for this candidate, find the closest one

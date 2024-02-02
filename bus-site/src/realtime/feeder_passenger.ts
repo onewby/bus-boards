@@ -12,17 +12,17 @@ import type {PolarDisruptions, Vehicles} from "../api.type";
 import sourceFile from "../routes/api/service/passenger-sources.json" assert {type: 'json'};
 import groupBy from "object.groupby";
 import {Point} from "../leaflet/geometry/index.js"
-import {type DownloadResponse, emptyDownloadResponse, UpdateFeeder} from "./feeder";
+import {type DownloadResponse, UpdateFeeder} from "./feeder";
 import {
     assignVehicles,
     getPoints,
-    getTripCandidates, getTripInfo,
+    getTripCandidates, getTripInfo, mapSQLTripCandidate,
     type TripCandidate,
     type TripCandidateList
 } from "./feeder_util";
-import {merge} from "../routes/api/service/realtime_util";
+import {format_gtfs_time, merge, sqlToLuxon, ZERO_TIME} from "../routes/api/service/realtime_util";
 
-const routeIDQuery = db.prepare("SELECT route_id FROM routes WHERE agency_id=? AND route_short_name=?").pluck()
+const routeIDQuery = db.prepare("SELECT route_id FROM routes WHERE agency_id=? AND upper(route_short_name)=upper(?)").pluck()
 const allRoutesQuery = db.prepare("SELECT UPPER(route_short_name) as route_short_name, route_id, agency_id FROM routes WHERE agency_id=?")
 
 const currentTripsQueryStmt = db.prepare(
@@ -42,7 +42,16 @@ const currentTripsQueryStmt = db.prepare(
                    AND NOT (exception_type IS NOT NULL AND exception_type = 2)
                    AND start.departure_time <= :startTime AND finish.departure_time >= :endTime`
 )
-const currentTripsQuery = (date: DateTime, startTime: string, endTime: string, route: string) => currentTripsQueryStmt.all({date: Number(date.toFormat("yyyyMMdd")), day: date.weekday - 1, startTime, endTime, route}) as TripCandidate[]
+const currentTripsQuery = (date: DateTime, startTime: number, endTime: number, route: string) => {
+    let dateSecs = date.set(ZERO_TIME).toSeconds()
+    return currentTripsQueryStmt.all({
+        date: Number(date.toFormat("yyyyMMdd")),
+        day: date.weekday - 1,
+        startTime,
+        endTime,
+        route
+    }).map(obj => mapSQLTripCandidate(obj, dateSecs))
+}
 
 export async function load_passenger_sources(): Promise<DownloadResponse>  {
     let responses: DownloadResponse[] = (await Promise.allSettled(Object.keys(sourceFile.sources).map(baseURL => get_passenger_source(baseURL as (keyof typeof sourceFile.sources)))))
@@ -103,7 +112,7 @@ async function process_vehicles(vehicles: Vehicles, operators: (keyof typeof sou
                 const updateTime = Date.now() / 1000
 
                 return {
-                    id: lineVehicles[vehicleIndex].properties.vehicle,
+                    id: `${sourceFile.operators[operator].opCode}-${line}-${lineVehicles[vehicleIndex].properties.vehicle}`,
                     alert: undefined,
                     isDeleted: false,
                     tripUpdate: undefined,
@@ -112,7 +121,7 @@ async function process_vehicles(vehicles: Vehicles, operators: (keyof typeof sou
                             tripId: trip.candidate.trip_id,
                             routeId: routeID,
                             directionId: -1,
-                            startTime: trip.departureTimes[0],
+                            startTime: format_gtfs_time(trip.departureTimes[0]),
                             startDate: DateTime.fromFormat(String(trip.candidate.date), "yyyyMMdd").toISODate()!,
                             scheduleRelationship: TripDescriptor_ScheduleRelationship.SCHEDULED
                         },
@@ -124,7 +133,7 @@ async function process_vehicles(vehicles: Vehicles, operators: (keyof typeof sou
                             odometer: -1,
                             speed: -1
                         },
-                        currentStopSequence: Number(trip.candidate.seqs.split(",")[trip.stopIndex]),
+                        currentStopSequence: Number(trip.candidate.seqs[trip.stopIndex]),
                         stopId: trip.route[trip.stopIndex],
                         currentStatus: VehiclePosition_VehicleStopStatus.IN_TRANSIT_TO,
                         timestamp: updateTime,

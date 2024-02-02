@@ -4,7 +4,7 @@ import {db} from "../../../db";
 import {DateTime, Duration} from "luxon";
 import proj4 from "proj4";
 import {intercityOperators} from "../stop/operators";
-import type {ServiceData, ServiceStopData, StopAlert} from "../../../api.type";
+import type {ServiceData, StopsQuery, ServiceStopData, StopAlert, ServiceInfo} from "../../../api.type";
 import {findRealtimeTrip, getAgencyAlerts, getRouteAlerts, getTripAlerts} from "./gtfs-cache";
 import {
     type TranslatedString,
@@ -42,16 +42,20 @@ export const GET: RequestHandler = async ({url}) => {
     const id = url.searchParams.get("id")
     if(id === null) error(400, "ID not provided.");
 
-    const service: any = serviceQuery.get(id)
-    if(service === undefined) error(404, "Service not found.");
-    const stops: ServiceStopData[] = stopsQuery.all(id) as ServiceStopData[]
-    const operator: any = operatorQuery.get(id)
+    const service = serviceQuery.get(id) as {routeID?: string, code: string, dest: string, mss: number} | undefined
+    if(service === undefined) error(404, "Service not found.")
+    const stopObjs = stopsQuery.all(id) as StopsQuery[]
+    const stops: ServiceStopData[] = stopObjs.map(obj => ({
+        ...obj,
+        arr: sqlToLuxon(obj.arr).toISOTime({suppressSeconds: true, suppressMilliseconds: true, includeOffset: false})!,
+        dep: sqlToLuxon(obj.dep).toISOTime({suppressSeconds: true, suppressMilliseconds: true, includeOffset: false})!,
+        status: undefined
+    }))
+    const operator = operatorQuery.get(id) as {id?: string, name: string, url: string}
     const shape = shapeQuery.get(id) as string
 
-    let routeID = service.routeID
-    delete service.routeID
-    let agencyID = operator.id
-    delete operator.id
+    let routeID = service.routeID!
+    let agencyID = operator.id!
 
     // Better coach listings - show root locality name
     if(intercityOperators.includes(operator.name)) {
@@ -102,11 +106,11 @@ export const GET: RequestHandler = async ({url}) => {
 
     let realtime = undefined
     const trip = findRealtimeTrip(id)
-    service.cancelled = false
+    let cancelled = false
     if(trip) {
-        service.cancelled = trip.vehicle?.trip?.scheduleRelationship === TripDescriptor_ScheduleRelationship.CANCELED
+        cancelled = trip.vehicle?.trip?.scheduleRelationship === TripDescriptor_ScheduleRelationship.CANCELED
             || trip.tripUpdate?.trip?.scheduleRelationship === TripDescriptor_ScheduleRelationship.CANCELED
-        if(service.cancelled) {
+        if(cancelled) {
             stops.forEach(stop => stop.status = "Cancelled")
         }
         let currentStop = trip.vehicle?.currentStopSequence
@@ -114,19 +118,15 @@ export const GET: RequestHandler = async ({url}) => {
 
         // Ember (and other better GTFS sources) delay calculation
         if(trip.tripUpdate) {
-            let scheduledTimes = stops.map(stop => {
-                return DateTime.fromFormat(trip.vehicle?.trip?.startDate + stop.dep, "yyyyMMddHH:mm:ss")
+            const date = DateTime.fromFormat(trip.vehicle?.trip?.startDate ?? DateTime.now().toFormat("yyyyMMdd"), "yyyyMMdd", {zone: "GMT"})
+            let scheduledTimes = stopObjs.map(stop => {
+                return date.plus({second: stop.dep})
             })
-            for (let i = 1; i < scheduledTimes.length; i++) {
-                while(scheduledTimes[i - 1] > scheduledTimes[i]) {
-                    scheduledTimes[i] = scheduledTimes[i].plus({days: 1})
-                }
-            }
 
             let actualTimes = stops.map((stop, i) => {
                 let update = trip.tripUpdate!.stopTimeUpdate.find(stu => stop.seq === stu.stopSequence)
                 if(update?.scheduleRelationship === TripUpdate_StopTimeUpdate_ScheduleRelationship.SKIPPED) return undefined
-                return update?.departure || update?.arrival ? DateTime.fromSeconds(update.departure?.time ?? update.arrival!.time) : scheduledTimes[i]
+                return update?.departure || update?.arrival ? DateTime.fromSeconds(update.departure?.time ?? update.arrival!.time, {zone: "GMT"}) : scheduledTimes[i]
             })
             actualTimes.forEach((stop, i) => {
                 if(!stop) {
@@ -159,40 +159,51 @@ export const GET: RequestHandler = async ({url}) => {
                 const posBNG = bngToWGS84.inverse({x: currentPos.longitude, y: currentPos.latitude})
                 const pct = findPctBetween(prevBNG, currBNG, posBNG)
 
-                if(!service.cancelled) {
-                    // Calculate bus delay per stop
-                    let prevStop: ServiceStopData = stops[currentStopIndex - 1]
-                    let currStop: ServiceStopData = stops[currentStopIndex]
+                if(!cancelled) {
+                    const date = DateTime.fromFormat(trip.vehicle?.trip?.startDate ?? DateTime.now().toFormat("yyyy-MM-dd"), "yyyy-MM-dd", {zone: "GMT"})
+                    const scheduledTimes = stopObjs.map(stop => ({
+                        arr: stop.arr ? date.plus({second: stop.arr}) : undefined,
+                        dep: stop.dep ? date.plus({second: stop.dep}) : undefined
+                    }))
 
-                    let prevDep = sqlToLuxon(prevStop.dep)
-                    let currArr = sqlToLuxon(currStop.arr)
+                    // Calculate bus delay per stop
+                    let prevStop = scheduledTimes[currentStopIndex - 1]
+                    let currStop = scheduledTimes[currentStopIndex]
+
+                    let prevDep = prevStop.dep ?? prevStop.arr!
+                    let currArr = currStop.arr ?? currStop.dep!
                     // Get the time that the bus should have been at this position at
                     let expectedTime = prevDep.plus(currArr.diff(prevDep).mapUnits(u => isNaN(pct) ? u : u * pct))
 
                     // Delay = current time - expected time
-                    let delay = DateTime.now().diff(expectedTime)
+                    let delay = DateTime.fromSeconds(trip.vehicle?.timestamp ?? Date.now() / 1000).diff(expectedTime)
 
                     // Apply delay to all stops past the current stop
                     // (don't show 'Departed' if too close to the last stop - may be a GPS error)
                     let includeLastStop = new LatLng(stops[currentStopIndex - 1].lat, stops[currentStopIndex - 1].long).distanceTo({lat: currentPos.latitude, lng: currentPos.longitude}) <= 25 ? 1 : 0
                     stops.slice(0, Math.max(currentStopIndex - includeLastStop, 0)).forEach(stop => stop.status = 'Departed')
-                    let delays = stops.slice(Math.max(currentStopIndex - includeLastStop, 0), stops.length)
-                    for(let stop of delays) {
+                    for (let i = Math.max(currentStopIndex - includeLastStop, 0); i < stops.length; i++) {
                         if(delay.toMillis() >= 1000 * 120 || delay.toMillis() <= -1000 * 60) {
-                            stop.status = "Exp. " + sqlToLuxon(stop.arr ?? stop.dep).plus(delay).toFormat("HH:mm")
+                            let scheduledDep = scheduledTimes[i].dep ?? scheduledTimes[i].arr!
+                            let delayedTime = (scheduledTimes[i].arr ?? scheduledTimes[i].dep!).plus(delay)
+                            if(scheduledDep.minute === delayedTime.minute) {
+                                stops[i].status = "On time"
+                            } else {
+                                stops[i].status = "Exp. " + delayedTime.toFormat("HH:mm")
+                            }
 
                             // Absorb delay in longer layovers
-                            if(stop.arr && stop.dep) {
+                            if(scheduledTimes[i].arr && scheduledTimes[i].dep) {
                                 try {
-                                    delay = delay.minus(sqlToLuxon(stop.dep).diff(sqlToLuxon(stop.arr)))
+                                    delay = delay.minus(scheduledTimes[i].dep!.diff(scheduledTimes[i].arr!))
                                 } catch(e) {}
                                 if(delay.toMillis() < 0) {
                                     delay = Duration.fromMillis(0)
-                                    stop.status = "On time"
+                                    stops[i].status = "On time"
                                 }
                             }
                         } else {
-                            stop.status = "On time"
+                            stops[i].status = "On time"
                         }
                     }
                     // Show current delayed stop in major stops list for context (since previous stops don't show delay, can look on time when delayed)
@@ -221,7 +232,6 @@ export const GET: RequestHandler = async ({url}) => {
         // @ts-ignore
         stop.puo = stop.puo === 1
     })
-    delete service.mss
 
     let alerts: StopAlert[] = [...getTripAlerts(id), ...getRouteAlerts(routeID), ...getAgencyAlerts(agencyID)].map(alert => ({
         header: findBestMatch(alert.headerText),
@@ -229,8 +239,14 @@ export const GET: RequestHandler = async ({url}) => {
         url: findBestMatch(alert.url)
     }))
 
+    const serviceObj: ServiceInfo = {
+        code: service!.code,
+        dest: service!.dest,
+        cancelled
+    }
+
     const data: ServiceData = {
-        "service": service,
+        "service": serviceObj,
         "operator": operator,
         "branches": [{
             "dest": service.dest,

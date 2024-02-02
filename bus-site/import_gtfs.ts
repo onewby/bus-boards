@@ -13,7 +13,6 @@ import JSON5 from "json5";
 import {existsSync, rmSync} from "node:fs";
 import groupBy from "object.groupby";
 import compare from "string-comparison"
-import {minPredicate} from "./src/realtime/feeder_util";
 import {Client} from "basic-ftp";
 import polyline from "google-polyline"
 
@@ -45,10 +44,10 @@ db.exec(tableCreateScript)
 const gtfsTables = ["stop_times", "trips", "calendar_dates", "calendar", "routes", "agency"]
 let addAgency = db.prepare("REPLACE INTO agency (agency_id, agency_name, agency_url, agency_timezone, agency_lang) VALUES (:agency_id, :agency_name, :agency_url, :agency_timezone, :agency_lang)")
 let addRoutes = db.prepare("REPLACE INTO routes (route_id, agency_id, route_short_name, route_long_name, route_type) VALUES (:route_id, :agency_id, :route_short_name, :route_long_name, :route_type)")
-let addCalendar = db.prepare("REPLACE INTO calendar (service_id, start_date, end_date, validity) VALUES (:service_id, :start_date, :end_date, ((:monday & 1) + (:tuesday & 2) + (:wednesday & 4) + (:thursday & 8) + (:friday & 16) + (:saturday & 32) + (:sunday & 64)))")
+let addCalendar = db.prepare("REPLACE INTO calendar (service_id, start_date, end_date, validity) VALUES (:service_id, :start_date, :end_date, (:monday + (:tuesday << 1) + (:wednesday << 2) + (:thursday << 3) + (:friday << 4) + (:saturday << 5) + (:sunday << 6)))")
 let addCalendarDates = db.prepare("REPLACE INTO calendar_dates (service_id, date, exception_type) VALUES (:service_id, :date, :exception_type)")
 let addTrips = db.prepare("REPLACE INTO trips (route_id, service_id, trip_id, trip_headsign, shape_id) VALUES (:route_id, :service_id, :trip_id, :trip_headsign, :shape_id)")
-let addStopTimes = db.prepare("REPLACE INTO stop_times (trip_id, arrival_time, departure_time, stop_id, stop_sequence, timepoint, stop_headsign, pickup_type, drop_off_type) VALUES (:trip_id, :arrival_time, :departure_time, :stop_id, :stop_sequence, :timepoint, NULLIF(:stop_headsign, ''), :pickup_type, :drop_off_type)")
+let addStopTimes = db.prepare("REPLACE INTO stop_times (trip_id, arrival_time, departure_time, stop_id, stop_sequence, timepoint, stop_headsign, pickup_type, drop_off_type) VALUES (:trip_id, substr(:arrival_time, 1, 2)*3600+substr(:arrival_time, 4, 2)*60+substr(:arrival_time, 7, 2), substr(:departure_time, 1, 2)*3600+substr(:departure_time, 4, 2)*60+substr(:departure_time, 7, 2), :stop_id, :stop_sequence, :timepoint, NULLIF(:stop_headsign, ''), :pickup_type, :drop_off_type)")
 let dropAllSource = db.transaction(() => {
     db.pragma('foreign_keys = OFF')
     gtfsTables.forEach(table => db.prepare(`DELETE FROM ${table}`).run())
@@ -112,7 +111,7 @@ async function calculate_joint_hash() {
 }
 
 async function import_zip(zip: CentralDirectory, prefix: string = "") {
-    const prefixable = ["service_id"]
+    const prefixable = ["service_id", "trip_id", "shape_id"]
     let files: [string, Statement, Object?, string[]?][] = [
         ["agency.txt", addAgency],
         ["routes.txt", addRoutes, {"agency_id": "Ember"}],
@@ -127,7 +126,7 @@ async function import_zip(zip: CentralDirectory, prefix: string = "") {
     }
     let shapeFile: File | undefined = zip.files.find(f => f.path === "shapes.txt")
     if(shapeFile) {
-        await import_shapes(shapeFile)
+        await import_shapes(shapeFile, prefix)
     }
     console.log(`Insertions completed in ${(Date.now() - startTime) / 1000} seconds`)
 }
@@ -184,15 +183,15 @@ const storeShapes = db.transaction((shapes: [string, string][]) => {
 })
 
 // Encoded then imported
-async function import_shapes(shapeFile: File) {
+async function import_shapes(shapeFile: File, prefix?: string) {
     let currentShapeID = ""
     let currentShapePoints: [number, number][] = []
     let shapesToWrite: [string, string][] = []
     for await (const row of stream_csv(shapeFile)) {
         if(row.shape_id !== currentShapeID) {
             if(currentShapeID !== "") {
-                shapesToWrite.push([currentShapeID, polyline.encode(currentShapePoints)])
-                if(shapesToWrite.length === 1000) {
+                shapesToWrite.push([prefix ? prefix + currentShapeID : currentShapeID, polyline.encode(currentShapePoints)])
+                if(shapesToWrite.length >= 1000) {
                     storeShapes(shapesToWrite)
                     shapesToWrite = []
                 }
@@ -203,7 +202,7 @@ async function import_shapes(shapeFile: File) {
             currentShapePoints.push([Number(row.shape_pt_lat), Number(row.shape_pt_lon)])
         }
     }
-    shapesToWrite.push([currentShapeID, polyline.encode(currentShapePoints)])
+    shapesToWrite.push([prefix ? prefix + currentShapeID : currentShapeID, polyline.encode(currentShapePoints)])
     storeShapes(shapesToWrite)
 }
 
@@ -314,6 +313,14 @@ function reset_polar() {
     rmSync(".update", {force: true})
 }
 
+function minPredicate<T>(arr: T[], comparator: (i1: T, i2: T) => boolean) {
+    let lowest = 0
+    for(let i = 0; i < arr.length; i++) {
+        if(comparator(arr[i], arr[lowest])) lowest = i
+    }
+    return arr[lowest]
+}
+
 const TRAVELINE_FILE = "gtfs/traveline_noc.zip"
 const TNDS_USERNAME = process.env["TNDS_USERNAME"] ?? ""
 const TNDS_PASSWORD = process.env["TNDS_PASSWORD"] ?? ""
@@ -419,6 +426,12 @@ async function download_noc() {
             insertTraveline.run(record)
         })
     })(finalInfo)
+}
+
+function remove_traveline_ember() {
+    db.exec("DELETE FROM stop_times WHERE trip_id=(SELECT trip_id FROM trips INNER JOIN main.routes r on r.route_id = trips.route_id WHERE r.agency_id='OP965')")
+    db.exec("DELETE FROM trips WHERE trip_id=(SELECT trip_id FROM trips INNER JOIN main.routes r on r.route_id = trips.route_id WHERE r.agency_id='OP965')")
+    db.exec("DELETE FROM routes WHERE agency_id='OP965'")
 }
 
 await import_zips()

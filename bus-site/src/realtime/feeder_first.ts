@@ -12,6 +12,7 @@ import {DateTime} from "luxon";
 import {readFileSync, writeFileSync} from "fs";
 import {existsSync} from "node:fs";
 import {type DownloadResponse, Feeder} from "./feeder";
+import {ZERO_DAY} from "../routes/api/service/realtime_util.ts";
 
 const apiKey = process.env["FIRST_API_KEY"] ?? ""
 
@@ -31,11 +32,11 @@ const tripQueryStmt = db.prepare(
                 INNER JOIN main.stop_times st on (trips.trip_id = st.trip_id AND stop_sequence=min_stop_seq)
                 LEFT OUTER JOIN main.calendar c on c.service_id = trips.service_id
                 LEFT OUTER JOIN main.calendar_dates d on (d.service_id = c.service_id AND d.date=:date)
-            WHERE route_short_name=:route AND agency_id=:op AND st.stop_id=:startStop AND SUBSTR(st.departure_time, 1, 5)=:startTime
+            WHERE route_short_name=:route AND agency_id=:op AND st.stop_id=:startStop AND st.departure_time=:startTime
                 AND ((start_date <= :date AND end_date >= :date AND (validity & (1 << :day)) <> 0) OR exception_type=1)
                     AND NOT (exception_type IS NOT NULL AND exception_type = 2)`
 )
-const tripQuery = (date: DateTime, route: string, op: string, startStop: string, startTime: string) =>
+const tripQuery = (date: DateTime, route: string, op: string, startStop: string, startTime: number) =>
     tripQueryStmt.get({date: Number(date.toFormat("yyyyMMdd")), day: date.weekday - 1, route, op, startStop, startTime}) as {trip_id: string, route_id: string}
 
 let activeWS: WebSocket | undefined = undefined
@@ -141,7 +142,7 @@ async function get_vehicles() {
 
 export async function load_first_vehicles(): Promise<DownloadResponse> {
     let entities = (await get_vehicles()).map(vehicle => {
-        let gtfsTrip = tripQuery(DateTime.fromSQL(vehicle.stops[0].date), vehicle.line_name, operators[vehicle.operator], vehicle.origin_atcocode, vehicle.stops[0].time)
+        let gtfsTrip = tripQuery(DateTime.fromSQL(vehicle.stops[0].date), vehicle.line_name, operators[vehicle.operator], vehicle.origin_atcocode, DateTime.fromFormat(vehicle.stops[0].time, "HH:mm").set(ZERO_DAY).toSeconds())
         if(gtfsTrip === undefined) return undefined
         return {
             id: vehicle.status.vehicle_id,

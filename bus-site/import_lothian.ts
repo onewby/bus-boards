@@ -2,6 +2,7 @@ import type {LothianPatterns, LothianRoutes, LothianTimetables} from "./src/api.
 import {db} from "./src/db";
 import {DateTime} from "luxon";
 import {allRoutesQuery} from "./import_passenger";
+import {relativeTo} from "./src/routes/api/service/realtime_util.ts";
 
 const lothian = 'OP596'
 const lothianCountry = 'OP597'
@@ -9,7 +10,7 @@ const ecb = 'OP598'
 export const lothianOpCodes = [lothian, lothianCountry, ecb]
 
 const routeQueryStmt = db.prepare(
-    `SELECT substr(start.departure_time, 1, 5) as minss, start.stop_id as startStop, substr(finish.departure_time, 1, 5) as maxss, finish.stop_id as finishStop, trips.trip_id
+    `SELECT start.departure_time as minss, start.stop_id as startStop, finish.departure_time as maxss, finish.stop_id as finishStop, trips.trip_id
             FROM trips
                 LEFT OUTER JOIN main.calendar c on trips.service_id = c.service_id
                 LEFT OUTER JOIN main.calendar_dates d on (c.service_id = d.service_id AND d.date=:date)
@@ -20,7 +21,7 @@ const routeQueryStmt = db.prepare(
               AND NOT (exception_type IS NOT NULL AND exception_type = 2)`
 )
 const routeQuery = (date: string, route: string) => routeQueryStmt.all(
-    {date: Number(date), route, day: DateTime.fromFormat(date, "yyyyMMdd").weekday - 1}) as {minss: string, startStop: string, maxss: string, finishStop: string, trip_id: string}[]
+    {date: Number(date), route, day: DateTime.fromFormat(date, "yyyyMMdd").weekday - 1}) as {minss: number, startStop: string, maxss: number, finishStop: string, trip_id: string}[]
 
 const routeInsert = db.prepare("INSERT INTO polar (gtfs, polar) VALUES (?,?)")
 const routeInsertAll = db.transaction((trips: Set<string>, lothianRoute: string) => {
@@ -64,17 +65,22 @@ export async function download_route_data() {
                     const routeTrips = routeQuery(dateString, routeID!)
 
                     for(let trip of timetable.timetable.trips) {
+                        trip.departures = trip.departures.filter(dep => dep.time !== "-")
                         const tripOrigin = trip.departures[0]
                         const tripDest = trip.departures[trip.departures.length - 1]
+                        const originTime = DateTime.fromSeconds(tripOrigin.scheduledFor.unixTime)
+                        const destTime = DateTime.fromSeconds(tripDest.scheduledFor.unixTime)
+                        const originTimeSecs = relativeTo(originTime, originTime)
+                        const destTimeSecs = relativeTo(originTime, destTime)
                         const locatedTrip = routeTrips.find(trip => {
                             return trip.startStop === tripOrigin.stopID && trip.finishStop === tripDest.stopID
-                                && trip.minss === tripOrigin.time && trip.maxss === tripDest.time
+                                && trip.minss === originTimeSecs && trip.maxss === destTimeSecs
                         })
                         if(locatedTrip) allocateds.add(locatedTrip.trip_id)
                     }
                 }))
                 timetablePromises.forEach((result, i) => {
-                    if(result.status === "rejected") console.log(pattern.id, i)
+                    if(result.status === "rejected") console.log(pattern.id, i, result.reason)
                 })
                 routeInsertAll(allocateds, pattern.id)
             }))
