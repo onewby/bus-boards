@@ -118,7 +118,7 @@ async function import_zip(zip: CentralDirectory, prefix: string = "") {
         ["calendar.txt", addCalendar, {}, prefixable],
         ["calendar_dates.txt", addCalendarDates, {}, prefixable],
         ["trips.txt", addTrips, {"trip_headsign": null, "shape_id": null}, prefixable],
-        ["stop_times.txt", addStopTimes, {"stop_headsign": null}]
+        ["stop_times.txt", addStopTimes, {"stop_headsign": null}, prefixable]
     ]
     let startTime = Date.now()
     for(const tuple of files) {
@@ -139,7 +139,7 @@ async function import_txt_file(zip: CentralDirectory, file_name: string, sql: St
 }
 
 async function insertSource(file: File, sql: Statement, defaults: Object = {}, prefixable: string[] = [], prefix="") {
-    let buffer = []
+    let buffer: any[] = []
     let batchInsert = db.transaction((records) => {
         for(const record of records) {
             sql.run(record)
@@ -429,6 +429,7 @@ async function download_noc() {
 }
 
 function remove_traveline_ember() {
+    console.log("Removing Ember TNDS data")
     db.exec("DELETE FROM stop_times WHERE trip_id=(SELECT trip_id FROM trips INNER JOIN main.routes r on r.route_id = trips.route_id WHERE r.agency_id='OP965')")
     db.exec("DELETE FROM trips WHERE trip_id=(SELECT trip_id FROM trips INNER JOIN main.routes r on r.route_id = trips.route_id WHERE r.agency_id='OP965')")
     db.exec("DELETE FROM routes WHERE agency_id='OP965'")
@@ -442,4 +443,5 @@ clean_stops()
 reset_polar()
 patch_display_names()
 await download_noc()
+remove_traveline_ember()
 db.close()
