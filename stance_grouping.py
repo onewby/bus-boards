@@ -144,7 +144,8 @@ manual_renames: List[Tuple[LocalityCode, StopName, StopName]] = [
     ("ES001470", "Stance 8", "Transport Interchange"),
     ("ES000923", "Town Centre Stances", "Town Centre"),
     ("ES000923", "Town Centre stances", "Town Centre"),
-    ("N0077005", "Nelson Street Real Time Tracking", "Nelson Street")
+    ("N0077005", "Nelson Street Real Time Tracking", "Nelson Street"),
+    ("N0078288", "St Partick Square", "St Patrick Square")
 ]
 
 # ATCOCodes for stances that should be marked as arrivals that are not

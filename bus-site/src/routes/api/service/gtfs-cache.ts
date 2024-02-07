@@ -10,6 +10,7 @@ import {load_first_vehicles} from "../../../realtime/feeder_first.ts";
 import {load_coaches} from "../../../realtime/feeder_coaches.ts";
 import {type DownloadResponse, emptyDownloadResponse, type StopAlerts} from "../../../realtime/feeder.ts";
 import {load_Lothian_vehicles} from "../../../realtime/feeder_lothian.ts";
+import {FeedMessageWithAlerts} from "../../../realtime/gtfs_protobuf.ts";
 
 /*
  * Realtime data
@@ -39,7 +40,7 @@ export async function downloadGTFS() {
         if((env.GTFS ?? 'disabled') === 'microservice') {
             const gtfsResp = await fetch(env.GTFS_URL ?? "http://localhost:3948")
             if(!gtfsResp.ok || !gtfsResp.body) return gtfsCache // Fail nicely - provide previous cache
-            gtfsCache = await gtfsResp.json()
+            gtfsCache = FeedMessageWithAlerts.decode(new Uint8Array(await gtfsResp.arrayBuffer()))
         } else if((env.GTFS ?? 'disabled') === 'svelte') {
             await manualDownloadGTFS()
         }

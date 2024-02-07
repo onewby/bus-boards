@@ -103,7 +103,7 @@ export async function load_Lothian_vehicles(): Promise<DownloadResponse> {
                             routeId: pattern.route,
                             directionId: -1,
                             startTime: format_gtfs_time(trip.departureTimes[0]),
-                            startDate: DateTime.fromFormat(String(trip.candidate.date), "yyyyMMdd").toISODate()!,
+                            startDate: String(trip.candidate.date)!,
                             scheduleRelationship: TripDescriptor_ScheduleRelationship.SCHEDULED
                         },
                         vehicle: undefined,

@@ -98,7 +98,7 @@ export async function load_coaches(): Promise<DownloadResponse> {
                         routeId: route.route_id,
                         directionId: -1,
                         startTime: depTime.toSQLTime(),
-                        startDate: depTime.toISODate()!,
+                        startDate: depTime.toISODate({format: "basic"})!,
                         scheduleRelationship: dep.tracking.is_cancelled ? TripDescriptor_ScheduleRelationship.CANCELED : TripDescriptor_ScheduleRelationship.SCHEDULED
                     },
                     vehicle: undefined,

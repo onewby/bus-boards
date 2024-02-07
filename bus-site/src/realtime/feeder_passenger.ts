@@ -122,7 +122,7 @@ async function process_vehicles(vehicles: Vehicles, operators: (keyof typeof sou
                             routeId: routeID,
                             directionId: -1,
                             startTime: format_gtfs_time(trip.departureTimes[0]),
-                            startDate: DateTime.fromFormat(String(trip.candidate.date), "yyyyMMdd").toISODate()!,
+                            startDate: String(trip.candidate.date),
                             scheduleRelationship: TripDescriptor_ScheduleRelationship.SCHEDULED
                         },
                         vehicle: undefined,

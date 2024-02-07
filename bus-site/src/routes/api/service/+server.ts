@@ -160,7 +160,7 @@ export const GET: RequestHandler = async ({url}) => {
                 const pct = findPctBetween(prevBNG, currBNG, posBNG)
 
                 if(!cancelled) {
-                    const date = DateTime.fromFormat(trip.vehicle?.trip?.startDate ?? DateTime.now().toFormat("yyyy-MM-dd"), "yyyy-MM-dd", {zone: "GMT"})
+                    const date = DateTime.fromFormat(trip.vehicle?.trip?.startDate ?? DateTime.now().toFormat("yyyyMMdd"), "yyyyMMdd", {zone: "GMT"})
                     const scheduledTimes = stopObjs.map(stop => ({
                         arr: stop.arr ? date.plus({second: stop.arr}) : undefined,
                         dep: stop.dep ? date.plus({second: stop.dep}) : undefined
