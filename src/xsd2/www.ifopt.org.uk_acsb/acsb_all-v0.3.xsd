@@ -1,0 +1,315 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns="http://www.ifopt.org.uk/acsb"
+            xmlns:ifopt="http://www.ifopt.org.uk/ifopt"
+            targetNamespace="http://www.ifopt.org.uk/acsb"
+            elementFormDefault="qualified"
+            attributeFormDefault="unqualified"
+            version="0.2"
+            id="acsb_all">
+   <xsd:element name="WheelchairAccess" type="AccessibilityStructure" default="false">
+		    <xsd:annotation>
+			      <xsd:documentation>Whether a PLACE / SITE ELEMENT is wheelchair accessible.</xsd:documentation>
+		    </xsd:annotation>
+	  </xsd:element>
+   <xsd:element name="StepFreeAccess" type="AccessibilityStructure" default="unknown">
+		    <xsd:annotation>
+			      <xsd:documentation>Whether a PLACE / SITE ELEMENT has step free access.</xsd:documentation>
+		    </xsd:annotation>
+	  </xsd:element>
+   <xsd:element name="EscalatorFreeAccess" type="AccessibilityStructure" default="unknown">
+		    <xsd:annotation>
+			      <xsd:documentation>Whether a PLACE / SITE ELEMENT has escalator free access.</xsd:documentation>
+		    </xsd:annotation>
+	  </xsd:element>
+   <xsd:element name="LiftFreeAccess" type="AccessibilityStructure" default="unknown">
+		    <xsd:annotation>
+			      <xsd:documentation>Whether a PLACE / SITE ELEMENT has lift free access.</xsd:documentation>
+		    </xsd:annotation>
+	  </xsd:element>
+   <xsd:element name="AudibleSignalsAvailable" type="AccessibilityStructure" default="false">
+		    <xsd:annotation>
+			      <xsd:documentation>Whether a PLACE / SITE ELEMENT is wheelchair accessible.</xsd:documentation>
+		    </xsd:annotation>
+	  </xsd:element>
+   <xsd:element name="VisualSignsAvailable" type="AccessibilityStructure" default="unknown">
+		    <xsd:annotation>
+			      <xsd:documentation>Whether a PLACE / SITE ELEMENT has Visual signals availble for the free access.</xsd:documentation>
+		    </xsd:annotation>
+	  </xsd:element>
+   <xsd:element name="GuideDogAccess" type="AccessibilityStructure" default="unknown">
+		    <xsd:annotation>
+			      <xsd:documentation>Whether a PLACE / SITE ELEMENT allows guide dog access.</xsd:documentation>
+		    </xsd:annotation>
+	  </xsd:element>
+   <xsd:simpleType name="LimitationIdType">
+      <xsd:annotation>
+         <xsd:documentation>Type for identifier of a hazard within a stop place.</xsd:documentation>
+      </xsd:annotation>
+      <xsd:restriction base="xsd:NMTOKEN"/>
+   </xsd:simpleType>
+   <xsd:simpleType name="AccessibilityEnumeration">
+		    <xsd:annotation>
+			      <xsd:documentation>Enumeration of values for an accessibility value.</xsd:documentation>
+		    </xsd:annotation>
+		    <xsd:restriction base="xsd:string">
+			      <xsd:enumeration value="unknown"/>
+			      <xsd:enumeration value="false"/>
+			      <xsd:enumeration value="true"/>
+		    </xsd:restriction>
+	  </xsd:simpleType>
+   <xsd:simpleType name="MobilityEnumeration">
+		    <xsd:annotation>
+			      <xsd:documentation>Identification of mobility USER NEEDs.</xsd:documentation>
+		    </xsd:annotation>
+		    <xsd:restriction base="xsd:NMTOKEN">
+			      <xsd:enumeration value="wheelchair"/>
+			      <xsd:enumeration value="assistedWheelchair"/>
+			      <xsd:enumeration value="motorizedWheelchair"/>
+			      <xsd:enumeration value="walkingFrame"/>
+			      <xsd:enumeration value="restrictedMobility"/>
+			      <xsd:enumeration value="otherMobilityNeed"/>
+		    </xsd:restriction>
+	  </xsd:simpleType>
+   <xsd:simpleType name="PyschosensoryNeedEnumeration">
+		    <xsd:annotation>
+			      <xsd:documentation>Enumeration of specific psychosensory USER NEEDs.</xsd:documentation>
+		    </xsd:annotation>
+		    <xsd:restriction base="xsd:NMTOKEN">
+			      <xsd:enumeration value="visualImpairment"/>
+			      <xsd:enumeration value="auditoryImpairment"/>
+			      <xsd:enumeration value="cognitiveInputImpairment"/>
+			      <xsd:enumeration value="averseToLifts"/>
+			      <xsd:enumeration value="averseToEscalators"/>
+			      <xsd:enumeration value="averseToConfinedSpaces"/>
+			      <xsd:enumeration value="averseToCrowds"/>
+			      <xsd:enumeration value="otherPsychosensoryNeed"/>
+		    </xsd:restriction>
+	  </xsd:simpleType>
+   <xsd:simpleType name="MedicalNeedEnumeration">
+		    <xsd:annotation>
+			      <xsd:documentation>Enumeration of specific Medical USER NEEDs.</xsd:documentation>
+		    </xsd:annotation>
+		    <xsd:restriction base="xsd:NMTOKEN">
+			      <xsd:enumeration value="allergic"/>
+			      <xsd:enumeration value="heartCondition"/>
+			      <xsd:enumeration value="otherMedicalNeed"/>
+		    </xsd:restriction>
+	  </xsd:simpleType>
+   <xsd:simpleType name="EncumbranceEnumeration">
+		    <xsd:annotation>
+			      <xsd:documentation>Enumeration of specific encumbrances USER NEEDs.</xsd:documentation>
+		    </xsd:annotation>
+		    <xsd:restriction base="xsd:NMTOKEN">
+			      <xsd:enumeration value="luggageEncumbered"/>
+			      <xsd:enumeration value="pushchair"/>
+			      <xsd:enumeration value="baggageTrolley"/>
+			      <xsd:enumeration value="oversizeBaggage"/>
+			      <xsd:enumeration value="guideDog"/>
+			      <xsd:enumeration value="otherAnimal"/>
+			      <xsd:enumeration value="otherEncumbrance"/>
+		    </xsd:restriction>
+	  </xsd:simpleType>
+   <xsd:simpleType name="SuitabilityEnumeration">
+		    <xsd:annotation>
+			      <xsd:documentation>Identification of specific SUITABILITY.</xsd:documentation>
+		    </xsd:annotation>
+		    <xsd:restriction base="xsd:NMTOKEN">
+			      <xsd:enumeration value="suitable"/>
+			      <xsd:enumeration value="notSuitable"/>
+		    </xsd:restriction>
+	  </xsd:simpleType>
+   <xsd:complexType name="LimitationRefStructure">
+      <xsd:annotation>
+         <xsd:documentation>Type for reference to an identifier of a hazard within a stop place.</xsd:documentation>
+      </xsd:annotation>
+      <xsd:simpleContent>
+         <xsd:extension base="LimitationIdType"/>
+      </xsd:simpleContent>
+   </xsd:complexType>
+   <xsd:complexType name="AccessibilityLimitationStructure">
+      <xsd:annotation>
+         <xsd:documentation>Type for limitation on navigation.</xsd:documentation>
+      </xsd:annotation>
+      <xsd:sequence>
+         <xsd:element name="LimitationId" type="LimitationIdType" minOccurs="0">
+            <xsd:annotation>
+               <xsd:documentation>Identifier of LIMITATION.</xsd:documentation>
+            </xsd:annotation>
+         </xsd:element>
+         <xsd:element name="ValidityCondition" type="ifopt:ValidityConditionStructure" minOccurs="0">
+            <xsd:annotation>
+               <xsd:documentation>Validty condition governing applicability of LIMITATION.</xsd:documentation>
+            </xsd:annotation>
+         </xsd:element>
+         <xsd:group ref="MobilityLimitationGroup"/>
+         <xsd:group ref="SensoryLimitationGroup"/>
+         <xsd:element ref="ifopt:Extensions" minOccurs="0"/>
+      </xsd:sequence>
+   </xsd:complexType>
+   <xsd:complexType name="AccessibilityAssessmentStructure">
+      <xsd:annotation>
+         <xsd:documentation>Type for Assesment.</xsd:documentation>
+      </xsd:annotation>
+      <xsd:sequence>
+         <xsd:element name="MobilityImpairedAccess" type="xsd:boolean">
+            <xsd:annotation>
+               <xsd:documentation>Summary indication as to whether the component is considered to be accessible or not.</xsd:documentation>
+            </xsd:annotation>
+         </xsd:element>
+         <xsd:element name="Limitations" minOccurs="0">
+            <xsd:annotation>
+               <xsd:documentation>The Limitations that apply to component.</xsd:documentation>
+            </xsd:annotation>
+            <xsd:complexType>
+               <xsd:sequence>
+                  <xsd:element name="AccessibilityLimitation" type="AccessibilityLimitationStructure"
+                               maxOccurs="unbounded">
+                     <xsd:annotation>
+                        <xsd:documentation>The accessibility limitations of a component.</xsd:documentation>
+                     </xsd:annotation>
+                  </xsd:element>
+               </xsd:sequence>
+            </xsd:complexType>
+         </xsd:element>
+         <xsd:element name="Suitabilities" minOccurs="0">
+            <xsd:annotation>
+               <xsd:documentation>The Suitability of the component to meet specifc user needs.</xsd:documentation>
+            </xsd:annotation>
+            <xsd:complexType>
+               <xsd:sequence>
+                  <xsd:element name="Suitability" type="SuitabilityStructure" maxOccurs="unbounded">
+                     <xsd:annotation>
+                        <xsd:documentation>The Suitability of com[onent to meet a specifc user need.</xsd:documentation>
+                     </xsd:annotation>
+                  </xsd:element>
+               </xsd:sequence>
+            </xsd:complexType>
+         </xsd:element>
+         <xsd:element ref="ifopt:Extensions" minOccurs="0"/>
+      </xsd:sequence>
+   </xsd:complexType>
+   <xsd:complexType name="AccessibilityStructure">
+		    <xsd:annotation>
+			      <xsd:documentation>Type for accessibility.</xsd:documentation>
+		    </xsd:annotation>
+		    <xsd:simpleContent>
+			      <xsd:extension base="AccessibilityEnumeration"/>
+		    </xsd:simpleContent>
+	  </xsd:complexType>
+   <xsd:complexType name="PassengerAccessibilityNeedsStructure">
+		    <xsd:annotation>
+			      <xsd:documentation>Type for accessibility needs. Records the requirementrs of a passenger that may affect choice of facilities.</xsd:documentation>
+		    </xsd:annotation>
+		    <xsd:sequence>
+			      <xsd:element name="UserNeed" type="UserNeedStructure" minOccurs="0" maxOccurs="unbounded">
+				        <xsd:annotation>
+					          <xsd:documentation>Specific pyschosensory need that may constrain choice of services and facilities.</xsd:documentation>
+				        </xsd:annotation>
+			      </xsd:element>
+			      <xsd:element name="AccompaniedByCarer" type="xsd:boolean" minOccurs="0">
+				        <xsd:annotation>
+					          <xsd:documentation>Whether the passenger is accompanied by a carer or assistant.</xsd:documentation>
+				        </xsd:annotation>
+			      </xsd:element>
+		    </xsd:sequence>
+	  </xsd:complexType>
+   <xsd:complexType name="UserNeedStructure">
+		    <xsd:annotation>
+			      <xsd:documentation>Type for of a specific need.</xsd:documentation>
+		    </xsd:annotation>
+		    <xsd:sequence>
+			      <xsd:group ref="UserNeedGroup">
+				        <xsd:annotation>
+					          <xsd:documentation>one of the following.</xsd:documentation>
+				        </xsd:annotation>
+			      </xsd:group>
+			      <xsd:element name="Excluded" type="xsd:boolean" minOccurs="0">
+				        <xsd:annotation>
+					          <xsd:documentation>Whether USER NEED is included or excluded. Default is 'included'.</xsd:documentation>
+				        </xsd:annotation>
+			      </xsd:element>
+			      <xsd:element name="NeedRanking" type="xsd:integer" minOccurs="0">
+				        <xsd:annotation>
+					          <xsd:documentation>Relative ranking of USER NEED on a sclae 1-5</xsd:documentation>
+				        </xsd:annotation>
+			      </xsd:element>
+			      <xsd:element name="Extensions" type="xsd:anyType" minOccurs="0">
+				        <xsd:annotation>
+					          <xsd:documentation>Extensions to USETR NEED.</xsd:documentation>
+				        </xsd:annotation>
+			      </xsd:element>
+		    </xsd:sequence>
+	  </xsd:complexType>
+   <xsd:complexType name="SuitabilityStructure">
+		    <xsd:annotation>
+			      <xsd:documentation>Type for of a specific SUITABILITY.</xsd:documentation>
+		    </xsd:annotation>
+		    <xsd:sequence>
+			      <xsd:element name="Suitable" type="SuitabilityEnumeration">
+				        <xsd:annotation>
+					          <xsd:documentation>Whether the Facility is suitable.</xsd:documentation>
+				        </xsd:annotation>
+			      </xsd:element>
+			      <xsd:element name="UserNeed" type="UserNeedStructure">
+				        <xsd:annotation>
+					          <xsd:documentation>USER NEED for which SUITABILITY is specified.</xsd:documentation>
+				        </xsd:annotation>
+			      </xsd:element>
+		    </xsd:sequence>
+	  </xsd:complexType>
+   <xsd:group name="MobilityLimitationGroup">
+		    <xsd:annotation>
+			      <xsd:documentation>Group of mobility LIMITATIONs.</xsd:documentation>
+		    </xsd:annotation>
+		    <xsd:sequence>
+			      <xsd:element ref="WheelchairAccess"/>
+			      <xsd:element ref="StepFreeAccess" minOccurs="0"/>
+			      <xsd:element ref="EscalatorFreeAccess" minOccurs="0"/>
+			      <xsd:element ref="LiftFreeAccess" minOccurs="0"/>
+		    </xsd:sequence>
+	  </xsd:group>
+   <xsd:group name="SensoryLimitationGroup">
+		    <xsd:annotation>
+			      <xsd:documentation>Group of sensory LIMITATIONs.</xsd:documentation>
+		    </xsd:annotation>
+		    <xsd:sequence>
+			      <xsd:element ref="AudibleSignalsAvailable" minOccurs="0">
+				        <xsd:annotation>
+					          <xsd:documentation>Whether a PLACE / SITE ELEMENT has Audible signals for the viusally impaired.</xsd:documentation>
+				        </xsd:annotation>
+			      </xsd:element>
+			      <xsd:element ref="VisualSignsAvailable" minOccurs="0">
+				        <xsd:annotation>
+					          <xsd:documentation>Whether a PLACE / SITE ELEMENT has Visual signals for the hearing impaired.</xsd:documentation>
+				        </xsd:annotation>
+			      </xsd:element>
+		    </xsd:sequence>
+	  </xsd:group>
+   <xsd:group name="UserNeedGroup">
+		    <xsd:choice>
+			      <xsd:element name="MobilityNeed" type="MobilityEnumeration">
+				        <xsd:annotation>
+					          <xsd:documentation>Passenger mobility USER NEED for which SUITABILITY is specified.</xsd:documentation>
+				        </xsd:annotation>
+			      </xsd:element>
+			      <xsd:element name="PsychosensoryNeed" type="PyschosensoryNeedEnumeration">
+				        <xsd:annotation>
+					          <xsd:documentation>Passenger mobility USER NEED for which SUITABILITY is specified.</xsd:documentation>
+				        </xsd:annotation>
+			      </xsd:element>
+			      <xsd:element name="MedicalNeed">
+				        <xsd:annotation>
+					          <xsd:documentation>Passenger medical USER NEED for which SUITABILITY is specified.</xsd:documentation>
+				        </xsd:annotation>
+				        <xsd:simpleType>
+					          <xsd:restriction base="MedicalNeedEnumeration"/>
+				        </xsd:simpleType>
+			      </xsd:element>
+			      <xsd:element name="EncumbranceNeed" type="EncumbranceEnumeration">
+				        <xsd:annotation>
+					          <xsd:documentation>Passenger enceumbrance USER NEED for which SUITABILITY is specified.</xsd:documentation>
+				        </xsd:annotation>
+			      </xsd:element>
+		    </xsd:choice>
+	  </xsd:group>
+</xsd:schema>
