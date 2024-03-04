@@ -39,7 +39,7 @@ const findTripQuery = db.prepare(
                 INNER JOIN main.stop_times sta on (trips.trip_id = sta.trip_id AND sta.stop_sequence=max_stop_seq)
                 LEFT OUTER JOIN main.calendar c on c.service_id = trips.service_id
                 LEFT OUTER JOIN main.calendar_dates d on (d.service_id = c.service_id AND d.date=:date)
-            WHERE route_id=:route AND std.departure_time=:startTime AND sta.departure_time=:endTime
+            WHERE route_id=:route AND +std.departure_time=:startTime AND +sta.departure_time=:endTime
                 AND stdLoc LIKE :depWildcard AND staLoc LIKE :arrWildcard
                 AND ((start_date <= :date AND end_date >= :date AND (validity & (1 << :day)) <> 0) OR exception_type=1)
                     AND NOT (exception_type IS NOT NULL AND exception_type = 2)`

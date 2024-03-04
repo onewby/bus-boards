@@ -41,7 +41,7 @@ const currentTripsQueryStmt = db.prepare(
                  WHERE direction IS NULL AND polar=:pattern
                    AND ((start_date <= :date AND end_date >= :date AND (validity & (1 << :day)) <> 0) OR exception_type=1)
                    AND NOT (exception_type IS NOT NULL AND exception_type = 2)
-                   AND start.departure_time <= :startTime AND finish.departure_time >= :endTime`
+                   AND +start.departure_time <= :startTime AND +finish.departure_time >= :endTime`
 )
 const currentTripsQuery = (date: DateTime, startTime: number, endTime: number, pattern: string) => {
     let dateSecs = date.set(ZERO_TIME).toSeconds()

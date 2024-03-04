@@ -11,6 +11,7 @@ async function run() {
 
     // create vite server
     const server = await createServer({
+        mode: "production",
         optimizeDeps: {
             disabled: true,
         },
