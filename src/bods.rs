@@ -33,9 +33,9 @@ pub async fn bods_listener(tx: Sender<GTFSResponse>, _: Arc<BBConfig>) {
                             }
                         }
                     }
-                    return false;
+                    false
                 })
-                .map(|fe| fe.clone()).collect();
+                .cloned().collect();
             tx.send((BODS, filtered_entities, vec![])).await.unwrap_or_else(|err| eprintln!("{}", err));
         }
         time::sleep(time::Duration::from_secs(60)).await

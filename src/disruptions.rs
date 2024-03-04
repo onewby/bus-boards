@@ -18,7 +18,7 @@ use crate::transit_realtime::{Alert, EntitySelector, TimeRange};
 use crate::transit_realtime::alert::{Cause, Effect};
 
 
-pub async fn disruptions_listener(tx: Sender<GTFSResponse>, config: Arc<BBConfig>, db: Arc<DBPool>) -> () {
+pub async fn disruptions_listener(tx: Sender<GTFSResponse>, config: Arc<BBConfig>, db: Arc<DBPool>) {
     let passenger_alerts_cache = Mutex::new(HashMap::<SourceURL, Vec<Alert>>::new());
     loop {
         let (bods_alerts, lothian_alerts, passenger_alerts) = join!(get_bods_disruptions(&db), get_lothian_disruptions(&db), get_passenger_disruptions(&db, &config, &passenger_alerts_cache));
@@ -63,23 +63,23 @@ async fn get_bods_disruptions(db: &Arc<DBPool>) -> Vec<Alert> {
                 effect_detail: None,
                 header_text: Some(create_translated_string(situation.summary.to_string())),
                 informed_entity: con.affects.networks.affected_network.affected_line.iter().map(|line| {
-                    let route = get_route(&db, line.affected_operator.operator_ref.to_owned(), line.line_ref.as_ref().unwrap_or(&"".to_string()).to_owned());
+                    let route = get_route(db, line.affected_operator.operator_ref.to_owned(), line.line_ref.as_ref().unwrap_or(&"".to_string()).to_owned());
                     EntitySelector { agency_id: None, route_id: route.ok(), route_type: None, trip: None, stop_id: None, direction_id: None }
                 }).chain(
                     compact_op(&con.affects.operators).map(|op| {
-                        let agency = get_agency(&db, op.operator_ref.to_owned());
+                        let agency = get_agency(db, op.operator_ref.to_owned());
                         EntitySelector { agency_id: agency.ok(), route_id: None, route_type: None, trip: None, stop_id: None, direction_id: None }
                     })
                 ).collect(),
                 url: get_infolinks_url(&situation.info_links)
             }
-        }).filter(|alert: &Alert| alert.informed_entity.len() > 0).collect();
+        }).filter(|alert: &Alert| !alert.informed_entity.is_empty()).collect();
         let stop_points: Vec<&AffectedStopPoint> = situation.consequences.consequences.iter().flat_map(
             |con| if let Some(sps) = con.affects.stop_points.as_ref() {
-                sps.stop_points.iter().map(|sp| sp).collect::<Vec<_>>()
+                sps.stop_points.iter().collect::<Vec<_>>()
             } else { vec![] }
         ).collect();
-        if stop_points.len() > 0 {
+        if !stop_points.is_empty() {
             alerts.push(Alert {
                 active_period: time_ranges.clone(),
                 cause: Some(Cause::OtherCause as i32),
@@ -106,7 +106,7 @@ async fn get_bods_disruptions(db: &Arc<DBPool>) -> Vec<Alert> {
                 effect_detail: None
             })
         }
-        return alerts
+        alerts
     }).collect();
     alerts
 }

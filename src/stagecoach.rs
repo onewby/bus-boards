@@ -31,10 +31,10 @@ pub async fn get_region(region: &str, config: &Arc<BBConfig>, db: &Arc<DBPool>) 
                 match resp.json::<StagecoachVehicles>().await {
                     Ok(vehicles) => {
                         return vehicles.services.iter()
-                            .filter(|sc| !(sc.journey_completed && !sc.cancelled))
+                            .filter(|sc| !sc.journey_completed || sc.cancelled)
                             .filter_map(|sc| {
                                 get_stagecoach_trip(
-                                    &db, config.stagecoach.local_operators[&sc.local_operator.to_lowercase()].as_str(),
+                                    db, config.stagecoach.local_operators[&sc.local_operator.to_lowercase()].as_str(),
                                     sc.line_number.as_str(), sc.next_stop_code.as_str(), &sc.origin_std?
                                 ).map(|trip| {
                                     FeedEntity {
@@ -83,7 +83,7 @@ pub async fn get_region(region: &str, config: &Arc<BBConfig>, db: &Arc<DBPool>) 
             eprintln!("Could not fetch Stagecoach data for {region}. {err}");
         }
     }
-    return vec![]
+    vec![]
 }
 
 #[derive(Serialize, Deserialize)]
@@ -202,7 +202,7 @@ fn deserialize_usize<'de, D>(deserializer: D) -> Result<usize, D::Error>
         D: de::Deserializer<'de>,
 {
     let s: &str = de::Deserialize::deserialize(deserializer)?;
-    return usize::from_str(s).map_err(|e| de::Error::custom(format!("String '{}' should be numeric for usize", s)))
+    usize::from_str(s).map_err(|_e| de::Error::custom(format!("String '{}' should be numeric for usize", s)))
 }
 
 fn deserialize_usize_opt<'de, D>(deserializer: D) -> Result<Option<usize>, D::Error>
@@ -210,8 +210,8 @@ fn deserialize_usize_opt<'de, D>(deserializer: D) -> Result<Option<usize>, D::Er
         D: de::Deserializer<'de>,
 {
     let s: &str = de::Deserialize::deserialize(deserializer)?;
-    if s == "" { return Ok(None) }
-    return usize::from_str(s).map(|s| Some(s)).map_err(|e| de::Error::custom(format!("String '{}' should be numeric for usize", s)))
+    if s.is_empty() { return Ok(None) }
+    usize::from_str(s).map(Some).map_err(|_e| de::Error::custom(format!("String '{}' should be numeric for usize", s)))
 }
 
 fn deserialize_f64<'de, D>(deserializer: D) -> Result<f64, D::Error>
@@ -219,7 +219,7 @@ fn deserialize_f64<'de, D>(deserializer: D) -> Result<f64, D::Error>
         D: de::Deserializer<'de>,
 {
     let s: &str = de::Deserialize::deserialize(deserializer)?;
-    return f64::from_str(s).map_err(|e| de::Error::custom(format!("String '{}' should be numeric for f64", s)))
+    f64::from_str(s).map_err(|_e| de::Error::custom(format!("String '{}' should be numeric for f64", s)))
 }
 
 fn deserialize_f64_opt<'de, D>(deserializer: D) -> Result<Option<f64>, D::Error>
@@ -227,8 +227,8 @@ fn deserialize_f64_opt<'de, D>(deserializer: D) -> Result<Option<f64>, D::Error>
         D: de::Deserializer<'de>,
 {
     let s: &str = de::Deserialize::deserialize(deserializer)?;
-    if s == "" { return Ok(None) }
-    return f64::from_str(s).map(|s| Some(s)).map_err(|e| de::Error::custom(format!("String '{}' should be numeric for f64", s)))
+    if s.is_empty() { return Ok(None) }
+    f64::from_str(s).map(Some).map_err(|_e| de::Error::custom(format!("String '{}' should be numeric for f64", s)))
 }
 
 fn deserialize_timestamp_str<'de, D>(deserializer: D) -> Result<DateTime<Utc>, D::Error>
@@ -236,7 +236,7 @@ fn deserialize_timestamp_str<'de, D>(deserializer: D) -> Result<DateTime<Utc>, D
         D: de::Deserializer<'de>,
 {
     let time: usize = deserialize_usize(deserializer)?;
-    return DateTime::from_timestamp_millis(time as i64).ok_or(de::Error::custom("Time not in range"))
+    DateTime::from_timestamp_millis(time as i64).ok_or(de::Error::custom("Time not in range"))
 }
 
 fn deserialize_timestamp_str_opt<'de, D>(deserializer: D) -> Result<Option<DateTime<Utc>>, D::Error>
@@ -244,7 +244,7 @@ fn deserialize_timestamp_str_opt<'de, D>(deserializer: D) -> Result<Option<DateT
         D: de::Deserializer<'de>,
 {
     let s: &str = de::Deserialize::deserialize(deserializer)?;
-    if s == "" { return Ok(None); }
-    let time = usize::from_str(s).map_err(|e| de::Error::custom(format!("String '{}' should be numeric for usize", s)))?;
-    return DateTime::from_timestamp_millis(time as i64).map(|d| Some(d)).ok_or(de::Error::custom("Time not in range"))
+    if s.is_empty() { return Ok(None); }
+    let time = usize::from_str(s).map_err(|_e| de::Error::custom(format!("String '{}' should be numeric for usize", s)))?;
+    DateTime::from_timestamp_millis(time as i64).map(Some).ok_or(de::Error::custom("Time not in range"))
 }

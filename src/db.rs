@@ -38,17 +38,17 @@ pub fn get_string<P: Params>(db: &Arc<DBPool>, query: &str, params: P) -> Result
 }
 
 #[memoize(Ignore: db)]
-pub fn get_agency<'a>(db: &Arc<DBPool>, code: String) -> Result<String, String> {
+pub fn get_agency(db: &Arc<DBPool>, code: String) -> Result<String, String> {
     get_string(db, "SELECT agency_id FROM traveline WHERE code=?", params![code])
 }
 
 #[memoize(Ignore: db)]
-pub fn get_route<'a>(db: &Arc<DBPool>, code: String, route: String) -> Result<String, String> {
+pub fn get_route(db: &Arc<DBPool>, code: String, route: String) -> Result<String, String> {
     get_string(db, "SELECT route_id FROM routes INNER JOIN main.traveline t on routes.agency_id = t.agency_id WHERE code=? AND route_short_name=?", (code, route))
 }
 
 #[memoize(Ignore: db)]
-pub fn get_route_id<'a>(db: &Arc<DBPool>, agency_id: String, route: String) -> Result<String, String> {
+pub fn get_route_id(db: &Arc<DBPool>, agency_id: String, route: String) -> Result<String, String> {
     get_string(db, "SELECT route_id FROM routes WHERE agency_id=? AND upper(route_short_name)=upper(?)", (agency_id, route))
 }
 
@@ -69,9 +69,9 @@ fn trip_query(query: &str, db: &Arc<DBPool>, date: &DateTime<Utc>, start_before:
         Ok(TripCandidate {
             trip_id: row.get("trip_id")?,
             direction: row.get("direction").ok(),
-            route: route_str.split(",").map(|s| s.to_string()).collect(),
-            times: times_str.split(",").map(|s| DateTime::from_timestamp(i64::from_str(s).unwrap() + date_secs, 0).unwrap()).collect(),
-            seqs: seqs_str.split(",").map(|s| u32::from_str(s).unwrap()).collect(),
+            route: route_str.split(',').map(|s| s.to_string()).collect(),
+            times: times_str.split(',').map(|s| DateTime::from_timestamp(i64::from_str(s).unwrap() + date_secs, 0).unwrap()).collect(),
+            seqs: seqs_str.split(',').map(|s| u32::from_str(s).unwrap()).collect(),
             date: row.get("date")?,
         })
     }).unwrap().filter_map(|i| i.ok()).collect()
@@ -124,13 +124,6 @@ pub fn get_line_segments(db: &Arc<DBPool>, route_id: String) -> HashMap<String, 
         .query_map(params![route_id], |result| Ok((result.get("stop_id")?, Point::new(result.get("x")?, result.get("y")?)))).unwrap().filter_map(|v| v.ok()))
 }
 
-#[memoize(Ignore: db)]
-pub fn get_lothian_patterns(db: &Arc<DBPool>) -> HashMap<String, Vec<String>> {
-    get_pool(db).prepare_cached(r#"SELECT * FROM lothian"#).unwrap()
-        .query_map(params![], |row| Ok((row.get("route")?, row.get("pattern")?))).unwrap()
-        .filter_map(|x: Result<(String, String), _>| x.ok()).into_group_map()
-}
-
 #[derive(Clone)]
 pub struct LothianPattern {
     pub(crate) route: String,
@@ -146,7 +139,7 @@ pub fn get_lothian_patterns_tuples(db: &Arc<DBPool>) -> Vec<LothianPattern> {
 #[memoize(Ignore: db)]
 pub fn get_lothian_route(db: &Arc<DBPool>, route: String) -> Option<String> {
     get_pool(db).prepare_cached("SELECT route_id FROM routes WHERE route_short_name=? AND agency_id IN (\"OP596\", \"OP597\", \"OP598\")").unwrap()
-        .query_row(params![route], |row| Ok(row.get("route_id")?)).ok()
+        .query_row(params![route], |row| row.get("route_id")).ok()
 }
 
 #[derive(Clone)]
@@ -195,7 +188,7 @@ pub struct CoachRoute {
 
 pub fn get_coach_routes(db: &Arc<DBPool>, config: &Arc<BBConfig>) -> Vec<CoachRoute> {
     let values = Rc::new(config.coaches.operators.iter().cloned().map(Value::from).collect::<Vec<Value>>());
-    get_pool(&db).prepare("SELECT agency_id, route_id, route_short_name FROM routes WHERE agency_id IN (SELECT value from rarray(?1))").unwrap()
+    get_pool(db).prepare("SELECT agency_id, route_id, route_short_name FROM routes WHERE agency_id IN (SELECT value from rarray(?1))").unwrap()
         .query_map([values], |row| {
             let route_short_name: String = row.get("route_short_name")?;
             Ok(CoachRoute {

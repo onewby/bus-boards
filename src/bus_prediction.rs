@@ -33,10 +33,10 @@ pub fn get_trip_candidates(db: &Arc<DBPool>, specifier: &str, now_date: &DateTim
     }
 }
 
-pub fn get_trip_info<'a>(candidate: &'a TripCandidate, candidate_i: usize, points: &Map<String, Point>, loc: &Point, now: &DateTime<Utc>) -> TripInfo {
+pub fn get_trip_info(candidate: &TripCandidate, candidate_i: usize, points: &Map<String, Point>, loc: &Point, now: &DateTime<Utc>) -> TripInfo {
     let route = &candidate.route;
     let segments: Vec<geo_types::Line<f64>> = (0..route.len()-1).map(|i| {
-        geo_types::Line::new(points.get(&route[i]).map(|p| p.clone()).unwrap_or_default(), points.get(&route[i+1]).map(|p| p.clone()).unwrap_or_default())
+        geo_types::Line::new(points.get(&route[i]).copied().unwrap_or_default(), points.get(&route[i+1]).copied().unwrap_or_default())
     }).collect();
     let closest_segment = segments.iter().map(|s| loc.euclidean_distance(s)).position_min_by(f64_cmp).unwrap_or(0);
 
@@ -46,24 +46,24 @@ pub fn get_trip_info<'a>(candidate: &'a TripCandidate, candidate_i: usize, point
     let to_time = candidate.times[closest_segment + 1];
 
     let current_time = from_time.add(TimeDelta::milliseconds((to_time.signed_duration_since(from_time).num_milliseconds() as f64 * pct) as i64));
-    let diff = now.signed_duration_since(current_time).num_milliseconds().abs() as usize;
+    let diff = now.signed_duration_since(current_time).num_milliseconds().unsigned_abs() as usize;
 
-    return TripInfo {
+    TripInfo {
         candidate: candidate_i,
         diff,
         stop_index: closest_segment + 1
     }
 }
 
-pub fn assign_vehicles(mut closeness: &mut Vec<TripCandidateList>, candidates: &Vec<TripCandidate>) -> HashMap<usize, TripInfo> {
+pub fn assign_vehicles(closeness: &mut Vec<TripCandidateList>, candidates: &[TripCandidate]) -> HashMap<usize, TripInfo> {
     let mut assignments: HashMap<usize, TripInfo> = HashMap::new();
     // Until empty
-    while closeness.len() > 0 {
+    while !closeness.is_empty() {
         // Find closest candidate for each vehicle
         let per_vehicle = closeness.iter().map(|c| FinalTripCandidate {
             vehicle: c.vehicle,
             // Find closest matching remaining trip
-            trip: c.cands.iter().min().unwrap().clone(),
+            trip: *c.cands.iter().min().unwrap(),
         });
 
         // Find closest match of these
@@ -78,7 +78,7 @@ pub fn assign_vehicles(mut closeness: &mut Vec<TripCandidateList>, candidates: &
             v.cands.retain(|c| candidates[c.candidate].trip_id != candidates[lowest.trip.candidate].trip_id)
         });
         // And remove any vehicles without any further hope
-        closeness.retain(|v| v.cands.len() > 0);
+        closeness.retain(|v| !v.cands.is_empty());
     }
     assignments
 }
@@ -110,7 +110,7 @@ impl PartialEq<Self> for TripInfo {
 
 impl PartialOrd<Self> for TripInfo {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        self.diff.partial_cmp(&other.diff)
+        Some(self.cmp(other))
     }
 }
 
@@ -135,7 +135,7 @@ impl PartialEq<Self> for FinalTripCandidate {
 
 impl PartialOrd<Self> for FinalTripCandidate {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        self.trip.partial_cmp(&other.trip)
+        Some(self.cmp(other))
     }
 }
 

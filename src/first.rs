@@ -14,7 +14,7 @@ use reqwest::Client;
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use serde::de::{SeqAccess, Visitor};
 use serde::ser::SerializeSeq;
-use strum_macros::Display;
+
 use tokio::net::TcpStream;
 use tokio::sync::mpsc::Sender;
 use tokio::time;
@@ -31,12 +31,12 @@ use crate::GTFSResponse;
 use crate::transit_realtime::{FeedEntity, Position, TripDescriptor, VehiclePosition};
 use crate::transit_realtime::trip_descriptor::ScheduleRelationship::Scheduled;
 
-const REGIONS_FILE: &'static str = "first-regions.json";
+const REGIONS_FILE: &str = "first-regions.json";
 
 pub async fn first_listener(tx: Sender<GTFSResponse>, config: Arc<BBConfig>, db: Arc<DBPool>) {
     let mut regions: Vec<RPCConfiguration> = if let Ok(regions_file) = File::open(REGIONS_FILE)
         && let Ok(regions) = serde_json::from_reader::<_, Vec<RPCConfigParams>>(BufReader::new(regions_file)) {
-        regions.iter().map(|RPCConfigParams(region)| region.clone()).collect_vec()
+        regions.iter().map(|RPCConfigParams(region)| *region).collect_vec()
     } else {
         println!("Could not find existing FirstBus regions file - creating a default.");
         let regions = config.first.bounds.values().cloned().collect_vec();
@@ -71,8 +71,8 @@ async fn get_vehicles(ws: &mut WSStream, db: &Arc<DBPool>, config: &Arc<BBConfig
         .map(map_to_feed_entity).collect())
 }
 
-async fn get_vehicles_by_regions(ws: &mut WSStream, regions: &Vec<RPCConfiguration>) -> (Vec<RPCConfiguration>, Vec<Member>) {
-    let mut region_queue = regions.clone();
+async fn get_vehicles_by_regions(ws: &mut WSStream, regions: &[RPCConfiguration]) -> (Vec<RPCConfiguration>, Vec<Member>) {
+    let mut region_queue = regions.to_owned();
     let mut final_regions: Vec<RPCConfiguration> = Vec::with_capacity(region_queue.len());
     let mut final_vehicles: Vec<Member> = vec![];
     while let Some(region) = region_queue.pop() {
@@ -155,7 +155,7 @@ async fn send_and_receive(ws: &mut WSStream, region: &RPCConfiguration) -> Optio
             jsonrpc: "2.0".to_string(),
             id: uuid.clone(),
             method: "configuration".to_string(),
-            params: region.clone()
+            params: *region
         }
     ).unwrap();
     ws.send(Message::Text(msg)).await.ok()?;
@@ -247,8 +247,8 @@ async fn initialise_ws_until_success(api_key: &str) -> WSStream {
     }
 }
 
-fn save_regions(regions: &Vec<RPCConfiguration>) {
-    fs::write(REGIONS_FILE, serde_json::to_vec(&regions.iter().map(|r| RPCConfigParams(r.clone())).collect_vec()).unwrap()).unwrap();
+fn save_regions(regions: &[RPCConfiguration]) {
+    fs::write(REGIONS_FILE, serde_json::to_vec(&regions.iter().map(|r| RPCConfigParams(*r)).collect_vec()).unwrap()).unwrap();
 }
 
 struct RPCConfigParams(RPCConfiguration);

@@ -17,7 +17,7 @@ pub struct BBConfig {
 
 impl BBConfig {
     pub fn is_enabled(&self, resp: GTFSResponder) -> bool {
-        return self.listeners.contains(&resp);
+        self.listeners.contains(&resp)
     }
 }
 

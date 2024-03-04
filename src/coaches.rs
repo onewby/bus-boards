@@ -9,7 +9,7 @@ use itertools::Itertools;
 use tokio::sync::mpsc::Sender;
 use tokio::time;
 use regex::Regex;
-use serde::{Deserialize, Deserializer};
+use serde::{Deserialize};
 use crate::config::BBConfig;
 use crate::db::{CoachRoute, DBPool, get_coach_routes, get_coach_trip, get_line_segments};
 use crate::GTFSResponder::{COACHES};
@@ -17,7 +17,7 @@ use crate::GTFSResponse;
 use crate::transit_realtime::{FeedEntity, Position, TripDescriptor, VehiclePosition};
 use crate::transit_realtime::trip_descriptor::ScheduleRelationship::{Canceled, Scheduled};
 use crate::transit_realtime::vehicle_position::VehicleStopStatus::InTransitTo;
-use crate::util::{f64_cmp, get_url, gtfs_date, gtfs_time, relative_to, zero_day};
+use crate::util::{f64_cmp, get_url, gtfs_date, gtfs_time};
 
 pub async fn coaches_listener(tx: Sender<GTFSResponse>, config: Arc<BBConfig>, db: Arc<DBPool>) {
     let api_option = get_api_info().await;
@@ -35,7 +35,7 @@ pub async fn coaches_listener(tx: Sender<GTFSResponse>, config: Arc<BBConfig>, d
         let routes: Vec<FeedEntity> = stream::iter(routes.iter())
             .map(r_map)
             .buffer_unordered(10)
-            .flat_map(|p| stream::iter(p))
+            .flat_map(stream::iter)
             .collect::<Vec<FeedEntity>>().await;
 
         tx.send((COACHES, routes, vec![])).await.unwrap_or_else(|err| eprintln!("{}", err));
@@ -50,13 +50,13 @@ async fn get_routes(db: &Arc<DBPool>, route: CoachRoute, api_url: &str, api_key:
             let points = get_line_segments(db, route.route_id.to_string());
             return vehicles.routes[0].chronological_departures.iter()
                 .filter_map(|dep| {
-                    return if dep.trip.id.ends_with("S") || dep.trip.id.ends_with("E")
+                    return if dep.trip.id.ends_with('S') || dep.trip.id.ends_with('E')
                         || dep.active_vehicle.is_none() || dep.tracking.is_completed {
                         None
                     } else if let Some(trip) = get_coach_trip(db, route.route_id.as_str(), &dep.trip.departure_location_name, &dep.trip.arrival_location_name, &dep.trip.departure_time_unix, &dep.trip.arrival_time_unix)
                         && let Some(vehicle) = &dep.active_vehicle {
                         let index = (0..trip.route.len() - 2).map(|i| {
-                            Line::new(points[&trip.route[i]], points[&trip.route[i+1]]).euclidean_distance(&Point::<f64>::new(vehicle.current_wgs84_longitude_degrees as f64, vehicle.current_wgs84_latitude_degrees as f64))
+                            Line::new(points[&trip.route[i]], points[&trip.route[i+1]]).euclidean_distance(&Point::<f64>::new(vehicle.current_wgs84_longitude_degrees, vehicle.current_wgs84_latitude_degrees))
                         }).position_min_by(f64_cmp).map(|pos| pos + 1).unwrap_or_default();
 
                         Some(FeedEntity {

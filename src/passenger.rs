@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::Arc;
-use chrono::{DateTime, DurationRound, Utc};
+use chrono::{DateTime, Utc};
 use config::Map;
 use futures::{FutureExt, StreamExt};
 use geo_types::Point;
@@ -42,7 +42,7 @@ pub async fn get_source_vehicles((url, operators): (&SourceURL, &Map<OperatorNam
         if vehicles_result.is_ok() {
             let vehicle_features = vehicles_result.unwrap().features;
             return vehicle_features.into_iter().group_by(|v| (v.properties.operator.to_string(), v.properties.line.to_string())).into_iter()
-                .filter(|((operator, line), _)| operators.contains_key(&operator.to_lowercase()))
+                .filter(|((operator, _line), _)| operators.contains_key(&operator.to_lowercase()))
                 .flat_map(|source| process_line_vehicles(db, operators, source.0, source.1))
                 .collect()
         } else {
@@ -52,7 +52,7 @@ pub async fn get_source_vehicles((url, operators): (&SourceURL, &Map<OperatorNam
     vec![]
 }
 
-pub fn process_line_vehicles<'a, 'b, FeatureIterator>(db: &Arc<DBPool>, operators: &Map<OperatorName, PassengerSource>, (operator, line): (String, String), vehicles_iter: FeatureIterator) -> Vec<FeedEntity>
+pub fn process_line_vehicles<FeatureIterator>(db: &Arc<DBPool>, operators: &Map<OperatorName, PassengerSource>, (operator, line): (String, String), vehicles_iter: FeatureIterator) -> Vec<FeedEntity>
     where FeatureIterator: Iterator<Item = VehiclesFeature> {
     let operator_data = operators.get(&operator.to_lowercase()).unwrap();
     let route_id_result = get_route_id(db, operator_data.gtfs.to_owned(), line.to_owned());
@@ -63,19 +63,19 @@ pub fn process_line_vehicles<'a, 'b, FeatureIterator>(db: &Arc<DBPool>, operator
     let vehicles: Vec<VehiclesFeature> = vehicles_iter.collect();
     let candidates = bus_prediction::get_trip_candidates(db, route_id.as_str(), &now_date, passenger_trip_query);
     let points = get_line_segments(db, route_id);
-    let mut closeness: Vec<TripCandidateList> = vehicles.iter().enumerate().map(|(i, vehicle)| gather_direction_candidates(&now_date, &candidates, &points, i, &vehicle)).filter(|v| v.cands.len() > 0).collect();
+    let mut closeness: Vec<TripCandidateList> = vehicles.iter().enumerate().map(|(i, vehicle)| gather_direction_candidates(&now_date, &candidates, &points, i, vehicle)).filter(|v| !v.cands.is_empty()).collect();
     bus_prediction::assign_vehicles(&mut closeness, &candidates).iter().map(|(&i, trip)| to_feed_entity(trip, &vehicles[i], &candidates)).collect()
 }
 
-fn gather_direction_candidates<'a>(now_date: &DateTime<Utc>, candidates: &'a Vec<TripCandidate>, points: &'a Map<String, Point>, i: usize, vehicle: &'a VehiclesFeature) -> TripCandidateList {
+fn gather_direction_candidates<'a>(now_date: &DateTime<Utc>, candidates: &'a [TripCandidate], points: &'a Map<String, Point>, i: usize, vehicle: &'a VehiclesFeature) -> TripCandidateList {
     let direction: u8 = if vehicle.properties.direction == "inbound" { 0 } else { 1 };
     TripCandidateList {
         vehicle: i,
-        cands: candidates.iter().enumerate().filter(|(i, c)| c.direction == Some(direction)).map(|(i, c)| bus_prediction::get_trip_info(c, i, &points, &vehicle.geometry.coordinates, &now_date)).collect(),
+        cands: candidates.iter().enumerate().filter(|(_i, c)| c.direction == Some(direction)).map(|(i, c)| bus_prediction::get_trip_info(c, i, points, &vehicle.geometry.coordinates, now_date)).collect(),
     }
 }
 
-fn to_feed_entity(trip: &TripInfo, vehicle: &VehiclesFeature, candidates: &Vec<TripCandidate>) -> FeedEntity {
+fn to_feed_entity(trip: &TripInfo, vehicle: &VehiclesFeature, candidates: &[TripCandidate]) -> FeedEntity {
     FeedEntity {
         id: format!("{}-{}-{}", vehicle.properties.operator, vehicle.properties.line, vehicle.properties.vehicle),
         is_deleted: None,
@@ -119,14 +119,14 @@ pub async fn get_source_alerts((url, operators): (&SourceURL, &Map<OperatorName,
                 active_period: alert.active_periods.iter().map(|active_period| {
                     TimeRange {
                         start: DateTime::<Utc>::from_str(active_period.start.as_str()).map(|t| t.timestamp() as u64).ok(),
-                        end: active_period.end.as_ref().map(|str| DateTime::<Utc>::from_str(str).ok()).flatten().map(|t| t.timestamp() as u64)
+                        end: active_period.end.as_ref().and_then(|str| DateTime::<Utc>::from_str(str).ok()).map(|t| t.timestamp() as u64)
                     }
                 }).collect(),
                 informed_entity: alert.embedded.line.iter().filter_map(|line| {
                     let operator = &line.embedded.transmodel_operator.name;
                     let agency_id = &operators.get(operator.as_str())?.gtfs;
                     let route = &line.name;
-                    let route_id = get_route_id(&db, agency_id.to_string(), route.to_string()).ok()?;
+                    let route_id = get_route_id(db, agency_id.to_string(), route.to_string()).ok()?;
                     // get GTFS route ID
                     Some(EntitySelector {
                         agency_id: None,

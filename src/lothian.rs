@@ -25,7 +25,7 @@ pub async fn lothian_listener(tx: Sender<GTFSResponse>, _: Arc<BBConfig>, db: Ar
         let entities = stream::iter(all_patterns.iter())
             .map(p_map)
             .buffer_unordered(10)
-            .flat_map(|p| stream::iter(p))
+            .flat_map(stream::iter)
             .collect::<Vec<FeedEntity>>().await;
 
         tx.send((LOTHIAN, entities, vec![])).await.unwrap_or_else(|err| eprintln!("{}", err));
@@ -34,9 +34,9 @@ pub async fn lothian_listener(tx: Sender<GTFSResponse>, _: Arc<BBConfig>, db: Ar
     }
 }
 
-fn to_feed_entity(trip: &TripInfo, vehicle: &LothianVehicle, candidates: &Vec<TripCandidate>) -> FeedEntity {
+fn to_feed_entity(trip: &TripInfo, vehicle: &LothianVehicle, candidates: &[TripCandidate]) -> FeedEntity {
     FeedEntity {
-        id: format!("lothian-{}-{}", vehicle.service_name, vehicle.journey_id.to_string()),
+        id: format!("lothian-{}-{}", vehicle.service_name, vehicle.journey_id),
         is_deleted: None,
         trip_update: None,
         vehicle: Some(VehiclePosition {
@@ -75,14 +75,14 @@ async fn process_pattern(route: String, pattern: String, http: &Client, db: &Arc
         Ok(resp) => {
             return if resp.status().is_success() && let Ok(vehicles) = resp.json::<LothianLiveVehicles>().await {
                 let now_date = Utc::now();
-                let candidates = get_trip_candidates(&db, pattern.as_str(), &now_date, lothian_trip_query);
-                let points = get_line_segments(&db, route.to_string());
+                let candidates = get_trip_candidates(db, pattern.as_str(), &now_date, lothian_trip_query);
+                let points = get_line_segments(db, route.to_string());
                 let mut closeness: Vec<TripCandidateList> = vehicles.vehicles.iter().enumerate().map(|(v_i, v)| {
                     TripCandidateList {
                         vehicle: v_i,
                         cands: candidates.iter().enumerate().map(|(c_i, c)| get_trip_info(c, c_i, &points, &Point::new(v.longitude, v.latitude), &now_date)).collect(),
                     }
-                }).filter(|v| v.cands.len() > 0).collect();
+                }).filter(|v| !v.cands.is_empty()).collect();
                 assign_vehicles(&mut closeness, &candidates).iter().map(|(&i, trip)| to_feed_entity(trip, &vehicles.vehicles[i], &candidates)).collect()
             } else {
                 vec![]
@@ -103,13 +103,13 @@ pub async fn get_lothian_disruptions(db: &Arc<DBPool>) -> Vec<Alert> {
                 active_period: event.time_ranges.iter().map(|time_range| {
                     TimeRange {
                         start: DateTime::<Utc>::from_str(time_range.start.as_str()).map(|t| t.timestamp() as u64).ok(),
-                        end: time_range.finish.as_ref().map(|str| DateTime::<Utc>::from_str(str).ok()).flatten().map(|t| t.timestamp() as u64)
+                        end: time_range.finish.as_ref().and_then(|str| DateTime::<Utc>::from_str(str).ok()).map(|t| t.timestamp() as u64)
                     }
                 }).collect(),
                 informed_entity: event.routes_affected.iter().map(|route| {
                     EntitySelector {
                         agency_id: None,
-                        route_id: get_lothian_route(&db, route.name.to_string()),
+                        route_id: get_lothian_route(db, route.name.to_string()),
                         route_type: None,
                         trip: None,
                         stop_id: None,

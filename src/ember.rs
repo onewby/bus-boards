@@ -18,7 +18,7 @@ pub async fn ember_listener(tx: Sender<GTFSResponse>, _: Arc<BBConfig>) {
             }
         }
 
-        let mut entities: Vec<FeedEntity> = gtfs_rt.entity.iter().map(|e| e.clone()).map(|old_entity| {
+        let mut entities: Vec<FeedEntity> = gtfs_rt.entity.iter().cloned().map(|old_entity| {
             return FeedEntity {
                 vehicle: old_entity.vehicle.map(|v| {
                     VehiclePosition {
@@ -40,7 +40,7 @@ pub async fn ember_listener(tx: Sender<GTFSResponse>, _: Arc<BBConfig>) {
                 }),
                 alert: old_entity.alert.map(|alert| {
                     Alert {
-                        informed_entity: alert.informed_entity.iter().map(|e| e.clone()).map(|e| {
+                        informed_entity: alert.informed_entity.iter().cloned().map(|e| {
                             EntitySelector {
                                 trip: e.trip.map(|trip| {
                                     TripDescriptor {
@@ -62,7 +62,7 @@ pub async fn ember_listener(tx: Sender<GTFSResponse>, _: Arc<BBConfig>) {
 
         let (tus, mut vehicles): (Vec<FeedEntity>, Vec<FeedEntity>) = entities.iter_mut().map(|e| e.clone()).partition(|e| e.trip_update.is_some() && e.vehicle.is_none());
         vehicles.iter_mut().filter(|e| e.trip_update.is_none()).for_each(|trip| {
-            if let Some(vehicleless) = tus.iter().find(|vehicleless| trip.vehicle.as_ref().and_then(|vp| vp.trip.as_ref()).and_then(|trip| trip.trip_id.as_ref()).as_deref() == vehicleless.trip_update.as_ref().and_then(|tu| tu.trip.trip_id.as_ref()).as_deref()) {
+            if let Some(vehicleless) = tus.iter().find(|vehicleless| trip.vehicle.as_ref().and_then(|vp| vp.trip.as_ref()).and_then(|trip| trip.trip_id.as_ref()) == vehicleless.trip_update.as_ref().and_then(|tu| tu.trip.trip_id.as_ref())) {
                 trip.trip_update = vehicleless.trip_update.clone();
             }
         });

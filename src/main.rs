@@ -124,7 +124,7 @@ fn spawn_listener<Fut: Future + Send + 'static>(config: &Arc<BBConfig>, listener
     }
 }
 
-fn spawn_listener_db<'a, Fut: Future + Send + 'static>(config: &Arc<BBConfig>, listener_type: GTFSResponder, tx: &Sender<GTFSResponse>, db: &Arc<DBPool>, listener: fn(Sender<GTFSResponse>, Arc<BBConfig>, db: Arc<DBPool>) -> Fut) {
+fn spawn_listener_db<Fut: Future + Send + 'static>(config: &Arc<BBConfig>, listener_type: GTFSResponder, tx: &Sender<GTFSResponse>, db: &Arc<DBPool>, listener: fn(Sender<GTFSResponse>, Arc<BBConfig>, db: Arc<DBPool>) -> Fut) {
     if config.is_enabled(listener_type) {
         let sender = tx.clone();
         let cfg = Arc::clone(config);
