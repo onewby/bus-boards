@@ -68,8 +68,8 @@ export async function load_coaches(): Promise<DownloadResponse> {
             if(dep.trip.id.endsWith("S") || dep.trip.id.endsWith("E")) return undefined // positioning move
             if(dep.active_vehicle === null || dep.tracking.is_completed) return undefined
 
-            const depTime = DateTime.fromSeconds(dep.trip.departure_time_unix, {zone: "GMT"})
-            const arrTime = DateTime.fromSeconds(dep.trip.arrival_time_unix, {zone: "GMT"})
+            const depTime = DateTime.fromSeconds(dep.trip.departure_time_unix, {zone: "Europe/London"})
+            const arrTime = DateTime.fromSeconds(dep.trip.arrival_time_unix, {zone: "Europe/London"})
 
             const trip = findTrip(depTime, route.route_id, relativeTo(depTime, depTime), relativeTo(depTime, arrTime), dep.trip.departure_location_name, dep.trip.arrival_location_name)
             if(trip === undefined) return undefined

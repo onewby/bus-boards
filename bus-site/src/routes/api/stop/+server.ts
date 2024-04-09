@@ -44,7 +44,7 @@ export const GET: RequestHandler = async ({url}) => {
     if(locality == null || name == "") error(400, "Invalid query provided.");
 
     let date = url.searchParams.get("date")
-    if(date == null || date == "") date = DateTime.now().set({second: 0, millisecond: 0}).toISO()!
+    if(date == null || date == "") date = DateTime.now().set({second: 0, millisecond: 0}).toISO({includeOffset: false})!
 
     let filterLoc = url.searchParams.get("filterLoc")
     let filterName = url.searchParams.get("filterName")
@@ -206,7 +206,7 @@ const mapWithTimestamp = (date: DateTime) => {
         let _timestamp = DateTime.fromSeconds(zeroDate + dep.departure_time)
         return {
             ...dep,
-            departure_time: _timestamp.toFormat("HH:mm"),
+            departure_time: _timestamp.setZone("GMT").toFormat("HH:mm"),
             _timestamp,
             type: "bus",
             colour: "#777"

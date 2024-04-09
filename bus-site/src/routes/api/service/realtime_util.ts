@@ -40,7 +40,7 @@ export const ZERO_TIME: DateObjectUnits = {hour: 0, minute: 0, second: 0, millis
 export const FULL_TIME: DateObjectUnits = {hour: 23, minute: 59, second: 59, millisecond: 999}
 
 export function sqlToLuxon(time: number) {
-    return DateTime.fromSeconds(time, {zone: "GMT"})
+    return DateTime.fromSeconds(time, {zone: "Europe/London"})
 }
 
 export function relativeTo(date: DateTime, time: DateTime) {

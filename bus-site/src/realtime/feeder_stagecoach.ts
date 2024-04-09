@@ -144,7 +144,7 @@ function json_reviver(this: any, key: string, value: string) {
         case "ex":
         case "af":
         case "ef":
-            return DateTime.fromSeconds(Number(value) / 1000, {zone: "GMT"})
+            return DateTime.fromSeconds(Number(value) / 1000, {zone: "Europe/London"})
         case "cd":
         case "jc":
             return value === "True"
@@ -170,7 +170,7 @@ async function load_stagecoach_data(operator: typeof SC_OPERATORS[number]): Prom
         let timeWithoutMins = sc[ORIGIN_STD].set({second: 0, millisecond: 0})
         // Locate trip ID from origin std and stop
         const stop: TripStop | undefined = findStop.get({date: Number(timeWithoutMins.toISODate({format: 'basic'})), day: timeWithoutMins.weekday - 1},
-            SC_LOCAL_OPERATORS[sc[LOCAL_OPERATOR]], sc[ROUTE_NUMBER], sc[NEXT_STOP_CODE], timeWithoutMins.set(ZERO_DAY).toSeconds()) as TripStop | undefined
+            SC_LOCAL_OPERATORS[sc[LOCAL_OPERATOR]], sc[ROUTE_NUMBER], sc[NEXT_STOP_CODE], timeWithoutMins.set(ZERO_DAY).toSeconds() + timeWithoutMins.offset * 60) as TripStop | undefined
         if(!stop) return null
         // Locate current stop from next std and stop
         return {

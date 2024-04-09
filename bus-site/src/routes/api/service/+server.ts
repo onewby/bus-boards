@@ -47,8 +47,8 @@ export const GET: RequestHandler = async ({url}) => {
     const stopObjs = stopsQuery.all(id) as StopsQuery[]
     const stops: ServiceStopData[] = stopObjs.map(obj => ({
         ...obj,
-        arr: sqlToLuxon(obj.arr).toISOTime({suppressSeconds: true, suppressMilliseconds: true, includeOffset: false})!,
-        dep: sqlToLuxon(obj.dep).toISOTime({suppressSeconds: true, suppressMilliseconds: true, includeOffset: false})!,
+        arr: sqlToLuxon(obj.arr).setZone("GMT").toISOTime({suppressSeconds: true, suppressMilliseconds: true, includeOffset: false})!,
+        dep: sqlToLuxon(obj.dep).setZone("GMT").toISOTime({suppressSeconds: true, suppressMilliseconds: true, includeOffset: false})!,
         status: undefined
     }))
     const operator = operatorQuery.get(id) as {id?: string, name: string, url: string}
@@ -118,7 +118,7 @@ export const GET: RequestHandler = async ({url}) => {
 
         // Ember (and other better GTFS sources) delay calculation
         if(trip.tripUpdate) {
-            const date = DateTime.fromFormat(trip.vehicle?.trip?.startDate ?? DateTime.now().toFormat("yyyyMMdd"), "yyyyMMdd", {zone: "GMT"})
+            const date = DateTime.fromFormat(trip.vehicle?.trip?.startDate ?? DateTime.now().toFormat("yyyyMMdd"), "yyyyMMdd", {zone: "Europe/London"})
             let scheduledTimes = stopObjs.map(stop => {
                 return date.plus({second: stop.dep})
             })
@@ -126,7 +126,7 @@ export const GET: RequestHandler = async ({url}) => {
             let actualTimes = stops.map((stop, i) => {
                 let update = trip.tripUpdate!.stopTimeUpdate.find(stu => stop.seq === stu.stopSequence)
                 if(update?.scheduleRelationship === TripUpdate_StopTimeUpdate_ScheduleRelationship.SKIPPED) return undefined
-                return update?.departure || update?.arrival ? DateTime.fromSeconds(update.departure?.time ?? update.arrival!.time, {zone: "GMT"}) : scheduledTimes[i]
+                return update?.departure || update?.arrival ? DateTime.fromSeconds(update.departure?.time ?? update.arrival!.time, {zone: "Europe/London"}) : scheduledTimes[i]
             })
             actualTimes.forEach((stop, i) => {
                 if(!stop) {
@@ -160,7 +160,7 @@ export const GET: RequestHandler = async ({url}) => {
                 const pct = findPctBetween(prevBNG, currBNG, posBNG)
 
                 if(!cancelled) {
-                    const date = DateTime.fromFormat(trip.vehicle?.trip?.startDate ?? DateTime.now().toFormat("yyyyMMdd"), "yyyyMMdd", {zone: "GMT"})
+                    const date = DateTime.fromFormat(trip.vehicle?.trip?.startDate ?? DateTime.now().toFormat("yyyyMMdd"), "yyyyMMdd", {zone: "Europe/London"})
                     const scheduledTimes = stopObjs.map(stop => ({
                         arr: stop.arr ? date.plus({second: stop.arr}) : undefined,
                         dep: stop.dep ? date.plus({second: stop.dep}) : undefined
