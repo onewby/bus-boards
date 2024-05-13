@@ -1,11 +1,12 @@
 use std::cmp::Ordering;
-use std::fmt;
+use std::{fmt, fs};
 use std::fmt::{Display, Formatter};
 use std::future::Future;
 use std::marker::PhantomData;
 use chrono::{DateTime, DurationRound, TimeDelta, Utc};
 use std::time::Duration;
 use std::ops::Sub;
+use std::str::FromStr;
 use geo_types::{CoordNum, Point};
 use reqwest::{IntoUrl, StatusCode};
 use serde::de;
@@ -92,4 +93,13 @@ pub fn deserialize_point_array<'de, D>(deserializer: D) -> Result<Point<f64>, D:
         D: de::Deserializer<'de>,
 {
     deserializer.deserialize_seq(PointVisitor::<f64>::new())
+}
+
+pub fn load_last_update(file: &str) -> DateTime<Utc> {
+    fs::read_to_string(file).ok().and_then(|s| DateTime::<Utc>::from_str(s.as_str()).ok())
+        .unwrap_or(DateTime::from_timestamp_millis(0).unwrap())
+}
+
+pub fn save_last_update(file: &str, time: &DateTime<Utc>) {
+    fs::write(file, time.to_string()).expect("Could not write last update time to file!");
 }

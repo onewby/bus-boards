@@ -13,6 +13,7 @@ use rusqlite::{named_params, Params, params};
 use rusqlite::types::Value;
 use crate::bus_prediction::TripCandidate;
 use crate::config::BBConfig;
+use crate::passenger::PassengerDirectionInfo;
 use crate::util::{gtfs_date, relative_to, zero_day};
 
 pub type DBPool = Pool<SqliteConnectionManager>;
@@ -125,15 +126,15 @@ pub fn get_line_segments(db: &Arc<DBPool>, route_id: String) -> HashMap<String, 
 }
 
 #[derive(Clone)]
-pub struct LothianPattern {
+pub struct LothianDBPattern {
     pub(crate) route: String,
     pub(crate) pattern: String
 }
 
-pub fn get_lothian_patterns_tuples(db: &Arc<DBPool>) -> Vec<LothianPattern> {
+pub fn get_lothian_patterns_tuples(db: &Arc<DBPool>) -> Vec<LothianDBPattern> {
     get_pool(db).prepare_cached(r#"SELECT * FROM lothian"#).unwrap()
-        .query_map(params![], |row| Ok(LothianPattern {route: row.get("route")?, pattern: row.get("pattern")? })).unwrap()
-        .filter_map(|x: Result<LothianPattern, _>| x.ok()).collect()
+        .query_map(params![], |row| Ok(LothianDBPattern {route: row.get("route")?, pattern: row.get("pattern")? })).unwrap()
+        .filter_map(|x: Result<LothianDBPattern, _>| x.ok()).collect()
 }
 
 #[memoize(Ignore: db)]
@@ -270,4 +271,108 @@ pub fn get_first_trip(db: &Arc<DBPool>, route: &str, agency_id: &str, start_stop
             row.get("trip_id")
         }
     ).ok()
+}
+
+pub fn reset_lothian(db: &Arc<DBPool>) {
+    get_pool(db).execute("DELETE FROM polar WHERE direction IS NULL", params![]).unwrap();
+}
+
+pub type RouteID = String;
+pub type RouteName = String;
+pub fn get_operator_routes(db: &Arc<DBPool>, agency_id: &str) -> Vec<(RouteID, RouteName)> {
+    get_pool(db).prepare_cached("SELECT route_id,route_short_name FROM routes WHERE agency_id=?").unwrap()
+        .query_map(params![agency_id], |row| Ok((row.get("route_id")?, row.get("route_short_name")?)))
+        .unwrap().filter_map(|c| c.ok()).collect_vec()
+}
+
+pub struct LothianGTFSTrip {
+    pub min_stop_time: i64,
+    pub max_stop_time: i64,
+    pub origin_stop: String,
+    pub dest_stop: String,
+    pub trip_id: String
+}
+
+pub fn get_lothian_timetabled_trips(db: &Arc<DBPool>, date: &DateTime<Utc>, route_id: &str) -> Vec<LothianGTFSTrip> {
+    get_pool(db).prepare_cached(
+        r#"SELECT start.departure_time as minss, start.stop_id as startStop, finish.departure_time as maxss, finish.stop_id as finishStop, trips.trip_id
+            FROM trips
+                LEFT OUTER JOIN main.calendar c on trips.service_id = c.service_id
+                LEFT OUTER JOIN main.calendar_dates d on (c.service_id = d.service_id AND d.date=:date)
+                INNER JOIN main.stop_times start on (start.trip_id=trips.trip_id AND start.stop_sequence=trips.min_stop_seq)
+                INNER JOIN main.stop_times finish on (finish.trip_id=trips.trip_id AND finish.stop_sequence=trips.max_stop_seq)
+            WHERE route_id=:route
+              AND ((start_date <= :date AND end_date >= :date AND (validity & (1 << :day)) <> 0) OR exception_type=1)
+              AND NOT (exception_type IS NOT NULL AND exception_type = 2)"#).unwrap()
+        .query_map(named_params![
+            ":route": route_id,
+            ":date": gtfs_date(date),
+            ":day": date.weekday().num_days_from_monday()
+        ], |row| {
+            Ok(LothianGTFSTrip {
+                min_stop_time: row.get("minss")?,
+                max_stop_time: row.get("maxss")?,
+                origin_stop: row.get("startStop")?,
+                dest_stop: row.get("finishStop")?,
+                trip_id: row.get("trip_id")?,
+            })
+        }).unwrap().filter_map(|t| t.ok()).collect_vec()
+}
+
+pub fn save_lothian_pattern_allocations(db: &Arc<DBPool>, pattern: &str, trip_ids: &[String]) -> Result<(), rusqlite::Error> {
+    let mut db = get_pool(db);
+    let tx = db.transaction()?;
+    {
+        let mut stmt= tx.prepare_cached("INSERT INTO polar (gtfs, polar) VALUES (?,?)")?;
+        for trip_id in trip_ids {
+            stmt.execute(params![trip_id, pattern])?;
+        }
+    }
+    tx.commit()
+}
+
+pub fn reset_passenger(db: &Arc<DBPool>) {
+    get_pool(db).execute("DELETE FROM polar WHERE direction IS NOT NULL", params![]).unwrap();
+}
+
+pub struct PassengerRouteTrip {
+    pub min_stop_time: i64,
+    pub max_stop_time: i64,
+    pub trip_id: String
+}
+
+pub fn get_passenger_route_trips(db: &Arc<DBPool>, date: &DateTime<Utc>, route_id: &str) -> Vec<PassengerRouteTrip> {
+    get_pool(db).prepare_cached(
+        r#"SELECT start.departure_time as minss, finish.departure_time as maxss, trips.trip_id
+            FROM trips
+                LEFT OUTER JOIN main.calendar c on trips.service_id = c.service_id
+                LEFT OUTER JOIN main.calendar_dates d on (c.service_id = d.service_id AND d.date=:date)
+                INNER JOIN main.stop_times start on (start.trip_id=trips.trip_id AND start.stop_sequence=trips.min_stop_seq)
+                INNER JOIN main.stop_times finish on (finish.trip_id=trips.trip_id AND finish.stop_sequence=trips.max_stop_seq)
+            WHERE route_id=:route
+              AND ((start_date <= :date AND end_date >= :date AND (validity & (1 << :day)) <> 0) OR exception_type=1)
+              AND NOT (exception_type IS NOT NULL AND exception_type = 2)"#).unwrap()
+        .query_map(named_params! {
+            ":route": route_id,
+            ":date": gtfs_date(date),
+            ":day": date.weekday().num_days_from_monday()
+        }, |row| {
+            Ok(PassengerRouteTrip {
+                min_stop_time: row.get("minss")?,
+                max_stop_time: row.get("maxss")?,
+                trip_id: row.get("trip_id")?
+            })
+        }).unwrap().filter_map(|t| t.ok()).collect_vec()
+}
+
+pub fn save_passenger_trip_allocations(db: &Arc<DBPool>, trips: &Vec<PassengerDirectionInfo>) -> Result<(), rusqlite::Error> {
+    let mut db = get_pool(db);
+    let tx = db.transaction()?;
+    {
+        let mut stmt= tx.prepare_cached("INSERT INTO polar (gtfs, polar, direction) VALUES (?,?,?)")?;
+        for trip in trips {
+            stmt.execute(params![trip.gtfs, trip.polar, trip.direction])?;
+        }
+    }
+    tx.commit()
 }

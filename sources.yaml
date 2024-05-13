@@ -51,3 +51,8 @@ first:
   bounds:
     FGLA: [55.7329, -4.7626, 56.0203, -3.8404]
     FABD: [57.0891, -2.2834, 57.2250, -2.0376]
+lothian:
+  operators:
+      lothian: OP596
+      country: OP597
+      ecb: OP598

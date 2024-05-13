@@ -9,10 +9,18 @@ pub type OperatorName = String;
 #[derive(Serialize, Deserialize, Default)]
 pub struct BBConfig {
     pub listeners: Vec<GTFSResponder>,
+    pub update_interval_days: u8,
     pub passenger: Map<SourceURL, Map<OperatorName, PassengerSource>>,
     pub stagecoach: StagecoachConfig,
     pub coaches: CoachesConfig,
-    pub first: FirstConfig
+    pub first: FirstConfig,
+    pub lothian: LothianConfig
+}
+
+#[derive(Serialize, Deserialize, Default)]
+pub struct LastUpdates {
+    pub lothian: u8,
+    pub passenger: u8
 }
 
 impl BBConfig {
@@ -37,6 +45,11 @@ pub struct StagecoachConfig {
 pub struct CoachesConfig {
     pub operators: Vec<String>,
     pub route_overrides: Map<String, String>
+}
+
+#[derive(Serialize, Deserialize, Default)]
+pub struct LothianConfig {
+    pub operators: Map<String, String>
 }
 
 #[derive(Serialize, Deserialize, Default)]

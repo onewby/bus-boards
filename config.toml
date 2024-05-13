@@ -8,3 +8,5 @@ listeners = [
     "COACHES",
     "FIRST"
 ]
+
+update_interval_days = 14

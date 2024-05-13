@@ -1,23 +1,28 @@
+use std::array::IntoIter;
 use std::collections::HashMap;
+use std::future::Future;
+use std::ops::{Add, Index};
 use std::str::FromStr;
 use std::sync::Arc;
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, DurationRound, TimeDelta, Utc};
 use config::Map;
-use futures::{FutureExt, StreamExt};
+use futures::{FutureExt, stream, StreamExt};
+use futures::future::join_all;
+use futures::stream::{Iter, Then};
 use geo_types::Point;
 use itertools::{Itertools};
 use tokio::sync::mpsc::Sender;
 use tokio::sync::{Mutex};
 use tokio::{time};
-use tokio_stream::{self as stream};
 use crate::config::{BBConfig, OperatorName, PassengerSource, SourceURL};
-use crate::db::{DBPool, get_line_segments, get_route_id, passenger_trip_query};
+use crate::db::{DBPool, get_line_segments, get_lothian_route, get_operator_routes, get_passenger_route_trips, get_route_id, passenger_trip_query, PassengerRouteTrip, RouteID, RouteName, save_passenger_trip_allocations};
 use crate::GTFSResponder::PASSENGER;
 use crate::{bus_prediction, GTFSResponse};
 use crate::bus_prediction::{TripCandidate, TripCandidateList, TripInfo};
 use crate::siri::create_translated_string;
 use crate::transit_realtime::{Alert, EntitySelector, FeedEntity, Position, TimeRange, TripDescriptor, VehiclePosition};
 use crate::transit_realtime::vehicle_position::VehicleStopStatus;
+use crate::util::{get_url, relative_to, URLParseError};
 
 pub async fn passenger_listener(tx: Sender<GTFSResponse>, config: Arc<BBConfig>, db: Arc<DBPool>) {
     loop {
@@ -154,6 +159,102 @@ pub async fn get_source_alerts((url, operators): (&SourceURL, &Map<OperatorName,
         alerts_cache.lock().await.insert(url.to_owned(), alerts);
     }
     alerts_cache.lock().await.get(url).unwrap_or(&vec![]).clone()
+}
+
+pub async fn update_passenger_data(db: &Arc<DBPool>, config: &Arc<BBConfig>) {
+    join_all(config.passenger.iter()
+        .map(|source| update_operator(db, config, source))).await;
+}
+
+pub async fn update_operator(db: &Arc<DBPool>, config: &Arc<BBConfig>, (source_url, operators): (&SourceURL, &Map<OperatorName, PassengerSource>)) {
+    match get_url::<PassengerLines, _, _>(format!("{source_url}/network/lines"), reqwest::Response::json).await {
+        Ok(lines) => {
+            for (op_name, op_source) in operators {
+                let routes = get_operator_routes(db, op_source.gtfs.as_str());
+                let results = stream::iter(routes.iter().filter_map(|route| match_line(&lines, op_name, op_source, &route)))
+                    .then(|route| get_days_info(db, source_url, op_source, route))
+                    .flat_map(|v| stream::iter(v))
+                    .collect::<Vec<PassengerDirectionInfo>>().await;
+                save_passenger_trip_allocations(&db, &results).expect(&format!("Could not save allocations for {op_name}."));
+            }
+        }
+        Err(err) => { eprintln!("Could not get line data for {source_url}: {err}.") }
+    }
+}
+
+pub struct RouteInfo {
+    pub gtfs_id: String,
+    pub gtfs_name: String,
+    pub online_name: String
+}
+
+fn match_line(lines: &PassengerLines, op_name: &str, op_source: &PassengerSource, (route_id, route_name): &(RouteID, RouteName)) -> Option<RouteInfo> {
+    if let Some(line) = lines.embedded.line.iter().find(|l| l.name.to_lowercase() == route_name.to_lowercase()
+        && l.embedded.transmodel_operator.code == op_source.op_code) {
+        println!("- {route_name} ({})", line.name);
+        Some(RouteInfo {
+            gtfs_id: route_id.to_string(),
+            gtfs_name: route_name.to_string(),
+            online_name: line.name.to_string(),
+        })
+    } else {
+        eprintln!("No route exists on web data for {op_name}/${route_name}");
+        None
+    }
+}
+
+const DIRECTIONS: [&str; 2] = ["inbound", "outbound"];
+
+pub struct PassengerDirectionInfo {
+    pub gtfs: String,
+    pub polar: String,
+    pub direction: u8
+}
+
+async fn get_days_info(db: &Arc<DBPool>, source_url: &SourceURL, operator: &PassengerSource, route: RouteInfo) -> Vec<PassengerDirectionInfo> {
+    let today = Utc::now();
+    // for each day, in both directions, get trips
+    stream::iter((0..7)
+        .map(|i| today.add(TimeDelta::days(i))))
+        .map(|date| (date, get_passenger_route_trips(db, &date, route.gtfs_id.as_str())))
+        .flat_map(|(day, gtfs_routes)| {
+            let day = day.to_owned();
+            stream::iter(DIRECTIONS).then(move |dir| get_day_direction_info(source_url, operator, &route, day, dir.clone(), gtfs_routes))
+                .flat_map(|i| stream::iter(i))
+        })
+        .collect::<Vec<_>>().await
+}
+
+async fn get_day_direction_info(source_url: &SourceURL, operator: &PassengerSource, route: &RouteInfo, day: DateTime<Utc>, direction: &str, gtfs_routes: Vec<PassengerRouteTrip>) -> Vec<PassengerDirectionInfo> {
+    let (dir_index, _) = DIRECTIONS.iter().find_position(|&&dir| dir == direction).unwrap();
+    match get_url::<PassengerTimetable, _, _>(format!("{source_url}/network/operators/{}/lines/{}/timetables?direction={direction}&date={}", operator.op_code, route.online_name, day.format("%Y-%m-%d")), reqwest::Response::json).await {
+        Ok(timetable) => {
+            timetable.embedded.journey.iter()
+                .filter(|tj| tj.links.line.name == route.online_name)
+                .filter_map(|tj| {
+                    let origin_date = tj.embedded.visit.first().unwrap().aimed_departure_time.unwrap();
+                    let origin_time = relative_to(&origin_date, &origin_date).duration_trunc(TimeDelta::seconds(1)).unwrap().timestamp();
+                    let dest_time = relative_to(&origin_date, &tj.embedded.visit.first().unwrap().aimed_arrival_time).duration_trunc(TimeDelta::seconds(1)).unwrap().timestamp();
+                    let dest_time_m1 = dest_time - 60;
+
+                    gtfs_routes.iter()
+                        .find(|r| r.min_stop_time == origin_time && r.max_stop_time == dest_time)
+                        .or_else(|| gtfs_routes.iter()
+                            .find(|r| r.min_stop_time == origin_time && r.max_stop_time == dest_time_m1))
+                        .map(|trip| {
+                            PassengerDirectionInfo {
+                                gtfs: trip.trip_id.to_string(),
+                                polar: tj.id.to_string(),
+                                direction: dir_index as u8,
+                            }
+                        })
+                }).collect_vec()
+        }
+        Err(err) => {
+            eprintln!("Could not get timetable data for {} {} {} on {}: {}", operator.op_code, route.online_name, direction, day, err);
+            vec![]
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize)]
@@ -380,4 +481,119 @@ pub struct DisruptionTransmodelLine {
     name: String,
     title: String,
     operator: String,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct PassengerLines {
+    #[serde(rename = "embedded")]
+    pub embedded: PolarLinesEmbedded
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct PolarLinesEmbedded {
+    #[serde(rename = "transmodel:line")]
+    pub line: Vec<LinesTransmodelLine>
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct LinesTransmodelLine {
+    id:          String,
+    name:        String,
+    description: String,
+    colors:      Colors,
+    #[serde(rename = "_embedded")]
+    embedded:   LineEmbedded
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct PassengerTimetable {
+    #[serde(rename = "_links")]
+    links:    PassengerTimetableLinks,
+    #[serde(rename = "_embedded")]
+    embedded: PassengerTimetableEmbedded,
+    date:      String
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct PassengerTimetableEmbedded {
+    #[serde(rename = "transmodel:line")]
+    line: Vec<LinesTransmodelLine>,
+    #[serde(rename = "transmodel:direction")]
+    direction: TransmodelDirection,
+    #[serde(rename = "timetable:journey")]
+    journey: Vec<PassengerTimetableJourney>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct PassengerTimetableJourney {
+    id:        String,
+    #[serde(rename = "_embedded")]
+    embedded: TimetableJourneyEmbedded,
+    #[serde(rename = "_links")]
+    links:    TimetableJourneyLinks,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct TimetableJourneyEmbedded {
+    #[serde(rename = "timetable:visit")]
+    visit: Vec<PassengerTimetableVisit>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct PassengerTimetableVisit {
+    #[serde(rename = "aimedArrivalTime")]
+    aimed_arrival_time: DateTime<Utc>,
+    #[serde(rename = "aimedDepartureTime")]
+    aimed_departure_time: Option<DateTime<Utc>>,
+    #[serde(rename = "_links")]
+    links: PassengerTimetableVisitLinks
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct PassengerTimetableVisitLinks {
+    #[serde(rename = "timetable:waypoint")]
+    waypoint: PassengerSelf
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct PassengerSelf {
+    href: String
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct TimetableJourneyLinks {
+    #[serde(rename = "transmodel:line")]
+    line: LinksTransmodelLine
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct LinksTransmodelLine {
+    name:        String,
+    description: String,
+    colors:      Colors,
+    href:        String
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct TransmodelDirection {
+    name:        String,
+    origin:      String,
+    destination: String
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct PassengerTimetableLinks {
+    #[serde(rename = "transmodel:line")]
+    line: Vec<LinksTransmodelLine>,
+    #[serde(rename = "transmodel:direction")]
+    direction: Vec<TransmodelDirection>,
+    #[serde(rename = "self")]
+    passenger_self: PassengerSelf,
+    switch: Switch
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct Switch {
+    href:      String,
+    templated: bool
 }

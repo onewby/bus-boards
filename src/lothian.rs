@@ -1,27 +1,44 @@
+use std::ops::Add;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, TimeDelta, Utc};
+use chrono::serde::ts_seconds;
 use futures::{FutureExt, stream, StreamExt};
+use futures::future::join_all;
 use geo_types::Point;
 use itertools::Itertools;
+use nu_ansi_term::Color::Yellow;
 use reqwest::{Client};
+use rusqlite::Error;
 use tokio::sync::mpsc::Sender;
 use tokio::time;
 use crate::config::BBConfig;
-use crate::db::{DBPool, get_line_segments, get_lothian_patterns_tuples, get_lothian_route, lothian_trip_query, LothianPattern};
+use crate::db::{DBPool, get_operator_routes, get_line_segments, get_lothian_patterns_tuples, get_lothian_route, lothian_trip_query, LothianDBPattern, reset_lothian, get_lothian_timetabled_trips, save_lothian_pattern_allocations};
 use crate::GTFSResponder::LOTHIAN;
 use crate::GTFSResponse;
 use crate::bus_prediction::{assign_vehicles, get_trip_candidates, get_trip_info, TripCandidate, TripCandidateList, TripInfo};
 use crate::siri::create_translated_string;
 use crate::transit_realtime::{Alert, EntitySelector, FeedEntity, Position, TimeRange, TripDescriptor, VehiclePosition};
 use crate::transit_realtime::vehicle_position::VehicleStopStatus;
+use crate::util::{get_url, gtfs_date, load_last_update, relative_to, save_last_update, URLParseError};
 
-pub async fn lothian_listener(tx: Sender<GTFSResponse>, _: Arc<BBConfig>, db: Arc<DBPool>) {
+const UPDATE_FILE: &str = ".update.lothian";
+
+pub async fn lothian_listener(tx: Sender<GTFSResponse>, config: Arc<BBConfig>, db: Arc<DBPool>) {
     let http = Client::builder().timeout(Duration::from_secs(10)).build().unwrap();
     let all_patterns = get_lothian_patterns_tuples(&db);
+    let mut update_time = load_last_update(UPDATE_FILE);
     loop {
-        let p_map = |p: &LothianPattern| process_pattern(p.route.to_string(), p.pattern.to_string(), &http, &db);
+        if update_time.add(TimeDelta::days(config.update_interval_days as i64)) < Utc::now() {
+            println!("{}", Yellow.paint("Performing Lothian route updates"));
+            update_route_data(&db, &config).await;
+            let new_update_time = Utc::now();
+            update_time = new_update_time;
+            save_last_update(UPDATE_FILE, &new_update_time);
+        }
+
+        let p_map = |p: &LothianDBPattern| process_pattern(p.route.to_string(), p.pattern.to_string(), &http, &db);
         let entities = stream::iter(all_patterns.iter())
             .map(p_map)
             .buffer_unordered(10)
@@ -135,6 +152,65 @@ pub async fn get_lothian_disruptions(db: &Arc<DBPool>) -> Vec<Alert> {
     }
 }
 
+pub async fn update_route_data(db: &Arc<DBPool>, config: &Arc<BBConfig>) {
+    reset_lothian(db);
+    match get_url::<LothianRoutes, _, _>("https://lothianapi.com/routes", reqwest::Response::json).await {
+        Ok(routes) => {
+            join_all(
+                routes.groups.iter().map(|group| process_group(db, config, group))
+            ).await;
+        }
+        Err(e) => { eprintln!("{}", e) }
+    };
+}
+
+pub async fn process_group(db: &Arc<DBPool>, config: &Arc<BBConfig>, group: &LothianGroup) {
+    let gtfs = get_operator_routes(db, config.lothian.operators[group.id.as_str()].as_str());
+    join_all(group.routes.iter().filter_map(|r| {
+        gtfs.iter().find(|(route_id, route_name)| r.name == *route_name).map(|(route_id, route_name)| (r, route_id))
+    }).map(|r| process_route(db, r))).await;
+}
+
+pub async fn process_route(db: &Arc<DBPool>, (route, gtfs_route_id): (&LothianRoute, &String)) {
+    match get_url::<LothianPatterns, _, _>("", reqwest::Response::json).await {
+        Ok(patterns) => {
+            join_all(patterns.patterns.iter().map(|p| process_route_pattern(&db, gtfs_route_id, p.id.as_str()))).await;
+        }
+        Err(e) => { eprintln!("{}", e); }
+    };
+}
+
+pub async fn process_route_pattern(db: &Arc<DBPool>, gtfs_route_id: &str, pattern: &str) -> Result<(), Error> {
+    let current_date = Utc::now();
+    let allocateds = stream::iter(0..7)
+        .map(|i| current_date.add(TimeDelta::days(i)))
+        .then(|date| get_url_with_date(pattern, date))
+        .filter_map(|r| async move {
+            r.map(|(date, timetables)| {
+                let gtfs_trips = get_lothian_timetabled_trips(db, &date, gtfs_route_id);
+                let trip_ids = timetables.timetable.trips.iter().filter_map(|trip| {
+                    let deps = trip.departures.iter().filter(|dep| dep.time != "-").collect_vec();
+                    let origin = deps.first().unwrap();
+                    let dest = deps.last().unwrap();
+                    let origin_date = origin.scheduled_for.unix_time;
+                    let origin_time = relative_to(&origin_date, &origin_date);
+                    let dest_time = relative_to(&origin_date, &dest.scheduled_for.unix_time);
+                    gtfs_trips.iter().find(|trip|
+                        trip.origin_stop == origin.stop_id && trip.dest_stop == dest.stop_id
+                            && trip.min_stop_time == origin_time.timestamp() && trip.max_stop_time == dest_time.timestamp())
+                        .map(|t| t.trip_id.to_string())
+                }).collect_vec();
+                stream::iter(trip_ids)
+            }).ok()
+        }).flatten().collect::<Vec<_>>().await;
+    save_lothian_pattern_allocations(db, pattern, &allocateds).inspect_err(|e| eprintln!("Could not save Lothian allocations for {pattern}: {e}"))
+}
+
+async fn get_url_with_date(pattern: &str, date: DateTime<Utc>) -> Result<(DateTime<Utc>, LothianTimetables), URLParseError> {
+    get_url::<LothianTimetables, _, _>(format!("https://lothianapi.com/timetable?route_pattern_id={}&date={}", pattern, gtfs_date(&date)), reqwest::Response::json)
+        .await.map(|url| (date, url))
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 struct LothianLiveVehicles {
     vehicles: Vec<LothianVehicle>
@@ -188,4 +264,99 @@ struct LothianRoutesAffected {
 struct LothianTimeRange {
     start: String,
     finish: Option<String>
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct LothianRoutes {
+    server:      String,
+    #[serde(rename = "timeElapsed")]
+    time_elapsed: f64,
+    #[serde(rename = "networkTime")]
+    network_time: String,
+    groups:      Vec<LothianGroup>
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct LothianGroup {
+    id:          String,
+    name:        String,
+    description: Option<String>,
+    routes:      Vec<LothianRoute>
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct LothianRoute {
+    id:          String,
+    name:        String,
+    description: String,
+    color:       String,
+    #[serde(rename = "textColor")]
+    text_color:   String
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct LothianPatterns {
+    server:      String,
+    #[serde(rename = "timeElapsed")]
+    time_elapsed: f64,
+    #[serde(rename = "networkTime")]
+    network_time: String,
+    route:       LothianRoute,
+    patterns:    Vec<LothianPattern>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct LothianPattern {
+    id:          String,
+    #[serde(rename = "routeName")]
+    route_name:   String,
+    origin:      String,
+    destination: String,
+    polyline:    String
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct LothianTimetables {
+    server:      String,
+    #[serde(rename = "timeElapsed")]
+    time_elapsed: f64,
+    #[serde(rename = "networkTime")]
+    network_time: String,
+    timetable:   LothianTimetable
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct LothianTimetable {
+    #[serde(rename = "routePattern")]
+    route_pattern: LothianPattern,
+    trips:        Vec<LothianTrip>
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct LothianTrip {
+    #[serde(rename = "tripID")]
+    trip_id:     String,
+    departures: Vec<LothianDeparture>
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct LothianDeparture {
+    #[serde(rename = "stopID")]
+    stop_id:        String,
+    time:          String,
+    #[serde(rename = "isTimingPoint")]
+    is_timing_point: bool,
+    #[serde(rename = "scheduledFor")]
+    scheduled_for:  ScheduledFor,
+    sequence:      String
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct ScheduledFor {
+    #[serde(rename = "unixTime", with = "ts_seconds")]
+    unix_time:    DateTime<Utc>,
+    #[serde(rename = "isoTime")]
+    iso_time:     String,
+    #[serde(rename = "displayTime")]
+    display_time: String
 }
