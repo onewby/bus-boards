@@ -99,14 +99,12 @@ async fn main() {
     spawn_listener_db(&arc_cfg, COACHES, &tx, &arc_db.clone(), coaches_listener);
     spawn_listener_db(&arc_cfg, FIRST, &tx, &arc_db.clone(), first_listener);
 
-    // build our application with a route
     let app = Router::new()
         .route("/api/gtfsrt/proto", get(gtfs_realtime_proto))
         .route("/api/gtfsrt/json", get(gtfs_realtime_json))
         .with_state(gtfs_state)
         .layer(CompressionLayer::new());
 
-    // run our app with hyper, listening globally on port 3000
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
     axum::serve(listener, app).await.unwrap();
 }
