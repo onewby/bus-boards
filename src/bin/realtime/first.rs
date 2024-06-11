@@ -2,7 +2,7 @@ use std::cmp::min;
 use std::{fmt, fs};
 use std::fmt::{Display, Formatter, Write};
 use std::fs::File;
-use std::io::{BufReader};
+use std::io::BufReader;
 use std::sync::Arc;
 use std::time::Duration;
 use chrono::{DateTime, NaiveDateTime, Utc};
@@ -24,9 +24,10 @@ use tokio_tungstenite::tungstenite::error::UrlError;
 use tokio_tungstenite::tungstenite::handshake::client::{generate_key, Request};
 use url::Url;
 use uuid::Uuid;
-use crate::config::BBConfig;
+use BusBoardsServer::config::BBConfig;
+use BusBoardsServer::RPCConfiguration;
 use crate::db::{DBPool, get_first_trip};
-use crate::GTFSResponder::{FIRST};
+use crate::GTFSResponder::FIRST;
 use crate::GTFSResponse;
 use crate::transit_realtime::{FeedEntity, Position, TripDescriptor, VehiclePosition};
 use crate::transit_realtime::trip_descriptor::ScheduleRelationship::Scheduled;
@@ -366,14 +367,6 @@ pub struct RPCErrorBody {
     code: i64,
     data: String,
     message: String
-}
-
-#[derive(Serialize, Deserialize, Debug, Copy, Clone)]
-pub struct RPCConfiguration {
-    min_lon: f64,
-    max_lon: f64,
-    min_lat: f64,
-    max_lat: f64
 }
 
 #[derive(Serialize, Deserialize, Debug)]

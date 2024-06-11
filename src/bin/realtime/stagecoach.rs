@@ -6,7 +6,7 @@ use itertools::Itertools;
 use serde::de;
 use tokio::sync::mpsc::Sender;
 use tokio::time;
-use crate::config::BBConfig;
+use BusBoardsServer::config::BBConfig;
 use crate::db::{DBPool, get_stagecoach_trip};
 use crate::GTFSResponder::{STAGECOACH};
 use crate::GTFSResponse;

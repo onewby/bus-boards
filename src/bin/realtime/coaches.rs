@@ -10,7 +10,7 @@ use tokio::sync::mpsc::Sender;
 use tokio::time;
 use regex::Regex;
 use serde::{Deserialize};
-use crate::config::BBConfig;
+use BusBoardsServer::config::BBConfig;
 use crate::db::{CoachRoute, DBPool, get_coach_routes, get_coach_trip, get_line_segments};
 use crate::GTFSResponder::{COACHES};
 use crate::GTFSResponse;

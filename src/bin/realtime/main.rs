@@ -6,7 +6,6 @@ mod disruptions;
 mod db;
 mod siri;
 mod ember;
-mod config;
 mod passenger;
 mod util;
 mod bus_prediction;
@@ -27,13 +26,13 @@ use axum::Router;
 use axum::routing::{get};
 use nu_ansi_term::Color::{Green, Red};
 use prost::Message;
-use strum_macros::{Display, EnumIter};
 use tokio::sync::{mpsc};
 use tokio::sync::mpsc::{Sender};
 use tower_http::{compression::CompressionLayer};
 use crate::bods::bods_listener;
 use crate::coaches::coaches_listener;
-use crate::config::{BBConfig, load_config};
+use BusBoardsServer::config::{BBConfig, load_config};
+use BusBoardsServer::GTFSResponder;
 use crate::db::{DBPool, open_db};
 use crate::disruptions::{disruptions_listener};
 use crate::ember::ember_listener;
@@ -46,13 +45,6 @@ use crate::transit_realtime::{Alert, FeedEntity, FeedMessage};
 
 pub mod transit_realtime {
     include!(concat!(env!("OUT_DIR"), "/transit_realtime.rs"));
-}
-
-#[derive(Copy, Clone, Display, EnumIter)]
-#[derive(Eq, Hash, PartialEq)]
-#[derive(Serialize, Deserialize)]
-pub enum GTFSResponder {
-    BODS, DISRUPTIONS, EMBER, PASSENGER, LOTHIAN, STAGECOACH, COACHES, FIRST
 }
 
 type GTFSResponse = (GTFSResponder, Vec<FeedEntity>, Vec<Alert>);

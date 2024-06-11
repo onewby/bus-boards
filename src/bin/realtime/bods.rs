@@ -4,7 +4,7 @@ use prost::Message;
 use tokio::sync::mpsc::Sender;
 use tokio::time;
 use zip::ZipArchive;
-use crate::config::BBConfig;
+use BusBoardsServer::config::BBConfig;
 use crate::GTFSResponder::BODS;
 use crate::GTFSResponse;
 use crate::transit_realtime::{FeedEntity, FeedMessage};

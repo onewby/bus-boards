@@ -12,7 +12,7 @@ use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::{named_params, Params, params};
 use rusqlite::types::Value;
 use crate::bus_prediction::TripCandidate;
-use crate::config::BBConfig;
+use BusBoardsServer::config::BBConfig;
 use crate::passenger::PassengerDirectionInfo;
 use crate::util::{gtfs_date, relative_to, zero_day};
 

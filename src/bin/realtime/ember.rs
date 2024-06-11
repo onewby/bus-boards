@@ -2,7 +2,7 @@ use std::sync::Arc;
 use prost::Message;
 use tokio::sync::mpsc::Sender;
 use tokio::time;
-use crate::config::BBConfig;
+use BusBoardsServer::config::BBConfig;
 use crate::GTFSResponder::EMBER;
 use crate::GTFSResponse;
 use crate::transit_realtime::{Alert, EntitySelector, FeedEntity, FeedMessage, TripDescriptor, TripUpdate, VehiclePosition};

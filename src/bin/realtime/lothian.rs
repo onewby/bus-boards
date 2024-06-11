@@ -13,7 +13,7 @@ use reqwest::{Client};
 use rusqlite::Error;
 use tokio::sync::mpsc::Sender;
 use tokio::time;
-use crate::config::BBConfig;
+use BusBoardsServer::config::BBConfig;
 use crate::db::{DBPool, get_operator_routes, get_line_segments, get_lothian_patterns_tuples, get_lothian_route, lothian_trip_query, LothianDBPattern, reset_lothian, get_lothian_timetabled_trips, save_lothian_pattern_allocations};
 use crate::GTFSResponder::LOTHIAN;
 use crate::GTFSResponse;
