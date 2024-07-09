@@ -14,12 +14,13 @@ use geo_types::Coord;
 use itertools::Itertools;
 use phf::phf_map;
 use serde::Deserialize;
+use tempfile::{NamedTempFile, tempfile};
 
-pub fn process_source(source: &Source) -> Result<(), Box<dyn Error>> {
+pub fn process_source(db: &mut Connection, source: &Source) -> Result<(), Box<dyn Error>> {
     // Download source
     download_source(source)?;
     // Import zip
-    import_zip(source)
+    import_zip(db, source)
 }
 
 fn download_source(source: &Source) -> Result<(), Box<dyn Error>> {
@@ -29,15 +30,17 @@ fn download_source(source: &Source) -> Result<(), Box<dyn Error>> {
         println!("- {} is still new - skipping.", source.path);
         return Ok(());
     }
-    let resp = reqwest::blocking::Client::builder().timeout(None).build()?.get(source.url).send()?;
     fs::create_dir_all("gtfs")?;
-    let mut file = File::create(&source.path)?;
-    let bytes = resp.bytes()?;
-    file.write_all(&bytes)?;
+    let mut temp_file = NamedTempFile::new()?;
+    reqwest::blocking::Client::builder()
+        .timeout(None).build()?
+        .get(source.url).send()?
+        .copy_to(temp_file.as_file_mut())?;
+    fs::rename(temp_file.path(), &source.path)?;
     Ok(())
 }
 
-fn import_zip(source: &Source) -> Result<(), Box<dyn Error>> {
+fn import_zip(db: &mut Connection, source: &Source) -> Result<(), Box<dyn Error>> {
     let path = Path::new(source.path);
     let timer = Instant::now();
     let imports: Imports = [
@@ -59,16 +62,15 @@ fn import_zip(source: &Source) -> Result<(), Box<dyn Error>> {
     let mapping = unsafe { Mmap::map(&zip_file)? };
     let archive = ZipArchive::new(&mapping)?;
     let dir = as_tree(archive.entries())?;
-    let mut thread_conn = open_db()?;
     let file_name = path.file_name().unwrap().to_str().unwrap();
 
     for (subfile_name, stmt, indexes, defaults, add_prefix) in imports {
         println!("Importing {} for {}", subfile_name, file_name);
-        import_txt_file(&archive, &dir, subfile_name, &mut thread_conn, stmt, &indexes, &defaults, if add_prefix { Some(source.prefix) } else { None }).expect(subfile_name);
+        import_txt_file(&archive, &dir, subfile_name, db, stmt, &indexes, &defaults, if add_prefix { Some(source.prefix) } else { None }).expect(subfile_name);
     }
 
     println!("Importing shapes.txt for {}", file_name);
-    import_shapes(&archive, None, &mut thread_conn)?;
+    import_shapes(&archive, None, db)?;
 
     println!("{}s to import {}", timer.elapsed().as_secs(), file_name);
 

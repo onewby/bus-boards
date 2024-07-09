@@ -1,11 +1,11 @@
 use rusqlite::Connection;
 use std::error::Error;
 use BusBoardsServer::config::{LastUpdates, save_updates};
-use crate::{Localities, Stance};
+use crate::localities::{load_localities_json, Localities, Stance};
 
 fn clean_arrivals(db: &mut Connection) -> Result<(), Box<dyn Error>> {
     println!("Cleaning up arrivals");
-    let localities: Localities = crate::load_localities_json();
+    let localities: Localities = load_localities_json();
     let mut arrival_bays: Vec<&Stance> = Vec::new();
     for stop in localities.values() {
         for stances in stop.values() {
