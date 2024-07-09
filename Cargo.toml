@@ -44,8 +44,13 @@ csv = "1.3.0"
 crossbeam-channel = "0.5.13"
 polyline = "0.11.0"
 phf = { version = "0.11.2", features = ["macros"] }
-suppaftp = { version = "^6", features = ["native-tls"] }
+suppaftp = { version = "^6", features = ["rustls"] }
 sorensen = "0.2.0"
+log = "0.4.22"
+env_logger = "0.11.3"
+webpki-roots = "0.26.3"
+rustls = { version = "0.21.12", features = ["dangerous_configuration"] }
+rustls-pemfile = "2.1.2"
 
 [build-dependencies]
 prost-build = "0.12.3"

@@ -8,7 +8,7 @@ use crate::GTFSResponse;
 
 use chrono::{TimeDelta, Utc};
 use tokio::sync::Mutex;
-use crate::config::{BBConfig, SourceURL};
+use BusBoardsServer::config::{BBConfig, SourceURL};
 use crate::db::{DBPool, get_agency, get_route};
 use crate::GTFSResponder::DISRUPTIONS;
 use crate::lothian::get_lothian_disruptions;

@@ -1,2 +1,12 @@
 [build]
 rustflags = ["-C", "target-cpu=native", "-Z", "threads=8"]
+
+[profile.production]
+inherits = "release"
+codegen-units = 1
+lto = "fat"
+panic = "abort"
+
+[profile.profiling]
+inherits = "production"
+debug = true
