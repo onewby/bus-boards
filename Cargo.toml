@@ -51,6 +51,8 @@ env_logger = "0.11.3"
 rustls = { version = "0.21.12", features = ["dangerous_configuration"] }
 spex = "0.2.1"
 tempfile = "3.10.1"
+polars = { version = "0.41.3", features = ["lazy", "strings", "object", "dtype-struct", "regex", "performant", "is_in", "is_unique", "partition_by"] }
+proj = { version = "0.27.2", features = ["geo-types"] }
 
 [build-dependencies]
 prost-build = "0.12.3"

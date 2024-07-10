@@ -14,30 +14,14 @@ use geo_types::Coord;
 use itertools::Itertools;
 use phf::phf_map;
 use serde::Deserialize;
-use tempfile::{NamedTempFile, tempfile};
+use BusBoardsServer::download_if_old;
 
 pub fn process_source(db: &mut Connection, source: &Source) -> Result<(), Box<dyn Error>> {
     // Download source
-    download_source(source)?;
+    fs::create_dir_all("gtfs")?;
+    download_if_old(source.url, source.path)?;
     // Import zip
     import_zip(db, source)
-}
-
-fn download_source(source: &Source) -> Result<(), Box<dyn Error>> {
-    println!("Downloading {}", source.name);
-    let md = fs::metadata(&source.path);
-    if md.is_ok() && SystemTime::now().duration_since(md.unwrap().modified()?)?.as_secs() < (24 * 60 * 60) {
-        println!("- {} is still new - skipping.", source.path);
-        return Ok(());
-    }
-    fs::create_dir_all("gtfs")?;
-    let mut temp_file = NamedTempFile::new()?;
-    reqwest::blocking::Client::builder()
-        .timeout(None).build()?
-        .get(source.url).send()?
-        .copy_to(temp_file.as_file_mut())?;
-    fs::rename(temp_file.path(), &source.path)?;
-    Ok(())
 }
 
 fn import_zip(db: &mut Connection, source: &Source) -> Result<(), Box<dyn Error>> {

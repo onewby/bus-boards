@@ -1,15 +1,13 @@
 use std::collections::HashMap;
 use std::error::Error;
 use std::fs;
-use std::fs::File;
-use std::path::Path;
 use std::str::FromStr;
 use phf::phf_map;
-use reqwest::header::HeaderMap;
 use rusqlite::{Connection, params};
 use serde::{Deserialize, Serialize};
 use spex::parsing::XmlReader;
 use spex::xml::Element;
+use BusBoardsServer::download_if_old;
 
 pub type Localities = HashMap<LocalityCode, HashMap<StopName, Vec<Stance>>>;
 pub type LocalityCode = String;
@@ -17,7 +15,7 @@ pub type StopName = String;
 
 const NAPTAN_NS: &str = "http://www.naptan.org.uk/";
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct Stance {
     #[serde(rename = "ATCOCode")]
     pub atco_code: String,
@@ -42,7 +40,7 @@ pub fn load_localities_json() -> Localities {
 
 pub fn insert_localities(db: &mut Connection) -> Result<(), Box<dyn Error>> {
     println!("Insert localities into database");
-    let nptg_file = get_nptg()?;
+    let nptg_file = download_if_old("https://naptan.api.dft.gov.uk/v1/nptg", "NPTG.xml")?;
     let xml = XmlReader::parse_auto(nptg_file)?;
     let mut xml_localities = xml.root()
         .pre_ns(NAPTAN_NS)
@@ -149,21 +147,6 @@ pub fn insert_stops(db: &mut Connection) -> Result<(), Box<dyn Error>> {
     ")?;
 
     Ok(())
-}
-
-fn get_nptg() -> Result<File, Box<dyn Error>> {
-    let path = Path::new("NPTG.xml");
-    if !path.exists() {
-        println!("Downloading NPTG");
-        let mut file = File::options().write(true).create(true).open("NPTG.xml")?;
-        let mut headers = HeaderMap::new();
-        headers.append("accept", "*/*".parse().unwrap());
-        reqwest::blocking::Client::new()
-            .get("https://naptan.api.dft.gov.uk/v1/nptg")
-            .headers(headers)
-            .send()?.copy_to(&mut file)?;
-    }
-    Ok(File::open("NPTG.xml")?)
 }
 
 struct Locality {
