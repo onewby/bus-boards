@@ -8,3 +8,4 @@ target/
 Stops.csv
 stops.sqlite
 localities.json
+private.config.toml
