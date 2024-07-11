@@ -36,7 +36,7 @@ fn main() {
 
     group_stances().expect("Stance grouping error");
 
-    /*let mut connection = open_db(db_path.as_str()).expect("DB init error");
+    let mut connection = open_db(db_path.as_str()).expect("DB init error");
     create_tables(&connection).expect("Table create error");
     clear_tables(&connection).expect("Table reconstruction error");
     insert_localities(&mut connection).expect("Locality insert error");
@@ -47,7 +47,7 @@ fn main() {
     create_indexes(&mut connection).expect("Index creation error");
     cleanup(&mut connection).expect("Cleanup error");
     download_noc(&mut connection).expect("Traveline error");
-    connection.close().expect("Could not close connection");*/
+    connection.close().expect("Could not close connection");
     println!("Done!")
 }
 

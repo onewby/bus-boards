@@ -62,7 +62,7 @@ fn group_data(df: &mut DataFrame) -> Result<Localities, Box<dyn Error>> {
                 lat: s[5].try_extract().unwrap(),
                 long: s[6].try_extract().unwrap(),
                 street: s[4].get_str().map(|s| s.to_string()),
-                indicator: s[5].get_str().map(|s| s.to_string()),
+                indicator: s[3].get_str().map(|s| s.to_string()),
                 arrival: {
                     match s[7] {
                         AnyValue::Boolean(res) => res,
