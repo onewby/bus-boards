@@ -1,4 +1,4 @@
-pub const LOCALITY_CHANGES: [(&str, &str, &str, Option<&str>); 9] = [
+pub const LOCALITY_CHANGES: [(&str, &str, &str, Option<&str>); 10] = [
     ("N0077860", "Park Lane (Tyne and Wear Metro Station)", "E0057917", None),
     ("E0057948", "Bradford Interchange Rail Station", "N0077005", Some("Bradford")),
     ("E0057974", "Leeds Rail Station", "N0077039", Some("Leeds")),
@@ -7,26 +7,27 @@ pub const LOCALITY_CHANGES: [(&str, &str, &str, Option<&str>); 9] = [
     ("E0057190", "Luton Rail Station", "N0071638", Some("Luton")),
     ("N0078022", "Bus Station", "ES002978", Some("Glasgow")),
     ("E0039083", "Rail Station Entrance", "N0071638", Some("Luton")),
-    ("E0033284", "Wellington Bridge St Real Time Tracking", "N0077039", Some("Leeds"))
+    ("E0033284", "Wellington Bridge St Real Time Tracking", "N0077039", Some("Leeds")),
+    ("E0057149", "Rail Station", "N0077769", Some("Bournemouth"))
 ];
 
-pub const MANUAL_RENAMES: [(&str, &str, &str); 59] = [
+pub const MANUAL_RENAMES: [(&str, &str, &str); 60] = [
     ("N0078622", "Edinburgh Airport (Edinburgh Trams)", "Airport"),
-    ("ES001737", "Haymarket (Edinburgh Trams)", "Haymarket Station"),
+    ("ES001737", "Haymarket (Edinburgh Trams)", "Rail Station"),
     ("ES001737", "Haymarket Station", "Rail Station"),
     ("E0049583", "Stand 4", "Bus Station"),  // Tadcaster
     ("ES000536", "Bus Station", "Seagate Bus Station"),  // Dundee
-    ("N0078275", "Edinburgh Park Station", "Edinburgh Park Rail Station"),
-    ("N0078275", "Edinburgh Park Station (Edinburgh Trams)", "Edinburgh Park Rail Station"),
+    ("N0078275", "Edinburgh Park Station", "Rail Station"),
+    ("N0078275", "Edinburgh Park Station (Edinburgh Trams)", "Rail Station"),
     ("E0057900", "Newcastle Rail Station", "Newcastle Central Rail Station"),
     ("E0057900", "Central Station", "Newcastle Central Rail Station"),
     ("E0057900", "Central Station (Tyne and Wear Metro Station)", "Newcastle Central Rail Station"),
-    ("E0057900", "Central Station Bewick Street", "Newcastle Central Rail Station"),
+    ("E0057900", "Central Stn Bewick Street", "Newcastle Central Rail Station"),
     ("E0057900", "Central Station Clayton St", "Newcastle Central Rail Station"),
-    ("E0057900", "Central Station Neville St", "Newcastle Central Rail Station"),
-    ("E0057900", "Central Station Westgate Rd", "Newcastle Central Rail Station"),
+    ("E0057900", "Central Stn Neville St", "Newcastle Central Rail Station"),
+    ("E0057900", "Central Stn Westgate Rd", "Newcastle Central Rail Station"),
     ("E0057900", "Central Station Westgate Road", "Newcastle Central Rail Station"),
-    ("N0078208", "Ponteland Road - Newcastle Airport", "Newcastle Airport Ponteland Road"),
+    ("N0078208", " Ponteland Road - Newcastle Airport", "Newcastle Airport Ponteland Road"),
     ("N0078208", "Newcastle Airport Metro Station", "Newcastle Airport (Tyne and Wear Metro Station)"),
     ("E0055009", "Hull Rail Station", "Paragon Interchange (Rail Station)"),
     ("E0055009", "Hull Interchange", "Paragon Interchange (Rail Station)"),
@@ -62,6 +63,7 @@ pub const MANUAL_RENAMES: [(&str, &str, &str); 59] = [
     ("ES002978", "Bus Station", "Partick Station Interchange"),
     ("ES002978", "Partick Rail Station", "Partick Station Interchange"),
     ("ES002978", "Partick SPT Subway Station", "Partick Station Interchange"),
+    ("ES002978", "Partick Interchange", "Partick Station Interchange"),
     ("ES003486", "Stance", "Rail Station"), // could be Goosecroft Road - bit of an editorial decision
     ("ES001670", "Stance", "Bus Station"),
     ("ES000097", "Stance", "Bus Station"),
@@ -77,4 +79,9 @@ pub const MANUAL_ARRIVALS: [&str; 4] = [
     "6090117",
     "64803493",
     "6490IM002"
+];
+
+pub const NAPTAN_OVERRIDES: [(&str, &str); 2] = [
+    ("E0055323", "E0043654"),
+    ("N0072212", "E0041739")
 ];

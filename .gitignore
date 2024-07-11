@@ -1,1 +1,10 @@
 /target
+last_updates.json
+*.xml
+profile.json
+.cargo/
+gtfs/
+target/
+Stops.csv
+stops.sqlite
+localities.json

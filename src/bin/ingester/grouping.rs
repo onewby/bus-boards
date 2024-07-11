@@ -6,10 +6,10 @@ use std::io::BufWriter;
 use geo_types::Coord;
 use itertools::Itertools;
 use polars::datatypes::AnyValue;
-use polars::frame::DataFrame;
+use polars::frame::{DataFrame, UniqueKeepStrategy};
 use polars::frame::row::Row;
 use polars::io::SerReader;
-use polars::prelude::{as_struct, ChainedThen, coalesce, col, cols, CsvReadOptions, DataFrameJoinOps, DataType, Expr, IntoLazy, JoinArgs, JoinType, lit, Literal, NamedFrom, not, NULL, Schema, SchemaRef, SmartString, StringNameSpaceImpl, when};
+use polars::prelude::{as_struct, coalesce, col, CsvReadOptions, DataFrameJoinOps, DataType, Field, IntoLazy, JoinArgs, JoinType, lit, Literal, NamedFrom, not, NULL, Schema, SchemaRef, SmartString, StringNameSpaceImpl, when};
 use polars::series::Series;
 use proj::Proj;
 use regex::{Regex, RegexBuilder};
@@ -18,7 +18,7 @@ use tower_http::compression::Predicate;
 use BusBoardsServer::download_if_old;
 
 use crate::localities::{Localities, Stance};
-use crate::locality_changes::{LOCALITY_CHANGES, MANUAL_ARRIVALS, MANUAL_RENAMES};
+use crate::locality_changes::{LOCALITY_CHANGES, MANUAL_ARRIVALS, MANUAL_RENAMES, NAPTAN_OVERRIDES};
 
 pub fn group_stances() -> Result<Localities, Box<dyn Error>> {
     download_if_old("https://naptan.api.dft.gov.uk/v1/access-nodes?dataFormat=csv", "Stops.csv")?;
@@ -44,8 +44,8 @@ fn group_data(df: &mut DataFrame) -> Result<Localities, Box<dyn Error>> {
         .into_struct("").iter()
         .map(|vals| Coord::from((vals[0].try_extract().unwrap(), vals[1].try_extract().unwrap()))).collect();
     proj.convert_array(&mut coords)?;
-    let lat = coords.iter().map(|c| c.x).collect_vec();
-    let lon = coords.iter().map(|c| c.y).collect_vec();
+    let lat = coords.iter().map(|c| c.y).collect_vec();
+    let lon = coords.iter().map(|c| c.x).collect_vec();
     df
         .with_column(Series::new("Lat", lat))?
         .with_column(Series::new("Lon", lon))?;
@@ -110,34 +110,37 @@ fn standardise_synonyms(df: DataFrame) -> Result<DataFrame, Box<dyn Error>> {
     ).collect()?;
 
     // Create manual fixes to locality code, parent and name
-    let mut changes_schema = Schema::new();
-    changes_schema.insert_at_index(0, SmartString::from("NptgLocalityCode"), DataType::String)?;
-    changes_schema.insert_at_index(1, SmartString::from("CommonName"), DataType::String)?;
-    changes_schema.insert_at_index(2, SmartString::from("NewNptgLocalityCode"), DataType::String)?;
-    changes_schema.insert_at_index(3, SmartString::from("NewParentLocalityName"), DataType::String)?;
-
-    let mut renames_schema = Schema::new();
-    renames_schema.insert_at_index(0, SmartString::from("NptgLocalityCode"), DataType::String)?;
-    renames_schema.insert_at_index(1, SmartString::from("CommonName"), DataType::String)?;
-    renames_schema.insert_at_index(2, SmartString::from("NewCommonName"), DataType::String)?;
+    let changes_schema = Schema::from_iter([
+        Field::new("NptgLocalityCode", DataType::String),
+        Field::new("CommonName", DataType::String),
+        Field::new("NewNptgLocalityCode", DataType::String),
+        Field::new("NewParentLocalityName", DataType::String)
+    ]);
+    let renames_schema = Schema::from_iter([
+        Field::new("NptgLocalityCode", DataType::String),
+        Field::new("CommonName", DataType::String),
+        Field::new("NewCommonName", DataType::String)
+    ]);
+    let naptan_schema = Schema::from_iter([
+        Field::new("NptgLocalityCode", DataType::String),
+        Field::new("NewNptgLocalityCode2", DataType::String)
+    ]);
 
     let changes_df = DataFrame::from_rows_iter_and_schema(
         LOCALITY_CHANGES.map(|c| Row::new(vec![
-            AnyValue::String(c.0),
-            AnyValue::String(c.1),
-            AnyValue::String(c.2),
+            AnyValue::String(c.0), AnyValue::String(c.1), AnyValue::String(c.2),
             c.3.map_or(AnyValue::Null, |cc| AnyValue::String(cc))
-        ])).iter(),
-        &changes_schema
+        ])).iter(), &changes_schema
     )?;
-
     let renames_df = DataFrame::from_rows_iter_and_schema(
         MANUAL_RENAMES.map(|c| Row::new(vec![
-            AnyValue::String(c.0),
-            AnyValue::String(c.1),
-            AnyValue::String(c.2)
-        ])).iter(),
-        &renames_schema
+            AnyValue::String(c.0), AnyValue::String(c.1), AnyValue::String(c.2)
+        ])).iter(), &renames_schema
+    )?;
+    let naptan_df = DataFrame::from_rows_iter_and_schema(
+        NAPTAN_OVERRIDES.map(|c| Row::new(vec![
+            AnyValue::String(c.0), AnyValue::String(c.1)
+        ])).iter(), &naptan_schema
     )?;
 
     let df = df.lazy()
@@ -149,8 +152,12 @@ fn standardise_synonyms(df: DataFrame) -> Result<DataFrame, Box<dyn Error>> {
                [col("NptgLocalityCode"), col("CommonName")],
                [col("NptgLocalityCode"), col("CommonName")],
                JoinArgs::new(JoinType::Left)
+        ).join(naptan_df.lazy(),
+               [col("NptgLocalityCode")],
+               [col("NptgLocalityCode")],
+               JoinArgs::new(JoinType::Left)
         ).with_columns([
-            coalesce(&[col("NewNptgLocalityCode"), col("NptgLocalityCode")]).alias("NptgLocalityCode"),
+            coalesce(&[col("NewNptgLocalityCode"), col("NewNptgLocalityCode2"), col("NptgLocalityCode")]).alias("NptgLocalityCode"),
             coalesce(&[col("NewParentLocalityName"), col("ParentLocalityName")]).alias("ParentLocalityName"),
             coalesce(&[col("NewCommonName"), col("CommonName")]).alias("CommonName"),
             when(col("ATCOCode").is_in(lit(Series::new("ATCOCode", MANUAL_ARRIVALS))))
@@ -158,7 +165,7 @@ fn standardise_synonyms(df: DataFrame) -> Result<DataFrame, Box<dyn Error>> {
                 .otherwise(col("Arrival"))
                 .alias("Arrival")
         ])
-        .select(&[col("*").exclude(["NewNptgLocalityCode", "NewParentLocalityName"])])
+        .select(&[col("*").exclude(["NewNptgLocalityCode", "NewParentLocalityName", "NewNptgLocalityCode2"])])
         .collect()?;
 
     let df = df.lazy().with_column(
@@ -228,6 +235,7 @@ fn standardise_synonyms(df: DataFrame) -> Result<DataFrame, Box<dyn Error>> {
             [col("NptgLocalityCode"), col("CommonName")],
             JoinArgs::new(JoinType::Left))
         .collect()?;
+
     // Try matching station candidates to a child locality
     let candidates = df.clone().lazy().filter(stn_filter)
         .join(
@@ -240,16 +248,18 @@ fn standardise_synonyms(df: DataFrame) -> Result<DataFrame, Box<dyn Error>> {
                 .and(col("HasRail_y").eq(false))
                 .and(not(col("LocalityName_y").is_in(col("LocalityName").filter(col("IsRail")))))
         )
+        .unique(Some(vec!["ATCOCode".to_string()]), UniqueKeepStrategy::None)
         .select(&[col("ATCOCode"), col("CommonName_y").alias("NewCommonName"), col("NptgLocalityCode_y").alias("NewNptgLocalityCode")]);
     // Override with new name/locality where warranted
     let df = df.lazy()
-        .left_join(candidates, col("ATCOCode"), col("ATCOCode"))
+        .join(candidates, &[col("ATCOCode")], &[col("ATCOCode")], JoinArgs::new(JoinType::Left))
         .with_columns([
             coalesce(&[col("NewCommonName"), col("CommonName")]).alias("CommonName")     ,
             coalesce(&[col("NewNptgLocalityCode"), col("NptgLocalityCode")]).alias("NptgLocalityCode")
         ])
         .select(&[col("*").exclude(["NewCommonName", "NewNptgLocalityCode"])])
         .collect()?;
+
     Ok(df)
 }
 

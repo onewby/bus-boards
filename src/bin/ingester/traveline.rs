@@ -213,7 +213,6 @@ pub fn download_noc(conn: &mut Connection) -> Result<(), Box<dyn Error>> {
     {
         let mut stmt = tx.prepare("INSERT INTO traveline (code, agency_id, website) VALUES (?1, ?2, ?3)")?;
         for record in assigned_codes.iter().filter(|c| c.code.is_some()) {
-            println!("{}, {}, {}, {}", record.agency_id, record.code.clone().unwrap(), record.agency_name, record.website.clone().unwrap_or("-".to_string()));
             stmt.execute(params![
                 &record.code,
                 &record.agency_id,

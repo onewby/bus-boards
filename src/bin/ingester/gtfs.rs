@@ -1,20 +1,22 @@
-use crate::sources::Source;
-use std::error::Error;
-use rusqlite::{Connection, params_from_iter};
-use std::path::Path;
-use std::time::{Instant, SystemTime};
-use crate::open_db;
-use std::fs::File;
-use memmap::Mmap;
-use piz::read::{as_tree, DirectoryContents, FileTree, ZipArchive};
-use std::io::{BufReader, Write};
-use std::collections::HashMap;
 use std::{fs, iter};
+use std::collections::HashMap;
+use std::error::Error;
+use std::fs::File;
+use std::io::BufReader;
+use std::path::Path;
+use std::time::Instant;
+
 use geo_types::Coord;
 use itertools::Itertools;
+use memmap::Mmap;
 use phf::phf_map;
+use piz::read::{as_tree, DirectoryContents, FileTree, ZipArchive};
+use rusqlite::{Connection, params_from_iter};
 use serde::Deserialize;
+
 use BusBoardsServer::download_if_old;
+
+use crate::sources::Source;
 
 pub fn process_source(db: &mut Connection, source: &Source) -> Result<(), Box<dyn Error>> {
     // Download source
@@ -54,7 +56,7 @@ fn import_zip(db: &mut Connection, source: &Source) -> Result<(), Box<dyn Error>
     }
 
     println!("Importing shapes.txt for {}", file_name);
-    import_shapes(&archive, None, db)?;
+    import_shapes(&archive, Some(source.prefix.to_string()), db)?;
 
     println!("{}s to import {}", timer.elapsed().as_secs(), file_name);
 
@@ -108,7 +110,7 @@ fn import_shapes(archive: &ZipArchive, prefix: Option<String>, db: &mut Connecti
         // add prefix to ID and encode polyline
         .map(move |(shape_id, rows)| (
             prefix.as_ref().map_or(shape_id.clone(), |prefix| format!("{}{}", prefix, shape_id)),
-            polyline::encode_coordinates(rows.map(|row| Coord {x: row.shape_pt_lat, y: row.shape_pt_lon }), 5).unwrap()
+            polyline::encode_coordinates(rows.map(|row| Coord {y: row.shape_pt_lat, x: row.shape_pt_lon }), 5).unwrap()
         ))
         .chunks(1000).into_iter()
         .for_each(|shapes_to_write| { write_shapes_to_db(db, shapes_to_write) });

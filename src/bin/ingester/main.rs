@@ -30,15 +30,14 @@ const GTFS_TABLES: [&str; 6] = ["stop_times", "trips", "calendar_dates", "calend
 
 fn main() {
     let db_path = std::env::var("BUSES_DB_PATH").unwrap_or(DEFAULT_DB_PATH.to_string());
-    remove_file(db_path.as_str());
-    remove_file(format!("{db_path}-shm"));
-    remove_file(format!("{db_path}-wal"));
+    let _ = remove_file(db_path.as_str());
+    let _ = remove_file(format!("{db_path}-shm"));
+    let _ = remove_file(format!("{db_path}-wal"));
 
     group_stances().expect("Stance grouping error");
 
     let mut connection = open_db(db_path.as_str()).expect("DB init error");
     create_tables(&connection).expect("Table create error");
-    clear_tables(&connection).expect("Table reconstruction error");
     insert_localities(&mut connection).expect("Locality insert error");
     insert_stops(&mut connection).expect("Stop insert error");
     for source in SOURCES {

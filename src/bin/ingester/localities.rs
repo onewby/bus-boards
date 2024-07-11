@@ -2,7 +2,6 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::fs;
 use std::str::FromStr;
-use phf::phf_map;
 use rusqlite::{Connection, params};
 use serde::{Deserialize, Serialize};
 use spex::parsing::XmlReader;
@@ -78,11 +77,6 @@ fn convert_locality(locality: &Element) -> Option<Locality> {
     })
 }
 
-const NAPTAN_OVERRIDES: phf::Map<&str, &str> = phf_map! {
-    "E0055323" => "E0043654",
-    "N0072212" => "E0041739"
-};
-
 pub fn insert_stops(db: &mut Connection) -> Result<(), Box<dyn Error>> {
     println!("Importing stops");
     let localities = load_localities_json();
@@ -97,7 +91,6 @@ pub fn insert_stops(db: &mut Connection) -> Result<(), Box<dyn Error>> {
         let mut insert_stance = tx.prepare("INSERT INTO stances (code, street, indicator, lat, long, stop, crs) VALUES (?, ?, ?, ?, ?, ?, ?)")?;
 
         for (locality, stops) in localities {
-            let locality = NAPTAN_OVERRIDES.get(locality.as_str()).map_or(locality, |l| l.to_string());
             for (stop, stances) in stops {
                 match insert_stop.query_row([&stop, &locality], |row| row.get::<_, u64>(0)) {
                     Ok(stop_id) => {
@@ -110,7 +103,7 @@ pub fn insert_stops(db: &mut Connection) -> Result<(), Box<dyn Error>> {
                                 stance.long,
                                 stop_id,
                                 stance.crs
-                            ]).expect("Stance insert failed");
+                            ]).expect(format!("Stance insert failed: {}", stance.atco_code).as_str());
                         }
                     },
                     Err(err) => {
