@@ -1,6 +1,6 @@
 use rusqlite::Connection;
 use std::error::Error;
-use BusBoardsServer::config::{LastUpdates, save_updates};
+use std::fs;
 use crate::localities::{load_localities_json, Localities, Stance};
 
 fn clean_arrivals(db: &mut Connection) -> Result<(), Box<dyn Error>> {
@@ -62,7 +62,9 @@ fn clean_stops(conn: &Connection) -> Result<(), rusqlite::Error> {
 }
 
 fn reset_polar() -> Result<(), Box<dyn Error>> {
-    save_updates(LastUpdates::default())
+    fs::remove_file(".update.lothian");
+    fs::remove_file(".update.polar");
+    Ok(())
 }
 
 fn patch_display_names(conn: &mut Connection) -> rusqlite::Result<usize> {

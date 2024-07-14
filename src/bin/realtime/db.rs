@@ -20,7 +20,7 @@ pub type DBPool = Pool<SqliteConnectionManager>;
 pub type PooledConn = PooledConnection<SqliteConnectionManager>;
 
 pub fn open_db() -> Pool<SqliteConnectionManager> {
-    let manager = SqliteConnectionManager::file("/Users/onewby/Documents/BetterBuses/bus-site/stops.sqlite")
+    let manager = SqliteConnectionManager::file("stops.sqlite")
         .with_init(|s| rusqlite::vtab::array::load_module(s));
     Pool::new(manager).unwrap()
 }
@@ -323,7 +323,7 @@ pub fn save_lothian_pattern_allocations(db: &Arc<DBPool>, pattern: &str, trip_id
     let mut db = get_pool(db);
     let tx = db.transaction()?;
     {
-        let mut stmt= tx.prepare_cached("INSERT INTO polar (gtfs, polar) VALUES (?,?)")?;
+        let mut stmt= tx.prepare_cached("INSERT OR IGNORE INTO polar (gtfs, polar) VALUES (?,?)")?;
         for trip_id in trip_ids {
             stmt.execute(params![trip_id, pattern])?;
         }
@@ -369,7 +369,7 @@ pub fn save_passenger_trip_allocations(db: &Arc<DBPool>, trips: &Vec<PassengerDi
     let mut db = get_pool(db);
     let tx = db.transaction()?;
     {
-        let mut stmt= tx.prepare_cached("INSERT INTO polar (gtfs, polar, direction) VALUES (?,?,?)")?;
+        let mut stmt= tx.prepare_cached("REPLACE INTO polar (gtfs, polar, direction) VALUES (?,?,?)")?;
         for trip in trips {
             stmt.execute(params![trip.gtfs, trip.polar, trip.direction])?;
         }

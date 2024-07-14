@@ -53,6 +53,7 @@ spex = "0.2.1"
 tempfile = "3.10.1"
 polars = { version = "0.41.3", features = ["lazy", "strings", "object", "dtype-struct", "regex", "performant", "is_in", "is_unique", "partition_by"] }
 proj = { version = "0.27.2", features = ["geo-types"] }
+governor = "0.6.3"
 
 [build-dependencies]
 prost-build = "0.12.3"

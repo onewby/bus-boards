@@ -1,12 +1,15 @@
+use std::num::{NonZeroU32};
 use std::ops::Add;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 use chrono::{DateTime, TimeDelta, Utc};
 use chrono::serde::ts_seconds;
-use futures::{FutureExt, stream, StreamExt};
+use futures::{FutureExt, SinkExt, stream, StreamExt};
 use futures::future::join_all;
 use geo_types::Point;
+use governor::{DefaultDirectRateLimiter, Quota};
+use governor::prelude::StreamRateLimitExt;
 use itertools::Itertools;
 use nu_ansi_term::Color::Yellow;
 use reqwest::{Client};
@@ -165,16 +168,20 @@ pub async fn update_route_data(db: &Arc<DBPool>, config: &Arc<BBConfig>) {
 }
 
 pub async fn process_group(db: &Arc<DBPool>, config: &Arc<BBConfig>, group: &LothianGroup) {
-    let gtfs = get_operator_routes(db, config.lothian.operators[group.id.as_str()].as_str());
+    let gtfs = get_operator_routes(db, config.lothian.operators.get(group.id.as_str()).or(config.lothian.operators.get("lothian")).unwrap().as_str());
     join_all(group.routes.iter().filter_map(|r| {
-        gtfs.iter().find(|(route_id, route_name)| r.name == *route_name).map(|(route_id, route_name)| (r, route_id))
+        gtfs.iter()
+            .find(|(route_id, route_name)| r.name == *route_name)
+            .map(|(route_id, route_name)| (r, route_id))
     }).map(|r| process_route(db, r))).await;
 }
 
 pub async fn process_route(db: &Arc<DBPool>, (route, gtfs_route_id): (&LothianRoute, &String)) {
-    match get_url::<LothianPatterns, _, _>("", reqwest::Response::json).await {
+    match get_url::<LothianPatterns, _, _>(format!("https://lothianapi.com/routePatterns?route_name={}", route.name), reqwest::Response::json).await {
         Ok(patterns) => {
-            join_all(patterns.patterns.iter().map(|p| process_route_pattern(&db, gtfs_route_id, p.id.as_str()))).await;
+            for p in patterns.patterns {
+                process_route_pattern(&db, gtfs_route_id, p.id.as_str()).await;
+            }
         }
         Err(e) => { eprintln!("{}", e); }
     };
@@ -186,15 +193,19 @@ pub async fn process_route_pattern(db: &Arc<DBPool>, gtfs_route_id: &str, patter
         .map(|i| current_date.add(TimeDelta::days(i)))
         .then(|date| get_url_with_date(pattern, date))
         .filter_map(|r| async move {
+            if r.is_err() {
+                println!("{gtfs_route_id}, {pattern} - {}", r.as_ref().unwrap_err());
+            }
             r.map(|(date, timetables)| {
+                //println!("{gtfs_route_id}, {pattern}, {date} - {}", timetables.timetable.trips.len());
                 let gtfs_trips = get_lothian_timetabled_trips(db, &date, gtfs_route_id);
                 let trip_ids = timetables.timetable.trips.iter().filter_map(|trip| {
-                    let deps = trip.departures.iter().filter(|dep| dep.time != "-").collect_vec();
+                    let deps = trip.departures.iter().filter(|dep| dep.time != "-" && dep.scheduled_for.is_some()).collect_vec();
                     let origin = deps.first().unwrap();
                     let dest = deps.last().unwrap();
-                    let origin_date = origin.scheduled_for.unix_time;
+                    let origin_date = origin.scheduled_for.as_ref().unwrap().unix_time;
                     let origin_time = relative_to(&origin_date, &origin_date);
-                    let dest_time = relative_to(&origin_date, &dest.scheduled_for.unix_time);
+                    let dest_time = relative_to(&origin_date, &dest.scheduled_for.as_ref().unwrap().unix_time);
                     gtfs_trips.iter().find(|trip|
                         trip.origin_stop == origin.stop_id && trip.dest_stop == dest.stop_id
                             && trip.min_stop_time == origin_time.timestamp() && trip.max_stop_time == dest_time.timestamp())
@@ -202,7 +213,8 @@ pub async fn process_route_pattern(db: &Arc<DBPool>, gtfs_route_id: &str, patter
                 }).collect_vec();
                 stream::iter(trip_ids)
             }).ok()
-        }).flatten().collect::<Vec<_>>().await;
+        }).flat_map(|r| r).collect::<Vec<_>>().await;
+    println!("{gtfs_route_id}, {pattern} - saving {}", allocateds.len());
     save_lothian_pattern_allocations(db, pattern, &allocateds).inspect_err(|e| eprintln!("Could not save Lothian allocations for {pattern}: {e}"))
 }
 
@@ -305,17 +317,17 @@ pub struct LothianPatterns {
     patterns:    Vec<LothianPattern>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct LothianPattern {
     id:          String,
     #[serde(rename = "routeName")]
     route_name:   String,
     origin:      String,
     destination: String,
-    polyline:    String
+    polyline:    Option<String>
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct LothianTimetables {
     server:      String,
     #[serde(rename = "timeElapsed")]
@@ -325,21 +337,21 @@ pub struct LothianTimetables {
     timetable:   LothianTimetable
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct LothianTimetable {
     #[serde(rename = "routePattern")]
     route_pattern: LothianPattern,
     trips:        Vec<LothianTrip>
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct LothianTrip {
     #[serde(rename = "tripID")]
     trip_id:     String,
     departures: Vec<LothianDeparture>
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct LothianDeparture {
     #[serde(rename = "stopID")]
     stop_id:        String,
@@ -347,11 +359,11 @@ pub struct LothianDeparture {
     #[serde(rename = "isTimingPoint")]
     is_timing_point: bool,
     #[serde(rename = "scheduledFor")]
-    scheduled_for:  ScheduledFor,
-    sequence:      String
+    scheduled_for:  Option<ScheduledFor>,
+    sequence:      Option<String>
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct ScheduledFor {
     #[serde(rename = "unixTime", with = "ts_seconds")]
     unix_time:    DateTime<Utc>,

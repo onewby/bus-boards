@@ -26,7 +26,6 @@ use crate::traveline::download_noc;
 const DEFAULT_DB_PATH: &str = "stops.sqlite";
 const SQL_INDEXES: &str = include_str!("sql/indexes.sql");
 const SQL_MODEL: &str = include_str!("sql/model.sql");
-const GTFS_TABLES: [&str; 6] = ["stop_times", "trips", "calendar_dates", "calendar", "routes", "agency"];
 
 fn main() {
     let db_path = std::env::var("BUSES_DB_PATH").unwrap_or(DEFAULT_DB_PATH.to_string());
@@ -61,16 +60,6 @@ fn open_db(db_path: &str) -> Result<Connection, rusqlite::Error> {
 fn create_tables(conn: &Connection) -> Result<(), Box<dyn Error>> {
     println!("Initialising tables");
     conn.execute_batch(SQL_MODEL)?;
-    Ok(())
-}
-
-fn clear_tables(conn: &Connection) -> Result<(), Box<dyn Error>> {
-    conn.pragma_update(None, "foreign_keys", "OFF")?;
-    for table in GTFS_TABLES {
-        conn.execute(format!("DELETE FROM {table}").as_str(), [])?;
-    }
-    create_tables(conn)?;
-    conn.pragma_update(None, "foreign_keys", "ON")?;
     Ok(())
 }
 

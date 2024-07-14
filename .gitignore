@@ -6,6 +6,6 @@ profile.json
 gtfs/
 target/
 Stops.csv
-stops.sqlite
+stops.sqlite*
 localities.json
 private.config.toml

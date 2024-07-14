@@ -19,12 +19,6 @@ pub struct BBConfig {
     pub lothian: LothianConfig
 }
 
-#[derive(Serialize, Deserialize, Default)]
-pub struct LastUpdates {
-    pub lothian: u8,
-    pub passenger: u8
-}
-
 impl BBConfig {
     pub fn is_enabled(&self, resp: GTFSResponder) -> bool {
         self.listeners.contains(&resp)
@@ -76,22 +70,4 @@ pub fn load_config() -> BBConfig {
         eprintln!("{}", err);
         BBConfig::default()
     })
-}
-
-pub fn load_last_updates() -> LastUpdates {
-    let settings = Config::builder()
-        .add_source(File::with_name("last_updates"))
-        .set_default("lothian", 0).unwrap()
-        .set_default("passenger", 0).unwrap()
-        .build()
-        .unwrap();
-    settings.try_deserialize().unwrap_or_else(|err| {
-        eprintln!("{}", err);
-        LastUpdates::default()
-    })
-}
-
-pub fn save_updates(last_updates: LastUpdates) -> Result<(), Box<dyn Error>> {
-    let json = serde_json::to_string(&last_updates).map_err(|err| Box::new(err))?;
-    Ok(std::fs::write("last_updates.json", json).map_err(|err| Box::new(err))?)
 }

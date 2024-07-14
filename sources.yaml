@@ -12,11 +12,8 @@ passenger:
       gtfs: OP8781
       op_code: MBLB
     McGills Scotland East Ltd:
-      gtfs: OP8747
+      gtfs: OP11782
       op_code: MESC
-#    Bright Bus:
-#      gtfs: OP11782
-#      op_code: MESC
   https://westcoastmotors.arcticapi.com:
     WCMO:
       gtfs: OP528
@@ -56,3 +53,4 @@ lothian:
       lothian: OP596
       country: OP597
       ecb: OP598
+      eve: OP549
