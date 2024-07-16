@@ -4,8 +4,10 @@ use piz::ZipArchive;
 use piz::read::{as_tree, FileTree};
 use std::io::BufReader;
 use std::collections::{HashMap, HashSet};
+use std::fs::File;
 use serde::{Deserialize, Serialize};
 use std::io;
+use std::path::Path;
 use rustls::{Certificate, ClientConfig, DigitallySignedStruct, ServerName};
 use std::sync::Arc;
 use suppaftp::{RustlsConnector, RustlsFtpStream};
@@ -221,6 +223,19 @@ pub fn download_noc(conn: &mut Connection) -> Result<(), Box<dyn Error>> {
         }
     }
     tx.commit()?;
+    
+    // Insert manual overrides
+    
+    if Path::new("agency_mappings.json").exists() {
+        let overrides: HashMap<String, String> = serde_json::from_reader(BufReader::new(File::open("agency_mappings.json")?))?;
+        let tx = conn.transaction()?;
+        {
+            let mut stmt = tx.prepare("INSERT OR IGNORE INTO traveline (code, agency_id) VALUES (?1, ?2)")?;
+            for (traveline, gtfs) in overrides {
+                stmt.execute(params![traveline, gtfs])?;
+            }
+        }
+    }
 
     Ok(())
 }

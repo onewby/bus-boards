@@ -98,28 +98,20 @@ operator filters help in part to address this.
 
 ## Setup
 
-The repository is set up with a root directory and bus-site directory to 
-accommodate for a Python module with a JavaScript submodule in IntelliJ. 
-There are better/clearer ways to organise this, so this may change.
+The full system consists of a frontend Svelte client, a backend Rust server handling
+realtime data, and a Rust data ingester to populate the database.
 
-1. Install Python dependencies in the root directory using `pip3 install -r 
-   requirements.txt`. If there are conflicts, look into using a `virtualenv`.
-2. Install JavaScript dependencies in `bus-site` using `npm install` in the 
-   `bus-site` directory.
-3. To regenerate the crs.csv ATCO code to CRS mappings, place the [NaPTAN in 
-   XML format](https://naptan.api.dft.gov.uk/v1/access-nodes?dataFormat=xml) 
-   in the root directory as NaPTAN.xml and run `python3 stations.py`. The 
-   NaPTAN in XML format is ~500MB, so only do this if you really need to.
-4. Run `./buildDB.sh` to build the database for the first time. You can 
-   re-run this to regenerate locality and stance data at any point, or you 
-   can use `./rebuildDB.sh` in subsequent rebuilds to only update timetable 
-   data.
-5. Set the environment variable `DARWIN_API_KEY` to your [OpenLDBWS SOAP API key](https://realtime.nationalrail.co.uk/OpenLDBWSRegistration/)
-   for National Rail integration, and `FIRST_API_KEY` to a FirstBus API key
+1. Set the environment variable `DARWIN_API_KEY` to your [OpenLDBWS SOAP API key](https://realtime.nationalrail.co.uk/OpenLDBWSRegistration/)
+   for National Rail integration, and `BUS_FIRST_API_KEY` to a FirstBus API key
    for FirstBus realtime data.
-6. Set the environment variables `TNDS_USERNAME` and `TNDS_PASSWORD` to your FTP
+2. Set the environment variables `TNDS_USERNAME` and `TNDS_PASSWORD` to your FTP
    username and password for the [Traveline National Dataset](https://www.travelinedata.org.uk/traveline-open-data/traveline-national-dataset/).
-7. Run using `npm run all` from `bus-site/`.
+3. If crs.csv is out of date in `server/`, run `cargo run --bin stations`
+   from `server/` to update it.
+4. Populate the database using `cargo run --bin ingester` from `server/`.
+5. Run the server using `cargo run --bin realtime` from `server/`.
+6. Run the client using `npm run all` from `bus-site/`. Use the
+   environment variable `GTFS=OFF` if you do not want to use the realtime server.
 
 
 ## Next steps

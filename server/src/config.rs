@@ -62,7 +62,7 @@ pub fn load_config() -> BBConfig {
         .add_source(File::with_name("sources"))
         .add_source(File::with_name("private.config").required(false))
         // Add in settings from the environment (with a prefix of BUS)
-        .add_source(Environment::with_prefix("BUS"))
+        .add_source(Environment::with_prefix("BUS").separator("_"))
         .set_default("listeners", GTFSResponder::iter().map(|r| r.to_string()).collect::<Vec<String>>()).unwrap()
         .build()
         .unwrap();

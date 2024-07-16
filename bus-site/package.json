@@ -8,13 +8,8 @@
 		"preview": "vite preview",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
-		"import:gtfs": "vite-node --options.transformMode.ssr='/.*/' import_gtfs.ts",
-		"import:passenger": "vite-node --options.transformMode.ssr='/.*/' import_passenger.ts passenger",
-		"import:lothian": "vite-node --options.transformMode.ssr='/.*/' import_lothian.ts lothian",
-		"service:start": "PORT=3123 node build/index.js",
-		"service:realtime": "vite-node --options.transformMode.ssr='/.*/' src/realtime/gtfs_microservice.ts",
-		"all": "npm run build && GTFS=microservice concurrently -p '[{time} {name}]' -t 'HH:mm:ss' -c 'cyan,magenta' 'npm:service:realtime' 'npm:service:start'",
-		"dev:rt": "GTFS=microservice concurrently -p '[{time} {name}]' -t 'HH:mm:ss' -c 'cyan,magenta' 'npm:service:realtime' 'npm:dev'"
+		"start": "PORT=3123 node build/index.js",
+		"all": "npm run build && npm run start"
 	},
 	"devDependencies": {
 		"@sveltejs/adapter-auto": "^3.1.0",

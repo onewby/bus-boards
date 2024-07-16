@@ -4,8 +4,11 @@ import {
     FeedHeader,
     FeedMessage,
     Alert,
-} from "../routes/api/service/gtfs-realtime.ts";
-import type {StopAlerts} from "./feeder.ts";
+} from "./gtfs-realtime.ts";
+
+export type StopAlerts = {
+    alerts: Alert[]
+}
 
 export const FeedMessageWithAlerts = {
     encode(message: FeedMessage & StopAlerts, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {

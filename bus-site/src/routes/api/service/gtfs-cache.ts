@@ -1,16 +1,8 @@
-import {type Alert, FeedHeader_Incrementality, FeedMessage} from "./gtfs-realtime";
+import {type Alert, FeedMessage} from "./gtfs-realtime";
 import type {ServiceData} from "../../../api.type";
 import {GET as serviceGet} from "./+server";
 import {env} from "$env/dynamic/private";
-import {load_gtfs_source} from "../../../realtime/feeder_bods.ts";
-import {load_ember} from "../../../realtime/feeder_ember.ts";
-import {load_all_stagecoach_data} from "../../../realtime/feeder_stagecoach.ts";
-import {load_passenger_sources} from "../../../realtime/feeder_passenger.ts";
-import {load_first_vehicles} from "../../../realtime/feeder_first.ts";
-import {load_coaches} from "../../../realtime/feeder_coaches.ts";
-import {type DownloadResponse, emptyDownloadResponse, type StopAlerts} from "../../../realtime/feeder.ts";
-import {load_Lothian_vehicles} from "../../../realtime/feeder_lothian.ts";
-import {FeedMessageWithAlerts} from "../../../realtime/gtfs_protobuf.ts";
+import {FeedMessageWithAlerts, type StopAlerts} from "./gtfs_protobuf.ts";
 
 /*
  * Realtime data
@@ -23,8 +15,10 @@ let alertCache: AlertCaches = {route: {}, stop: {}, trip: {}, agency: {}}
 
 // Download GTFS data and update it every 10s
 export async function initGTFS() {
-    await downloadGTFS()
-    gtfsUpdateLoop()
+    if(env.GTFS !== "OFF") {
+        await downloadGTFS()
+        gtfsUpdateLoop()
+    }
 }
 
 function gtfsUpdateLoop() {
@@ -47,30 +41,6 @@ export async function downloadGTFS() {
     }
     serviceCache = {}
     createAlertCaches()
-}
-
-export async function manualDownloadGTFS() {
-    const sources = [load_gtfs_source(), load_ember(), load_all_stagecoach_data(), load_passenger_sources(), load_first_vehicles(), load_coaches(), load_Lothian_vehicles()]
-    const newEntries: DownloadResponse[] = (await Promise.allSettled(sources)).map(p => {
-        if(p.status === 'fulfilled') {
-            return p.value
-        } else {
-            console.error(p.reason)
-            return emptyDownloadResponse()
-        }
-    })
-
-    let nowDate = Date.now() / 1000
-    gtfsCache = {
-        header: {
-            gtfsRealtimeVersion: "2.0",
-            incrementality: FeedHeader_Incrementality.FULL_DATASET,
-            timestamp: Math.floor(Date.now() / 1000)
-        },
-        entity: newEntries.flatMap(e => e.entities),
-        alerts: newEntries.flatMap(e => e.alerts ?? [])
-            .filter(a => a.activePeriod.find(ap => ap.start <= nowDate && ap.end >= nowDate))
-    }
 }
 
 // Locate trip in GTFS cache
