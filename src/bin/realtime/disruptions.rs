@@ -21,22 +21,28 @@ use crate::transit_realtime::alert::{Cause, Effect};
 pub async fn disruptions_listener(tx: Sender<GTFSResponse>, config: Arc<BBConfig>, db: Arc<DBPool>) {
     let passenger_alerts_cache = Mutex::new(HashMap::<SourceURL, Vec<Alert>>::new());
     loop {
+        // Get provider disruptions
         let (bods_alerts, lothian_alerts, passenger_alerts) = join!(get_bods_disruptions(&db), get_lothian_disruptions(&db), get_passenger_disruptions(&db, &config, &passenger_alerts_cache));
 
+        // Flatten provider disruptions into one Vec
         let mut alerts = Vec::with_capacity(bods_alerts.len() + lothian_alerts.len() + passenger_alerts.len());
         alerts.extend(bods_alerts);
         alerts.extend(lothian_alerts);
         alerts.extend(passenger_alerts);
 
+        // Publish to main feed
         tx.send((DISRUPTIONS, vec![], alerts)).await.unwrap_or_else(|err| eprintln!("{}", err));
 
+        // Wait until next loop
         time::sleep(time::Duration::from_secs(60*15)).await
     }
 }
 
+/// Get BODS disruptions
 async fn get_bods_disruptions(db: &Arc<DBPool>) -> Vec<Alert> {
     let siri = download_siri().await;
     let alerts: Vec<Alert> = siri.siri.service_delivery.situation_exchange_delivery.situations.situations.iter().flat_map(|situation| {
+        // Map time ranges to GTFS
         let time_ranges: Vec<TimeRange> = situation.validity_period.iter().map(|pw| {
             TimeRange {
                 start: Some(pw.start_time.timestamp() as u64),
@@ -46,9 +52,10 @@ async fn get_bods_disruptions(db: &Arc<DBPool>) -> Vec<Alert> {
                 }
             }
         }).collect();
-        // One generic for stops
+        // One generic alert for stops
         // Specific advice for each route
         let mut alerts: Vec<Alert> = situation.consequences.consequences.iter().map(|con| {
+            // Route/operator-specific alert
             Alert {
                 active_period: time_ranges.clone(),
                 cause: Some(Cause::OtherCause as i32),
@@ -80,6 +87,7 @@ async fn get_bods_disruptions(db: &Arc<DBPool>) -> Vec<Alert> {
             } else { vec![] }
         ).collect();
         if !stop_points.is_empty() {
+            // Generic alert for stops
             alerts.push(Alert {
                 active_period: time_ranges.clone(),
                 cause: Some(Cause::OtherCause as i32),
@@ -111,6 +119,7 @@ async fn get_bods_disruptions(db: &Arc<DBPool>) -> Vec<Alert> {
     alerts
 }
 
+/// Convert Operators enum to an iterator of operators
 fn compact_op<'a>(obj: &'a Option<Operators>) -> Box<dyn Iterator<Item = &'a SiriAffectedOperator> + 'a> {
     return match obj {
         None => Box::new(iter::empty()),

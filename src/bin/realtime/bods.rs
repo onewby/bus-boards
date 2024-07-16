@@ -12,6 +12,7 @@ use crate::transit_realtime::{FeedEntity, FeedMessage};
 pub async fn bods_listener(tx: Sender<GTFSResponse>, _: Arc<BBConfig>) {
     loop {
         let mut bods: FeedMessage = FeedMessage::default();
+        // Download + decode BODS data
         if let Ok(result) = reqwest::get("https://data.bus-data.dft.gov.uk/avl/download/gtfsrt").await {
             if let Ok(bytes) = result.bytes().await {
                 if let Ok(mut archive) = ZipArchive::new(std::io::Cursor::new(bytes)) {
@@ -23,6 +24,7 @@ pub async fn bods_listener(tx: Sender<GTFSResponse>, _: Arc<BBConfig>) {
                 }
             }
         }
+        // Include vehicles with an active journey
         if bods.header.timestamp.is_some() {
             let filtered_entities: Vec<FeedEntity> = bods.entity.iter()
                 .filter(|e| {
@@ -36,8 +38,10 @@ pub async fn bods_listener(tx: Sender<GTFSResponse>, _: Arc<BBConfig>) {
                     false
                 })
                 .cloned().collect();
+            // Send to main feed
             tx.send((BODS, filtered_entities, vec![])).await.unwrap_or_else(|err| eprintln!("{}", err));
         }
+        // Wait for next loop
         time::sleep(time::Duration::from_secs(60)).await
     }
 }

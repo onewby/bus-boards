@@ -1,46 +1,54 @@
-use std::num::{NonZeroU32};
 use std::ops::Add;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
-use chrono::{DateTime, TimeDelta, Utc};
+
+use chrono::{DateTime, TimeDelta, Timelike, Utc};
 use chrono::serde::ts_seconds;
-use futures::{FutureExt, SinkExt, stream, StreamExt};
+use futures::{stream, StreamExt};
 use futures::future::join_all;
 use geo_types::Point;
-use governor::{DefaultDirectRateLimiter, Quota};
-use governor::prelude::StreamRateLimitExt;
 use itertools::Itertools;
+use log::{debug, error, info};
 use nu_ansi_term::Color::Yellow;
-use reqwest::{Client};
+use reqwest::Client;
 use rusqlite::Error;
 use tokio::sync::mpsc::Sender;
 use tokio::time;
+
 use BusBoardsServer::config::BBConfig;
-use crate::db::{DBPool, get_operator_routes, get_line_segments, get_lothian_patterns_tuples, get_lothian_route, lothian_trip_query, LothianDBPattern, reset_lothian, get_lothian_timetabled_trips, save_lothian_pattern_allocations};
+
+use crate::bus_prediction::{assign_vehicles, get_trip_candidates, get_trip_info, TripCandidate, TripCandidateList, TripInfo};
+use crate::db::{DBPool, get_line_segments, get_lothian_patterns_tuples, get_lothian_route, get_lothian_timetabled_trips, get_operator_routes, lothian_trip_query, LothianDBPattern, reset_lothian, save_lothian_pattern_allocations};
 use crate::GTFSResponder::LOTHIAN;
 use crate::GTFSResponse;
-use crate::bus_prediction::{assign_vehicles, get_trip_candidates, get_trip_info, TripCandidate, TripCandidateList, TripInfo};
 use crate::siri::create_translated_string;
 use crate::transit_realtime::{Alert, EntitySelector, FeedEntity, Position, TimeRange, TripDescriptor, VehiclePosition};
 use crate::transit_realtime::vehicle_position::VehicleStopStatus;
-use crate::util::{get_url, gtfs_date, load_last_update, relative_to, save_last_update, URLParseError};
+use crate::util::{adjust_timestamp, get_url, gtfs_date, load_last_update, relative_to, save_last_update, URLParseError};
 
 const UPDATE_FILE: &str = ".update.lothian";
 
 pub async fn lothian_listener(tx: Sender<GTFSResponse>, config: Arc<BBConfig>, db: Arc<DBPool>) {
     let http = Client::builder().timeout(Duration::from_secs(10)).build().unwrap();
-    let all_patterns = get_lothian_patterns_tuples(&db);
     let mut update_time = load_last_update(UPDATE_FILE);
+
+    // Get route-directions to fetch
+    let mut all_patterns = get_lothian_patterns_tuples(&db);
+
     loop {
+        // Perform route data updates on first run or at 3am at the configured interval
         if update_time.add(TimeDelta::days(config.update_interval_days as i64)) < Utc::now() {
-            println!("{}", Yellow.paint("Performing Lothian route updates"));
+            info!("{}", Yellow.paint("Performing Lothian route updates"));
             update_route_data(&db, &config).await;
-            let new_update_time = Utc::now();
+            all_patterns = get_lothian_patterns_tuples(&db);
+            info!("{}", Yellow.paint("Lothian route updates completed"));
+            let new_update_time = Utc::now().with_hour(3).unwrap().with_minute(0).unwrap();
             update_time = new_update_time;
             save_last_update(UPDATE_FILE, &new_update_time);
         }
 
+        // Match vehicles for each stored pattern
         let p_map = |p: &LothianDBPattern| process_pattern(p.route.to_string(), p.pattern.to_string(), &http, &db);
         let entities = stream::iter(all_patterns.iter())
             .map(p_map)
@@ -48,24 +56,27 @@ pub async fn lothian_listener(tx: Sender<GTFSResponse>, config: Arc<BBConfig>, d
             .flat_map(stream::iter)
             .collect::<Vec<FeedEntity>>().await;
 
+        // Publish to main feed
         tx.send((LOTHIAN, entities, vec![])).await.unwrap_or_else(|err| eprintln!("{}", err));
 
+        // Wait for next fetch
         time::sleep(Duration::from_secs(60)).await
     }
 }
 
-fn to_feed_entity(trip: &TripInfo, vehicle: &LothianVehicle, candidates: &[TripCandidate]) -> FeedEntity {
+/// Convert located trip to GTFS
+fn to_feed_entity(trip: &TripInfo, vehicle: &LothianVehicle, candidate: &TripCandidate) -> FeedEntity {
     FeedEntity {
         id: format!("lothian-{}-{}", vehicle.service_name, vehicle.journey_id),
         is_deleted: None,
         trip_update: None,
         vehicle: Some(VehiclePosition {
             trip: Some(TripDescriptor {
-                trip_id: Some(candidates[trip.candidate].trip_id.to_string()),
+                trip_id: Some(candidate.trip_id.to_string()),
                 route_id: None,
                 direction_id: None,
-                start_time: Some(candidates[trip.candidate].times[0].format("%H:%M:%S").to_string()),
-                start_date: Some(candidates[trip.candidate].date.to_string()),
+                start_time: Some(candidate.times[0].format("%H:%M:%S").to_string()),
+                start_date: Some(candidate.date.to_string()),
                 schedule_relationship: None,
             }),
             vehicle: None,
@@ -76,8 +87,8 @@ fn to_feed_entity(trip: &TripInfo, vehicle: &LothianVehicle, candidates: &[TripC
                 odometer: None,
                 speed: None,
             }),
-            current_stop_sequence: Some(candidates[trip.candidate].seqs[trip.stop_index]),
-            stop_id: Some(candidates[trip.candidate].route[trip.stop_index].to_owned()),
+            current_stop_sequence: Some(candidate.seqs[trip.stop_index]),
+            stop_id: Some(candidate.route[trip.stop_index].to_owned()),
             current_status: Some(i32::from(VehicleStopStatus::InTransitTo)),
             timestamp: Some(Utc::now().timestamp() as u64),
             congestion_level: None,
@@ -90,31 +101,39 @@ fn to_feed_entity(trip: &TripInfo, vehicle: &LothianVehicle, candidates: &[TripC
     }
 }
 
+/// Match vehicles for a specific route direction
 async fn process_pattern(route: String, pattern: String, http: &Client, db: &Arc<DBPool>) -> Vec<FeedEntity> {
     return match http.get(format!("https://tfeapp.com/api/website/vehicles_on_route.php?route_id={pattern}")).send().await {
         Ok(resp) => {
             return if resp.status().is_success() && let Ok(vehicles) = resp.json::<LothianLiveVehicles>().await {
-                let now_date = Utc::now();
+                let now_date = adjust_timestamp(&Utc::now());
+                // Get list of possible trips stored in GTFS that could match with a realtime vehicle
                 let candidates = get_trip_candidates(db, pattern.as_str(), &now_date, lothian_trip_query);
+                // Get route stance locations for vehicles to be matched to their nearest route line segment
                 let points = get_line_segments(db, route.to_string());
+                // For each vehicle, get a list of how delayed a vehicle would be on each trip at its current location
                 let mut closeness: Vec<TripCandidateList> = vehicles.vehicles.iter().enumerate().map(|(v_i, v)| {
                     TripCandidateList {
                         vehicle: v_i,
                         cands: candidates.iter().enumerate().map(|(c_i, c)| get_trip_info(c, c_i, &points, &Point::new(v.longitude, v.latitude), &now_date)).collect(),
                     }
                 }).filter(|v| !v.cands.is_empty()).collect();
-                assign_vehicles(&mut closeness, &candidates).iter().map(|(&i, trip)| to_feed_entity(trip, &vehicles.vehicles[i], &candidates)).collect()
+
+                // Match vehicles trip-by-trip using the most on-time matches first
+                let v: Vec<_> = assign_vehicles(&mut closeness, &candidates).iter().map(|(&i, trip)| to_feed_entity(trip, &vehicles.vehicles[i], &candidates[trip.candidate])).collect();
+                v
             } else {
                 vec![]
             }
         }
         Err(err) => {
-            eprintln!("{}", err);
+            error!("{}", err);
             vec![]
         }
     };
 }
 
+/// Map Lothian disruptions data to GTFS
 pub async fn get_lothian_disruptions(db: &Arc<DBPool>) -> Vec<Alert> {
     return if let Ok(resp) = reqwest::get("https://lothianupdates.com/api/public/getServiceUpdates").await
         && resp.status().is_success() && let Ok(disruptions) = resp.json::<LothianEvents>().await {
@@ -155,6 +174,7 @@ pub async fn get_lothian_disruptions(db: &Arc<DBPool>) -> Vec<Alert> {
     }
 }
 
+/// Match Lothian journey codes to GTFS trip IDs
 pub async fn update_route_data(db: &Arc<DBPool>, config: &Arc<BBConfig>) {
     reset_lothian(db);
     match get_url::<LothianRoutes, _, _>("https://lothianapi.com/routes", reqwest::Response::json).await {
@@ -163,10 +183,11 @@ pub async fn update_route_data(db: &Arc<DBPool>, config: &Arc<BBConfig>) {
                 routes.groups.iter().map(|group| process_group(db, config, group))
             ).await;
         }
-        Err(e) => { eprintln!("{}", e) }
+        Err(e) => { error!("{}", e) }
     };
 }
 
+/// Match Lothian journey codes to GTFS trip IDs for a given Lothian operator
 pub async fn process_group(db: &Arc<DBPool>, config: &Arc<BBConfig>, group: &LothianGroup) {
     let gtfs = get_operator_routes(db, config.lothian.operators.get(group.id.as_str()).or(config.lothian.operators.get("lothian")).unwrap().as_str());
     join_all(group.routes.iter().filter_map(|r| {
@@ -176,17 +197,21 @@ pub async fn process_group(db: &Arc<DBPool>, config: &Arc<BBConfig>, group: &Lot
     }).map(|r| process_route(db, r))).await;
 }
 
+/// Match Lothian journey codes to GTFS trip IDs for a given route
 pub async fn process_route(db: &Arc<DBPool>, (route, gtfs_route_id): (&LothianRoute, &String)) {
     match get_url::<LothianPatterns, _, _>(format!("https://lothianapi.com/routePatterns?route_name={}", route.name), reqwest::Response::json).await {
         Ok(patterns) => {
             for p in patterns.patterns {
-                process_route_pattern(&db, gtfs_route_id, p.id.as_str()).await;
+                if let Err(e) = process_route_pattern(&db, gtfs_route_id, p.id.as_str()).await {
+                    error!("Error processing pattern {} ({gtfs_route_id}): {}", p.id, e)
+                }
             }
         }
-        Err(e) => { eprintln!("{}", e); }
+        Err(e) => { error!("{}", e); }
     };
 }
 
+/// Match Lothian journey codes to GTFS trip IDs for a given route pattern
 pub async fn process_route_pattern(db: &Arc<DBPool>, gtfs_route_id: &str, pattern: &str) -> Result<(), Error> {
     let current_date = Utc::now();
     let allocateds = stream::iter(0..7)
@@ -194,30 +219,32 @@ pub async fn process_route_pattern(db: &Arc<DBPool>, gtfs_route_id: &str, patter
         .then(|date| get_url_with_date(pattern, date))
         .filter_map(|r| async move {
             if r.is_err() {
-                println!("{gtfs_route_id}, {pattern} - {}", r.as_ref().unwrap_err());
+                error!("{gtfs_route_id}, {pattern} - {}", r.as_ref().unwrap_err());
             }
             r.map(|(date, timetables)| {
-                //println!("{gtfs_route_id}, {pattern}, {date} - {}", timetables.timetable.trips.len());
                 let gtfs_trips = get_lothian_timetabled_trips(db, &date, gtfs_route_id);
                 let trip_ids = timetables.timetable.trips.iter().filter_map(|trip| {
                     let deps = trip.departures.iter().filter(|dep| dep.time != "-" && dep.scheduled_for.is_some()).collect_vec();
                     let origin = deps.first().unwrap();
                     let dest = deps.last().unwrap();
                     let origin_date = origin.scheduled_for.as_ref().unwrap().unix_time;
-                    let origin_time = relative_to(&origin_date, &origin_date);
-                    let dest_time = relative_to(&origin_date, &dest.scheduled_for.as_ref().unwrap().unix_time);
+                    let origin_time = adjust_timestamp(&relative_to(&origin_date, &origin_date));
+                    let dest_time = adjust_timestamp(&relative_to(&origin_date, &dest.scheduled_for.as_ref().unwrap().unix_time));
+                    // Find trip with matching origin/dest locations + times
                     gtfs_trips.iter().find(|trip|
                         trip.origin_stop == origin.stop_id && trip.dest_stop == dest.stop_id
                             && trip.min_stop_time == origin_time.timestamp() && trip.max_stop_time == dest_time.timestamp())
                         .map(|t| t.trip_id.to_string())
                 }).collect_vec();
+
                 stream::iter(trip_ids)
             }).ok()
         }).flat_map(|r| r).collect::<Vec<_>>().await;
-    println!("{gtfs_route_id}, {pattern} - saving {}", allocateds.len());
-    save_lothian_pattern_allocations(db, pattern, &allocateds).inspect_err(|e| eprintln!("Could not save Lothian allocations for {pattern}: {e}"))
+    debug!("{gtfs_route_id}, {pattern} - saving {}", allocateds.len());
+    save_lothian_pattern_allocations(db, pattern, &allocateds, gtfs_route_id).inspect_err(|e| error!("Could not save Lothian allocations for {pattern}: {e}"))
 }
 
+/// Utility function - perform timetable fetch for route pattern, return with the date searched for
 async fn get_url_with_date(pattern: &str, date: DateTime<Utc>) -> Result<(DateTime<Utc>, LothianTimetables), URLParseError> {
     get_url::<LothianTimetables, _, _>(format!("https://lothianapi.com/timetable?route_pattern_id={}&date={}", pattern, gtfs_date(&date)), reqwest::Response::json)
         .await.map(|url| (date, url))

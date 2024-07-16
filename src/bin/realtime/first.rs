@@ -1,20 +1,22 @@
-use std::cmp::min;
 use std::{fmt, fs};
-use std::fmt::{Display, Formatter, Write};
+use std::cmp::min;
+use std::fmt::{Display, Formatter};
 use std::fs::File;
 use std::io::BufReader;
 use std::sync::Arc;
 use std::time::Duration;
+
 use chrono::{DateTime, NaiveDateTime, Utc};
 use chrono_tz::Tz::Europe__London;
 use futures::{SinkExt, StreamExt};
+use futures::stream::FusedStream;
 use geo_types::Point;
 use itertools::Itertools;
+use log::{error, info};
 use reqwest::Client;
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use serde::de::{SeqAccess, Visitor};
 use serde::ser::SerializeSeq;
-
 use tokio::net::TcpStream;
 use tokio::sync::mpsc::Sender;
 use tokio::time;
@@ -24,8 +26,10 @@ use tokio_tungstenite::tungstenite::error::UrlError;
 use tokio_tungstenite::tungstenite::handshake::client::{generate_key, Request};
 use url::Url;
 use uuid::Uuid;
+
 use BusBoardsServer::config::BBConfig;
 use BusBoardsServer::RPCConfiguration;
+
 use crate::db::{DBPool, get_first_trip};
 use crate::GTFSResponder::FIRST;
 use crate::GTFSResponse;
@@ -35,34 +39,49 @@ use crate::transit_realtime::trip_descriptor::ScheduleRelationship::Scheduled;
 const REGIONS_FILE: &str = "first-regions.json";
 
 pub async fn first_listener(tx: Sender<GTFSResponse>, config: Arc<BBConfig>, db: Arc<DBPool>) {
+    // Realtime fetch has a 50-vehicle limit, so fetches are done in geographic regions with less than 50 vehicles and split/retried if 50 is matched/exceeded
     let mut regions: Vec<RPCConfiguration> = if let Ok(regions_file) = File::open(REGIONS_FILE)
         && let Ok(regions) = serde_json::from_reader::<_, Vec<RPCConfigParams>>(BufReader::new(regions_file)) {
         regions.iter().map(|RPCConfigParams(region)| *region).collect_vec()
     } else {
-        println!("Could not find existing FirstBus regions file - creating a default.");
+        info!("Could not find existing FirstBus regions file - creating a default.");
         let regions = config.first.bounds.values().cloned().collect_vec();
         save_regions(&regions);
         regions
     };
 
+    // Initialise WebSocket
+    let mut ws = initialise_ws_until_success(config.first.api_key.as_str()).await;
+    info!("FirstBus websocket successfully connected");
+
     loop {
-        let mut ws = initialise_ws_until_success(config.first.api_key.as_str()).await;
-        println!("FirstBus websocket successfully connected");
+        // Reconnect if WebSocket connection lost
+        if ws.is_terminated() {
+            info!("FirstBus connection lost - attempting reconnect");
+            ws = initialise_ws_until_success(config.first.api_key.as_str()).await;
+            info!("FirstBus websocket successfully connected");
+        }
 
+        // Get vehicles and publish to main feed
         tx.send((FIRST, get_vehicles(&mut ws, &db, &config, &mut regions).await.unwrap_or(vec![]), vec![])).await.unwrap_or_else(|err| eprintln!("{}", err));
+        // Wait until next loop
         time::sleep(Duration::from_secs(60)).await;
-
-        println!("FirstBus connection lost - attempting reconnect");
     }
 }
 
+
+/// Get First vehicle mappings
 async fn get_vehicles(ws: &mut WSStream, db: &Arc<DBPool>, config: &Arc<BBConfig>, regions: &mut Vec<RPCConfiguration>) -> Option<Vec<FeedEntity>> {
+    // Get list of vehicles and a list of new regions (in case any had to be created to accommodate all the vehicles)
     let (new_regions, vehicles) = get_vehicles_by_regions(ws, regions).await;
+
+    // Save the list of new regions to file if it has expanded
     if regions.len() != new_regions.len() {
         *regions = new_regions;
         save_regions(regions);
     }
 
+    // Map vehicles to GTFS
     Some(vehicles.iter()
         .filter_map(|v|
             get_first_trip(db, v.line_name.as_str(),
@@ -72,19 +91,28 @@ async fn get_vehicles(ws: &mut WSStream, db: &Arc<DBPool>, config: &Arc<BBConfig
         .map(map_to_feed_entity).collect())
 }
 
+/// Get a list of realtime vehicles from the First WebSocket stream
 async fn get_vehicles_by_regions(ws: &mut WSStream, regions: &[RPCConfiguration]) -> (Vec<RPCConfiguration>, Vec<Member>) {
+    // Clone list of regions - use as a list of regions still to try (regions may be put onto the queue if split)
     let mut region_queue = regions.to_owned();
+    // Accumulate list of regions actually used to get vehicles from (in case any are split)
     let mut final_regions: Vec<RPCConfiguration> = Vec::with_capacity(region_queue.len());
+    // Final list of vehicles to return
     let mut final_vehicles: Vec<Member> = vec![];
+    // While there are regions still to go...
     while let Some(region) = region_queue.pop() {
+        // Send a region request
         if let Some(resp) = send_and_receive(ws, &region).await && let Some(vehicles) = resp.resource.member {
+            // Split regions and try again if the number of vehicles meets/exceeds the limit
             if vehicles.len() >= 50 {
                 let height = region.max_lat - region.min_lat;
                 let width = region.max_lon - region.min_lon;
 
+                // Get average lat/lon of all the vehicles in the region
                 let lat_middle = vehicles.iter().map(|v| v.status.location.coordinates.y()).sum::<f64>() / (vehicles.len() as f64);
                 let lon_middle = vehicles.iter().map(|v| v.status.location.coordinates.x()).sum::<f64>() / (vehicles.len() as f64);
 
+                // Split length-ways/width-ways depending on what splits the vehicles more evenly
                 if (0.5 - (lat_middle-region.min_lat).abs()/height).abs() < (0.5 - (lon_middle-region.min_lon).abs()/width).abs() {
                     // lat is more central
                     region_queue.push(RPCConfiguration {
@@ -94,6 +122,7 @@ async fn get_vehicles_by_regions(ws: &mut WSStream, regions: &[RPCConfiguration]
                         min_lon: region.min_lon, max_lon: region.max_lon, min_lat: lat_middle, max_lat: region.max_lat
                     });
                 } else {
+                    // lon is more central
                     region_queue.push(RPCConfiguration {
                         min_lon: region.min_lon, max_lon: lon_middle, min_lat: region.min_lat, max_lat: region.max_lat
                     });
@@ -102,6 +131,7 @@ async fn get_vehicles_by_regions(ws: &mut WSStream, regions: &[RPCConfiguration]
                     });
                 }
             } else {
+                // Save region/vehicles if the response is within limits
                 final_regions.push(region);
                 final_vehicles.extend(vehicles);
             }
@@ -112,6 +142,7 @@ async fn get_vehicles_by_regions(ws: &mut WSStream, regions: &[RPCConfiguration]
     (final_regions, final_vehicles)
 }
 
+/// Map vehicle/trip to GTFS
 fn map_to_feed_entity((v, trip_id): (&Member, String)) -> FeedEntity {
     FeedEntity {
         id: v.status.vehicle_id.to_string(),
@@ -134,8 +165,8 @@ fn map_to_feed_entity((v, trip_id): (&Member, String)) -> FeedEntity {
                 odometer: None,
                 speed: None,
             }),
-            current_stop_sequence: Some(v.status.stops_index.value as u32),
-            stop_id: Some(v.stops[v.status.stops_index.value].atcocode.to_string()),
+            current_stop_sequence: v.status.stops_index.as_ref().map(|s| s.value as u32),
+            stop_id: v.status.stops_index.as_ref().map(|s| v.stops[s.value].atcocode.to_string()),
             current_status: None,
             timestamp: Some(v.status.recorded_at_time.timestamp() as u64),
             congestion_level: None,
@@ -148,7 +179,9 @@ fn map_to_feed_entity((v, trip_id): (&Member, String)) -> FeedEntity {
     }
 }
 
+/// Send a region vehicle request to the WebSocket stream and receive a response
 async fn send_and_receive(ws: &mut WSStream, region: &RPCConfiguration) -> Option<FirstVehicles> {
+    // Send request
     let uuid = Uuid::new_v4().to_string();
     ws.flush().await.ok()?;
     let msg = serde_json::to_string(
@@ -161,36 +194,42 @@ async fn send_and_receive(ws: &mut WSStream, region: &RPCConfiguration) -> Optio
     ).unwrap();
     ws.send(Message::Text(msg)).await.ok()?;
 
+    // Wait for response - first receive a Result with the Update's UUID, then the Update itself
     let mut current_id: String = "".to_string();
     while let Some(msg_option) = ws.next().await {
         if let Ok(ref msg) = msg_option && let Ok(msg) = msg.to_text() {
             let resp: serde_json::Result<RPCRequest> = serde_json::from_str(msg);
             if let Ok(request) = resp {
                 match request {
+                    // Obtain the UUID of the update response we are waiting for
                     RPCRequest::Result(res) => {
                         current_id = res.id.to_string();
                     }
+                    // Return once we have an update that matches
                     RPCRequest::Update(upd) => {
                         if current_id == uuid {
                             return Some(upd.params);
                         }
                     }
                     RPCRequest::Error(err) => {
-                        eprintln!("{:?}", err.error);
+                        error!("{:?}", err.error);
                     }
+                    // Discard irrelevant messages
                     _ => {}
                 }
             } else {
-                eprintln!("{:?}", resp.unwrap_err());
+                error!("{:?}", resp.unwrap_err());
+                error!("{:?}", serde_json::from_str::<RPCUpdate>(msg).unwrap_err());
             }
         } else {
-            eprintln!("{}", msg_option.unwrap_err());
+            error!("{}", msg_option.unwrap_err());
         }
     }
 
     None
 }
 
+/// Construct a WebSocket request with the necessary authorisation headers
 fn get_client_request(url_str: &str, access_token: &str) -> tokio_tungstenite::tungstenite::Result<Request> {
     let url = Url::parse(url_str).unwrap();
     let authority = url.authority();
@@ -216,18 +255,22 @@ fn get_client_request(url_str: &str, access_token: &str) -> tokio_tungstenite::t
     Ok(req)
 }
 
+/// Attempt to initialise the WebSocket
 async fn initialise_ws(api_key: &str) -> Option<WSStream> {
+    // Get WebSocket access token from API using the API key
     return if let Ok(resp) = Client::new().get("https://prod.mobileapi.firstbus.co.uk/api/v2/bus/service/socketInfo")
                         .header("x-app-key", api_key).send().await
         && resp.status().is_success()
         && let Ok(token_resp) = resp.json::<FirstWebSocketInfo>().await {
+        // Initialise the WebSocket stream
         let request = get_client_request("wss://streaming.bus.first.transportapi.com/", token_resp.data.access_token.as_str()).unwrap();
         let ws_stream_option = connect_async(request).await;
         if ws_stream_option.is_ok() {
             let (ws_stream, _) = ws_stream_option.unwrap();
+            // Return if successful
             Some(ws_stream)
         } else {
-            eprintln!("{}", ws_stream_option.unwrap_err());
+            error!("{}", ws_stream_option.unwrap_err());
             None
         }
     } else {
@@ -236,6 +279,7 @@ async fn initialise_ws(api_key: &str) -> Option<WSStream> {
 }
 
 const MAX_TIMEOUT: u64 = 32;
+/// Keep attempting to reconnect to the WebSocket until this succeeds, with an exponentially increasing timeout
 async fn initialise_ws_until_success(api_key: &str) -> WSStream {
     let mut timeout = 1;
     loop {
@@ -248,6 +292,7 @@ async fn initialise_ws_until_success(api_key: &str) -> WSStream {
     }
 }
 
+/// Save new regions file
 fn save_regions(regions: &[RPCConfiguration]) {
     fs::write(REGIONS_FILE, serde_json::to_vec(&regions.iter().map(|r| RPCConfigParams(*r)).collect_vec()).unwrap()).unwrap();
 }
@@ -399,7 +444,7 @@ pub struct Status {
     occupancy:              Occupancy,
     progress_between_stops: ProgressBetweenStops,
     recorded_at_time:       DateTime<Utc>,
-    stops_index:            StopsIndex,
+    stops_index:            Option<StopsIndex>,
     vehicle_id:             String,
 }
 

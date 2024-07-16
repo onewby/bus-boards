@@ -3,96 +3,124 @@ use std::ops::Add;
 use std::str::FromStr;
 use std::sync::Arc;
 
-use chrono::{DateTime, DurationRound, TimeDelta, Utc};
+use chrono::{DateTime, DurationRound, TimeDelta, Timelike, Utc};
 use config::Map;
-use futures::{FutureExt, stream, StreamExt};
+use futures::{stream, StreamExt};
 use futures::future::join_all;
 use geo_types::Point;
 use itertools::Itertools;
+use log::{debug, error, info};
 use nu_ansi_term::Color::Yellow;
 use reqwest::StatusCode;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::Mutex;
 use tokio::time;
 
+use bus_prediction::{assign_vehicles, get_trip_candidates};
 use BusBoardsServer::config::{BBConfig, OperatorName, PassengerSource, SourceURL};
 
 use crate::{bus_prediction, GTFSResponse};
 use crate::bus_prediction::{TripCandidate, TripCandidateList, TripInfo};
-use crate::db::{DBPool, get_line_segments, get_operator_routes, get_passenger_route_trips, get_route_id, passenger_trip_query, PassengerRouteTrip, RouteID, RouteName, save_passenger_trip_allocations};
+use crate::db::{DBPool, get_line_segments, get_operator_routes, get_passenger_route_trips, get_route_id, passenger_trip_query, PassengerRouteTrip, reset_passenger, RouteID, RouteName, save_passenger_trip_allocations};
 use crate::GTFSResponder::PASSENGER;
 use crate::siri::create_translated_string;
 use crate::transit_realtime::{Alert, EntitySelector, FeedEntity, Position, TimeRange, TripDescriptor, VehiclePosition};
 use crate::transit_realtime::vehicle_position::VehicleStopStatus;
-use crate::util::{get_url, load_last_update, relative_to, save_last_update, URLParseError};
+use crate::util::{adjust_timestamp, get_url, load_last_update, relative_to, save_last_update, URLParseError};
 
 const UPDATE_FILE: &str = ".update.passenger";
+const DIRECTIONS: [&str; 2] = ["inbound", "outbound"];
 
 pub async fn passenger_listener(tx: Sender<GTFSResponse>, config: Arc<BBConfig>, db: Arc<DBPool>) {
     let mut update_time = load_last_update(UPDATE_FILE);
     loop {
+        // Perform route updates on first run or at 2am on each interval
         if update_time.add(TimeDelta::days(config.update_interval_days as i64)) < Utc::now() {
-            println!("{}", Yellow.paint("Performing Passenger route updates"));
+            info!("{}", Yellow.paint("Performing Passenger route updates"));
             update_passenger_data(&db, &config).await;
-            let new_update_time = Utc::now();
+            info!("{}", Yellow.paint("Passenger route updates completed"));
+            let new_update_time = Utc::now().with_hour(2).unwrap().with_minute(0).unwrap();
             update_time = new_update_time;
             save_last_update(UPDATE_FILE, &new_update_time);
         }
 
+        // Get data for each operator
         let entities_stream = stream::iter(config.passenger.iter()).then(|s| get_source_vehicles(s, &db));
         let entities = entities_stream.collect::<Vec<Vec<FeedEntity>>>().await.concat();
 
-        tx.send((PASSENGER, entities, vec![])).await.unwrap_or_else(|err| eprintln!("{}", err));
+        // Publish to main feed
+        tx.send((PASSENGER, entities, vec![])).await.unwrap_or_else(|err| error!("{}", err));
 
+        // Wait for next loop
         time::sleep(time::Duration::from_secs(60)).await
     }
 }
 
+/// Map disruptions for each operator to GTFS, flatten into one feed
 pub async fn get_passenger_disruptions(db: &Arc<DBPool>, config: &Arc<BBConfig>, alerts_cache: &Mutex<HashMap<SourceURL, Vec<Alert>>>) -> Vec<Alert> {
     let alerts_stream = stream::iter(config.passenger.iter()).then(|s| get_source_alerts(s, alerts_cache, db));
     alerts_stream.collect::<Vec<Vec<Alert>>>().await.concat()
 }
 
+/// Get realtime data for a given Passenger operator(s) feed
 pub async fn get_source_vehicles((url, operators): (&SourceURL, &Map<OperatorName, PassengerSource>), db: &Arc<DBPool>) -> Vec<FeedEntity> {
+    // Fetch feed vehicle data
     if let Ok(vehicles_resp) = reqwest::get(format!("{url}/network/vehicles")).await {
         let vehicles_resp_str = vehicles_resp.text().await.unwrap();
         let vehicles_result: serde_json::Result<PassengerVehicles> = serde_json::from_str(vehicles_resp_str.as_str());
         if vehicles_result.is_ok() {
             let vehicle_features = vehicles_result.unwrap().features;
+            // Get results for each operator the feed contains
             return vehicle_features.into_iter().group_by(|v| (v.properties.operator.to_string(), v.properties.line.to_string())).into_iter()
                 .filter(|((operator, _line), _)| operators.contains_key(&operator.to_lowercase()))
                 .flat_map(|source| process_line_vehicles(db, operators, source.0, source.1))
                 .collect()
         } else {
-            eprintln!("{}", vehicles_result.err().unwrap());
+            error!("{}", vehicles_result.err().unwrap());
         }
     }
     vec![]
 }
 
+/// Map vehicles on a given route to GTFS
 pub fn process_line_vehicles<FeatureIterator>(db: &Arc<DBPool>, operators: &Map<OperatorName, PassengerSource>, (operator, line): (String, String), vehicles_iter: FeatureIterator) -> Vec<FeedEntity>
     where FeatureIterator: Iterator<Item = VehiclesFeature> {
+    // Get GTFS route ID for the given route
     let operator_data = operators.get(&operator.to_lowercase()).unwrap();
     let route_id_result = get_route_id(db, operator_data.gtfs.to_owned(), line.to_owned());
     if route_id_result.is_err() { return vec![] }
     let route_id = route_id_result.unwrap();
-    let now_date = Utc::now();
 
+    let now_date = adjust_timestamp(&Utc::now());
+    // Get list of vehicles specific to this operator
     let vehicles: Vec<VehiclesFeature> = vehicles_iter.collect();
-    let candidates = bus_prediction::get_trip_candidates(db, route_id.as_str(), &now_date, passenger_trip_query);
+
+    // Get list of possible trips stored in GTFS that could match with a realtime vehicle
+    let candidates = get_trip_candidates(db, route_id.as_str(), &now_date, passenger_trip_query);
+    // Get route stance locations for vehicles to be matched to their nearest route line segment
     let points = get_line_segments(db, route_id);
-    let mut closeness: Vec<TripCandidateList> = vehicles.iter().enumerate().map(|(i, vehicle)| gather_direction_candidates(&now_date, &candidates, &points, i, vehicle)).filter(|v| !v.cands.is_empty()).collect();
-    bus_prediction::assign_vehicles(&mut closeness, &candidates).iter().map(|(&i, trip)| to_feed_entity(trip, &vehicles[i], &candidates)).collect()
+    // For each vehicle, get a list of how delayed a vehicle would be on each trip at its current location
+    let mut closeness: Vec<TripCandidateList> = vehicles.iter().enumerate()
+        .map(|(i, vehicle)| gather_direction_candidates(&now_date, &candidates, &points, i, vehicle))
+        .filter(|v| !v.cands.is_empty())
+        .collect();
+    // Match vehicles trip-by-trip using the most on-time matches first
+    assign_vehicles(&mut closeness, &candidates).iter()
+        // then map to GTFS feed entities
+        .map(|(&i, trip)| to_feed_entity(trip, &vehicles[i], &candidates)).collect()
 }
 
+/// Get expected delay and next stop for each vehicle-trip combination in the specified direction
 fn gather_direction_candidates<'a>(now_date: &DateTime<Utc>, candidates: &'a [TripCandidate], points: &'a Map<String, Point>, i: usize, vehicle: &'a VehiclesFeature) -> TripCandidateList {
-    let direction: u8 = if vehicle.properties.direction == "inbound" { 0 } else { 1 };
+    let direction: u8 = if vehicle.properties.direction == "inbound" { 0 } else { 1 }; // map to the database's encoding for direction
     TripCandidateList {
         vehicle: i,
-        cands: candidates.iter().enumerate().filter(|(_i, c)| c.direction == Some(direction)).map(|(i, c)| bus_prediction::get_trip_info(c, i, points, &vehicle.geometry.coordinates, now_date)).collect(),
+        cands: candidates.iter().enumerate().filter(|(_i, c)| c.direction == Some(direction))
+            .map(|(i, c)| bus_prediction::get_trip_info(c, i, points, &vehicle.geometry.coordinates, now_date)).collect(),
     }
 }
 
+/// Map vehicle-trip assignment to GTFS
 fn to_feed_entity(trip: &TripInfo, vehicle: &VehiclesFeature, candidates: &[TripCandidate]) -> FeedEntity {
     FeedEntity {
         id: format!("{}-{}-{}", vehicle.properties.operator, vehicle.properties.line, vehicle.properties.vehicle),
@@ -129,9 +157,10 @@ fn to_feed_entity(trip: &TripInfo, vehicle: &VehiclesFeature, candidates: &[Trip
     }
 }
 
+/// Get disruptions for a given operator feed
 pub async fn get_source_alerts((url, operators): (&SourceURL, &Map<OperatorName, PassengerSource>), alerts_cache: &Mutex<HashMap<SourceURL, Vec<Alert>>>, db: &Arc<DBPool>) -> Vec<Alert> {
     if let Ok(disruptions_resp) = reqwest::get(format!("{url}/network/disruptions")).await && disruptions_resp.status().is_success() {
-        let disruptions: PassengerDisruptions = disruptions_resp.json().await.unwrap();
+        let disruptions: PassengerDisruptions = disruptions_resp.json().await.expect(format!("{url} disruptions").as_str());
         let alerts = disruptions.embedded.alert.iter().map(|alert| {
             Alert {
                 active_period: alert.active_periods.iter().map(|active_period| {
@@ -155,7 +184,7 @@ pub async fn get_source_alerts((url, operators): (&SourceURL, &Map<OperatorName,
                         direction_id: None,
                     })
                 }).collect(),
-                url: alert.links.as_ref().map(|link| create_translated_string(link.info.href.to_string())),
+                url: alert.links.as_ref().map(|link| create_translated_string(link.links_self.href.to_string())),
                 header_text: Some(create_translated_string(alert.header.to_string())),
                 description_text: Some(create_translated_string(alert.description.to_string())),
                 cause: None,
@@ -174,27 +203,35 @@ pub async fn get_source_alerts((url, operators): (&SourceURL, &Map<OperatorName,
     alerts_cache.lock().await.get(url).unwrap_or(&vec![]).clone()
 }
 
+/// Update Passenger journey to GTFS trip mappings
 pub async fn update_passenger_data(db: &Arc<DBPool>, config: &Arc<BBConfig>) {
+    reset_passenger(db);
     join_all(config.passenger.iter()
         .map(|source| update_operator(db, source))).await;
 }
 
+/// Update journey-trip mappings for a given Passenger feed
 pub async fn update_operator(db: &Arc<DBPool>, (source_url, operators): (&SourceURL, &Map<OperatorName, PassengerSource>)) {
+    // Get list of lines in this feed
     match get_url::<PassengerLines, _, _>(format!("{source_url}/network/lines"), reqwest::Response::json).await {
         Ok(lines) => {
             for (op_name, op_source) in operators {
+                // Get list of all routes in GTFS
                 let routes = get_operator_routes(db, op_source.gtfs.as_str());
+                // Match GTFS route to Passenger line, then collect journeys for each of the next 7 days
                 let results = stream::iter(routes.iter().filter_map(|route| match_line(&lines, op_name, op_source, &route)))
                     .then(|route| get_days_info(db, source_url, op_source, route))
                     .flat_map(|v| stream::iter(v))
                     .collect::<Vec<PassengerDirectionInfo>>().await;
+                // Save to database
                 save_passenger_trip_allocations(&db, &results).expect(&format!("Could not save allocations for {op_name}."));
             }
         }
-        Err(err) => { eprintln!("Could not get line data for {source_url}: {err}.") }
+        Err(err) => { error!("Could not get line data for {source_url}: {err}.") }
     }
 }
 
+/// GTFS route to Passenger line mapping
 #[derive(Clone)]
 pub struct RouteInfo {
     pub gtfs_id: String,
@@ -202,29 +239,30 @@ pub struct RouteInfo {
     pub online_name: String
 }
 
+/// Match GTFS route to Passenger line by name/operator
 fn match_line(lines: &PassengerLines, op_name: &str, op_source: &PassengerSource, (route_id, route_name): &(RouteID, RouteName)) -> Option<RouteInfo> {
     if let Some(line) = lines.embedded.line.iter().find(|l| l.name.to_lowercase() == route_name.to_lowercase()
         && l.embedded.transmodel_operator.code == op_source.op_code) {
-        println!("- {route_name} ({})", line.name);
+        debug!("- {} {route_name} ({})", op_source.op_code, line.name);
         Some(RouteInfo {
             gtfs_id: route_id.to_string(),
             gtfs_name: route_name.to_string(),
             online_name: line.name.to_string(),
         })
     } else {
-        eprintln!("No route exists on web data for {op_name}/${route_name}");
+        debug!("No route exists on web data for {op_name}/${route_name}");
         None
     }
 }
 
-const DIRECTIONS: [&str; 2] = ["inbound", "outbound"];
-
+/// Mapping of GTFS route to Passenger journey and the direction it operates in on its Passenger route
 pub struct PassengerDirectionInfo {
     pub gtfs: String,
     pub polar: String,
     pub direction: u8
 }
 
+/// Get trip-journey mappings for the next 7 days on a given route
 async fn get_days_info(db: &Arc<DBPool>, source_url: &SourceURL, operator: &PassengerSource, route: RouteInfo) -> Vec<PassengerDirectionInfo> {
     let today = Utc::now();
     // for each day, in both directions, get trips
@@ -238,6 +276,7 @@ async fn get_days_info(db: &Arc<DBPool>, source_url: &SourceURL, operator: &Pass
                 .then(move |dir| {
                     let route_arc = route_arc.clone();
                     let gtfs_routes_arc = gtfs_routes_arc.clone();
+                    // Get for a specific day (then flatten into one return Vec)
                     async move { get_day_direction_info(source_url, operator, route_arc, day, dir, gtfs_routes_arc).await }
                 })
                 .flat_map(stream::iter)
@@ -247,20 +286,25 @@ async fn get_days_info(db: &Arc<DBPool>, source_url: &SourceURL, operator: &Pass
         .collect::<Vec<_>>().await
 }
 
+/// Get trip-journey mappings for a specific day on a given route
 async fn get_day_direction_info(source_url: &SourceURL, operator: &PassengerSource, route: Arc<RouteInfo>, day: DateTime<Utc>, direction: &str, gtfs_routes: Arc<Vec<PassengerRouteTrip>>) -> Vec<PassengerDirectionInfo> {
+    // Map Passenger direction (inbound/outbound) to database encoding of 0/1
     let (dir_index, _) = DIRECTIONS.iter().find_position(|&&dir| dir == direction).unwrap();
     match get_url::<PassengerTimetable, _, _>(format!("{source_url}/network/operators/{}/lines/{}/timetables?direction={direction}&date={}", operator.op_code, route.online_name, day.format("%Y-%m-%d")), reqwest::Response::json).await {
         Ok(timetable) => {
             timetable.embedded.journey.iter()
+                // Get journeys that match the actual line we're looking for
                 .filter(|tj| tj.links.line.name == route.online_name)
                 .filter_map(|tj| {
                     let origin_date = tj.embedded.visit.first().unwrap().aimed_departure_time.unwrap();
-                    let origin_time = relative_to(&origin_date, &origin_date).duration_trunc(TimeDelta::seconds(1)).unwrap().timestamp();
-                    let dest_time = relative_to(&origin_date, &tj.embedded.visit.last().unwrap().aimed_arrival_time).duration_trunc(TimeDelta::seconds(1)).unwrap().timestamp();
+                    let origin_time = adjust_timestamp(&relative_to(&origin_date, &origin_date)).duration_trunc(TimeDelta::seconds(1)).unwrap().timestamp();
+                    let dest_time = adjust_timestamp(&relative_to(&origin_date, &tj.embedded.visit.last().unwrap().aimed_arrival_time)).duration_trunc(TimeDelta::seconds(1)).unwrap().timestamp();
                     let dest_time_m1 = dest_time - 60;
 
+                    // Match GTFS trips based on origin/dest times
                     gtfs_routes.iter()
                         .find(|r| r.min_stop_time == origin_time && r.max_stop_time == dest_time)
+                        // If we can't find anything, try (dest time - 1 minute) to account for rounding
                         .or_else(|| gtfs_routes.iter()
                             .find(|r| r.min_stop_time == origin_time && r.max_stop_time == dest_time_m1))
                         .map(|trip| {
@@ -274,7 +318,7 @@ async fn get_day_direction_info(source_url: &SourceURL, operator: &PassengerSour
         }
         Err(err) => {
             if let URLParseError::StatusCodeError(StatusCode::NOT_FOUND) = err {} else {
-                eprintln!("Could not get timetable data for {} {} {} on {}: {}", operator.op_code, route.online_name, direction, day, err);
+                error!("Could not get timetable data for {} {} {} on {}: {}", operator.op_code, route.online_name, direction, day, err);
             }
             vec![]
         }
@@ -407,7 +451,7 @@ pub struct PassengerAlert {
     #[serde(rename = "_embedded")]
     embedded: AlertEmbedded,
     #[serde(rename = "_links")]
-    links: Option<AlertLinks>
+    links: Option<Links>
 }
 
 #[derive(Serialize, Deserialize)]
@@ -468,11 +512,11 @@ pub struct TransmodelOperator {
 pub struct Links {
     #[serde(rename = "self")]
     links_self: Assets,
-    assets: Assets,
-    shapes: Assets,
-    stops: Assets,
-    changes: Changes,
-    timetable: Timetable,
+    assets: Option<Assets>,
+    shapes: Option<Assets>,
+    stops: Option<Assets>,
+    changes: Option<Changes>,
+    timetable: Option<Timetable>,
     #[serde(rename = "transmodel:line")]
     transmodel_line: Option<Vec<DisruptionTransmodelLine>>,
 }

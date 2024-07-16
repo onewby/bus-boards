@@ -1,20 +1,29 @@
-use std::cmp::Ordering;
 use std::{fmt, fs};
+use std::cmp::Ordering;
 use std::fmt::{Display, Formatter};
 use std::future::Future;
 use std::marker::PhantomData;
-use chrono::{DateTime, DurationRound, TimeDelta, Utc};
-use std::time::Duration;
-use std::ops::Sub;
+use std::ops::{Add, Sub};
 use std::str::FromStr;
+use std::time::Duration;
+
+use chrono::{DateTime, DurationRound, TimeDelta, TimeZone, Utc};
+use chrono_tz::Europe::London;
+use chrono_tz::OffsetComponents;
 use geo_types::{CoordNum, Point};
+use memoize::memoize;
 use reqwest::{IntoUrl, StatusCode};
 use serde::de;
-use serde::de::{MapAccess, SeqAccess, Visitor};
+use serde::de::{SeqAccess, Visitor};
+
 use crate::util::URLParseError::{DownloadError, ParsingError, StatusCodeError};
 
 pub fn zero_day(date: &DateTime<Utc>) -> DateTime<Utc> {
     date.sub(Duration::from_millis(date.duration_trunc(TimeDelta::days(1)).unwrap().timestamp_millis() as u64))
+}
+
+pub fn zero_time(date: &DateTime<Utc>) -> DateTime<Utc> {
+    date.duration_trunc(TimeDelta::days(1)).unwrap()
 }
 
 pub enum URLParseError {
@@ -102,4 +111,14 @@ pub fn load_last_update(file: &str) -> DateTime<Utc> {
 
 pub fn save_last_update(file: &str, time: &DateTime<Utc>) {
     fs::write(file, time.to_string()).expect("Could not write last update time to file!");
+}
+
+pub fn adjust_timestamp(time: &DateTime<Utc>) -> DateTime<Utc> {
+    let offset = get_bst_offset();
+    time.add(offset)
+}
+
+#[memoize(TimeToLive: Duration::from_secs(3600))]
+pub fn get_bst_offset() -> chrono::Duration {
+    London.offset_from_utc_datetime(&Utc::now().naive_utc()).dst_offset()
 }

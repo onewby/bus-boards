@@ -1,9 +1,9 @@
 use std::io::Read;
 
 use chrono::{DateTime, Utc};
-
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use zip::ZipArchive;
+
 use crate::transit_realtime::translated_string::Translation;
 use crate::transit_realtime::TranslatedString;
 
@@ -200,15 +200,6 @@ impl Default for AffectedOperatorUnion {
     }
 }
 
-impl AffectedOperatorUnion {
-    fn operator_ref(&self) -> String {
-        match self {
-            AffectedOperatorUnion::AffectedOperatorClass(aff_op) => aff_op.operator_ref.clone(),
-            AffectedOperatorUnion::String(str) => str.clone()
-        }
-    }
-}
-
 #[derive(Serialize, Deserialize, Default, Debug)]
 #[serde(rename_all = "PascalCase")]
 pub struct Delays {
@@ -241,6 +232,7 @@ pub struct Source {
     pub time_of_communication: String,
 }
 
+/// Download Siri disruptions data
 pub async fn download_siri() -> SiriSx {
     if let Ok(result) = reqwest::get("https://data.bus-data.dft.gov.uk/disruptions/download/bulk_archive").await {
         if let Ok(bytes) = result.bytes().await {
@@ -259,6 +251,7 @@ pub async fn download_siri() -> SiriSx {
     SiriSx::default()
 }
 
+/// Create an English TranslatedString
 pub fn create_translated_string(str: String) -> TranslatedString {
     TranslatedString {
         translation: vec![
@@ -270,6 +263,7 @@ pub fn create_translated_string(str: String) -> TranslatedString {
     }
 }
 
+/// Convert an InfoLinks URL to a TranslatedString
 pub fn get_infolinks_url(il_option: &Option<InfoLinks>) -> Option<TranslatedString> {
     return if let Some(il) = il_option {
         il.info_link.first().map(|link| TranslatedString {

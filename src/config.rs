@@ -1,9 +1,9 @@
-use std::error::Error;
 use config::{Config, Environment, File, Map};
 use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
-use crate::RPCConfiguration;
+
 use crate::GTFSResponder;
+use crate::RPCConfiguration;
 
 pub type SourceURL = String;
 pub type OperatorName = String;

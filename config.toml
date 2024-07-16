@@ -1,12 +1,12 @@
 listeners = [
-#    "BODS",
-#    "EMBER",
-#    "DISRUPTIONS",
+    "BODS",
+    "EMBER",
+    "DISRUPTIONS",
     "PASSENGER",
-#    "LOTHIAN",
-#    "STAGECOACH",
-#    "COACHES",
-#    "FIRST"
+    "LOTHIAN",
+    "STAGECOACH",
+    "COACHES",
+    "FIRST"
 ]
 
 update_interval_days = 14

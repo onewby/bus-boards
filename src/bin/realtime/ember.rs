@@ -10,6 +10,7 @@ use crate::transit_realtime::{Alert, EntitySelector, FeedEntity, FeedMessage, Tr
 pub async fn ember_listener(tx: Sender<GTFSResponse>, _: Arc<BBConfig>) {
     loop {
         let mut gtfs_rt: FeedMessage = FeedMessage::default();
+        // Fetch Ember GTFS data
         if let Ok(result) = reqwest::get("https://api.ember.to/v1/gtfs/realtime/").await {
             if let Ok(bytes) = result.bytes().await {
                 if let Ok(gtfs_rt2) = FeedMessage::decode(std::io::Cursor::new(bytes)) {
@@ -18,6 +19,7 @@ pub async fn ember_listener(tx: Sender<GTFSResponse>, _: Arc<BBConfig>) {
             }
         }
 
+        // Map Ember GTFS -> local by adding the designated prefix
         let mut entities: Vec<FeedEntity> = gtfs_rt.entity.iter().cloned().map(|old_entity| {
             return FeedEntity {
                 vehicle: old_entity.vehicle.map(|v| {
@@ -56,19 +58,22 @@ pub async fn ember_listener(tx: Sender<GTFSResponse>, _: Arc<BBConfig>) {
             };
         }).collect();
 
+        // Separate alerts from vehicle data
         let alerts: Vec<Alert> = entities.iter().filter_map(|e| e.alert.clone()).collect();
 
         // Partition into vehicle data, trip updates
-
         let (tus, mut vehicles): (Vec<FeedEntity>, Vec<FeedEntity>) = entities.iter_mut().map(|e| e.clone()).partition(|e| e.trip_update.is_some() && e.vehicle.is_none());
+        // Combine vehicle data with trip updates for the same trip
         vehicles.iter_mut().filter(|e| e.trip_update.is_none()).for_each(|trip| {
             if let Some(vehicleless) = tus.iter().find(|vehicleless| trip.vehicle.as_ref().and_then(|vp| vp.trip.as_ref()).and_then(|trip| trip.trip_id.as_ref()) == vehicleless.trip_update.as_ref().and_then(|tu| tu.trip.trip_id.as_ref())) {
                 trip.trip_update = vehicleless.trip_update.clone();
             }
         });
 
+        // Send to main feed
         tx.send((EMBER, vehicles, alerts)).await.unwrap_or_else(|err| eprintln!("{}", err));
 
+        // Wait until next loop
         time::sleep(time::Duration::from_secs(60)).await
     }
 }

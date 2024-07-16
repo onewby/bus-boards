@@ -20,17 +20,20 @@ use crate::transit_realtime::vehicle_position::VehicleStopStatus::InTransitTo;
 use crate::util::{f64_cmp, get_url, gtfs_date, gtfs_time};
 
 pub async fn coaches_listener(tx: Sender<GTFSResponse>, config: Arc<BBConfig>, db: Arc<DBPool>) {
+    // Get API info
     let api_option = get_api_info().await;
     if api_option.is_none() {
         eprintln!("Could not either download or parse coach API data.");
         return;
     }
     let (api_url, api_key) = api_option.unwrap();
+    // Get GTFS routes
     let routes = get_coach_routes(&db, &config);
     loop {
         let time_from = Utc::now().sub(TimeDelta::days(1)).timestamp();
         let time_to = Utc::now().add(TimeDelta::hours(1)).timestamp();
 
+        // Map vehicles for each route
         let r_map = |route: &CoachRoute| get_routes(&db, route.clone(), api_url.as_str(), api_key.as_str(), time_from, time_to);
         let routes: Vec<FeedEntity> = stream::iter(routes.iter())
             .map(r_map)
@@ -38,27 +41,36 @@ pub async fn coaches_listener(tx: Sender<GTFSResponse>, config: Arc<BBConfig>, d
             .flat_map(stream::iter)
             .collect::<Vec<FeedEntity>>().await;
 
+        // Publish to main feed
         tx.send((COACHES, routes, vec![])).await.unwrap_or_else(|err| eprintln!("{}", err));
 
+        // Wait for next loop
         time::sleep(time::Duration::from_secs(60)).await
     }
 }
 
+/// Get vehicle mappings for a given coach route
 async fn get_routes(db: &Arc<DBPool>, route: CoachRoute, api_url: &str, api_key: &str, time_from: i64, time_to: i64) -> Vec<FeedEntity> {
     match get_url::<MegabusVehicles, _, _>(format!("{api_url}/public-origin-departures-by-route-v1/{}/{time_from}/{time_to}?api_key={api_key}", route.route_short_name), reqwest::Response::json).await {
         Ok(vehicles) => {
+            // Get each stance's coordinates on the route
             let points = get_line_segments(db, route.route_id.to_string());
             return vehicles.routes[0].chronological_departures.iter()
                 .filter_map(|dep| {
+                    // Filter out inactive journeys - S/E implies a positioning run (not an in-service journey)
                     return if dep.trip.id.ends_with('S') || dep.trip.id.ends_with('E')
                         || dep.active_vehicle.is_none() || dep.tracking.is_completed {
                         None
                     } else if let Some(trip) = get_coach_trip(db, route.route_id.as_str(), &dep.trip.departure_location_name, &dep.trip.arrival_location_name, &dep.trip.departure_time_unix, &dep.trip.arrival_time_unix)
                         && let Some(vehicle) = &dep.active_vehicle {
+                        // Once a journey is matched to a GTFS trip...
+
+                        // Map vehicle to nearest line segment to find the next stop
                         let index = (0..trip.route.len() - 2).map(|i| {
                             Line::new(points[&trip.route[i]], points[&trip.route[i+1]]).euclidean_distance(&Point::<f64>::new(vehicle.current_wgs84_longitude_degrees, vehicle.current_wgs84_latitude_degrees))
                         }).position_min_by(f64_cmp).map(|pos| pos + 1).unwrap_or_default();
 
+                        // Map matched journey to GTFS
                         Some(FeedEntity {
                             id: dep.trip.id.to_string(),
                             is_deleted: None,
@@ -75,7 +87,7 @@ async fn get_routes(db: &Arc<DBPool>, route: CoachRoute, api_url: &str, api_key:
                                 vehicle: None,
                                 position: Some(Position {
                                     latitude: vehicle.current_wgs84_latitude_degrees as f32,
-                                    longitude: vehicle.current_wgs84_latitude_degrees as f32,
+                                    longitude: vehicle.current_wgs84_longitude_degrees as f32,
                                     bearing: Some(vehicle.current_forward_azimuth_degrees as f32),
                                     odometer: None,
                                     speed: None,
@@ -105,6 +117,7 @@ async fn get_routes(db: &Arc<DBPool>, route: CoachRoute, api_url: &str, api_key:
     vec![]
 }
 
+/// Get API url/key from configuration
 async fn get_api_info() -> Option<(String, String)> {
     let pattern_api_url: Regex = Regex::new(r#"\s*API_URL: '(.*)',"#).unwrap();
     let pattern_api_key: Regex = Regex::new(r#"\s*API_KEY: '(.*)',"#).unwrap();

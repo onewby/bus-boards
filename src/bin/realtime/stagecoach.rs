@@ -3,6 +3,7 @@ use std::sync::Arc;
 use chrono::{DateTime, Utc};
 use futures::{stream, StreamExt};
 use itertools::Itertools;
+use log::error;
 use serde::de;
 use tokio::sync::mpsc::Sender;
 use tokio::time;
@@ -12,18 +13,22 @@ use crate::GTFSResponder::{STAGECOACH};
 use crate::GTFSResponse;
 use crate::transit_realtime::{FeedEntity, Position, TripDescriptor, VehiclePosition};
 use crate::transit_realtime::trip_descriptor::ScheduleRelationship;
-use crate::util::{gtfs_date, gtfs_time};
+use crate::util::{adjust_timestamp, gtfs_date, gtfs_time};
 
 pub async fn stagecoach_listener(tx: Sender<GTFSResponse>, config: Arc<BBConfig>, db: Arc<DBPool>) {
     loop {
+        // Get entities for each Stagecoach operator
         let entities = stream::iter(config.stagecoach.regional_operators.iter())
             .then(|c| get_region(c.as_str(), &config, &db)).collect::<Vec<Vec<FeedEntity>>>().await.concat();
 
+        // Send to main feed
         tx.send((STAGECOACH, entities, vec![])).await.unwrap_or_else(|err| eprintln!("{}", err));
+        // Wait for next loop
         time::sleep(time::Duration::from_secs(60)).await
     }
 }
 
+/// Map journeys for the given Stagecoach region
 pub async fn get_region(region: &str, config: &Arc<BBConfig>, db: &Arc<DBPool>) -> Vec<FeedEntity> {
     match reqwest::get(format!("https://api.stagecoach-technology.net/vehicle-tracking/v1/vehicles?services=:{region}:::")).await {
         Ok(resp) => {
@@ -33,9 +38,13 @@ pub async fn get_region(region: &str, config: &Arc<BBConfig>, db: &Arc<DBPool>) 
                         return vehicles.services.iter()
                             .filter(|sc| !sc.journey_completed || sc.cancelled)
                             .filter_map(|sc| {
+                                if !config.stagecoach.local_operators.contains_key(&sc.local_operator.to_lowercase()) {
+                                    error!("Could not find Stagecoach operator mapping for {}", sc.local_operator);
+                                    return None
+                                }
                                 get_stagecoach_trip(
                                     db, config.stagecoach.local_operators[&sc.local_operator.to_lowercase()].as_str(),
-                                    sc.line_number.as_str(), sc.next_stop_code.as_str(), &sc.origin_std?
+                                    sc.line_number.as_str(), sc.next_stop.as_str(), &adjust_timestamp(&sc.origin_std?)
                                 ).map(|trip| {
                                     FeedEntity {
                                         id: sc.trip_id.to_string(),

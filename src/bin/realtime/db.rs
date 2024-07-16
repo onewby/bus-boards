@@ -2,29 +2,33 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use std::str::FromStr;
 use std::sync::Arc;
+
 use chrono::{Datelike, DateTime, DurationRound, TimeDelta, Utc};
 use geo_types::Point;
 use itertools::Itertools;
 use memoize::memoize;
-use prost::Message;
 use r2d2::{Pool, PooledConnection};
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::{named_params, Params, params};
 use rusqlite::types::Value;
-use crate::bus_prediction::TripCandidate;
+
 use BusBoardsServer::config::BBConfig;
+
+use crate::bus_prediction::TripCandidate;
 use crate::passenger::PassengerDirectionInfo;
-use crate::util::{gtfs_date, relative_to, zero_day};
+use crate::util::{adjust_timestamp, gtfs_date, relative_to, zero_day, zero_time};
 
 pub type DBPool = Pool<SqliteConnectionManager>;
 pub type PooledConn = PooledConnection<SqliteConnectionManager>;
 
+/// Create database connection pool
 pub fn open_db() -> Pool<SqliteConnectionManager> {
     let manager = SqliteConnectionManager::file("stops.sqlite")
         .with_init(|s| rusqlite::vtab::array::load_module(s));
     Pool::new(manager).unwrap()
 }
 
+/// Get connection from database pool
 pub fn get_pool(db: &Arc<DBPool>) -> PooledConn {
     let mut conn: Result<PooledConnection<SqliteConnectionManager>, r2d2::Error>;
     while {
@@ -34,27 +38,32 @@ pub fn get_pool(db: &Arc<DBPool>) -> PooledConn {
     conn.unwrap()
 }
 
+/// Get single string result from database query
 pub fn get_string<P: Params>(db: &Arc<DBPool>, query: &str, params: P) -> Result<String, String> {
     get_pool(db).prepare_cached(query).unwrap().query_row(params, |aid| aid.get(0)).map_err(|e| e.to_string())
 }
 
+/// Traveline operator code -> GTFS agency ID
 #[memoize(Ignore: db)]
 pub fn get_agency(db: &Arc<DBPool>, code: String) -> Result<String, String> {
     get_string(db, "SELECT agency_id FROM traveline WHERE code=?", params![code])
 }
 
+/// Traveline operator code + route name -> GTFS route ID
 #[memoize(Ignore: db)]
 pub fn get_route(db: &Arc<DBPool>, code: String, route: String) -> Result<String, String> {
     get_string(db, "SELECT route_id FROM routes INNER JOIN main.traveline t on routes.agency_id = t.agency_id WHERE code=? AND route_short_name=?", (code, route))
 }
 
+/// GTFS agency ID and route name -> GTFS route ID
 #[memoize(Ignore: db)]
 pub fn get_route_id(db: &Arc<DBPool>, agency_id: String, route: String) -> Result<String, String> {
     get_string(db, "SELECT route_id FROM routes WHERE agency_id=? AND upper(route_short_name)=upper(?)", (agency_id, route))
 }
 
+/// Get trip candidates for realtime vehicle matching - query made specific to data provider
 fn trip_query(query: &str, db: &Arc<DBPool>, date: &DateTime<Utc>, start_before: i64, end_after: i64, specifier: &str) -> Vec<TripCandidate>  {
-    let date_secs = zero_day(date).timestamp();
+    let date_secs = zero_time(date).timestamp();
 
     get_pool(db).prepare_cached(query).unwrap().query_map(named_params! {
         ":date": u64::from_str(date.format("%Y%m%d").to_string().as_str()).unwrap(),
@@ -78,6 +87,7 @@ fn trip_query(query: &str, db: &Arc<DBPool>, date: &DateTime<Utc>, start_before:
     }).unwrap().filter_map(|i| i.ok()).collect()
 }
 
+/// Get trip candidates for Passenger realtime vehicle matching
 pub fn passenger_trip_query(db: &Arc<DBPool>, date: &DateTime<Utc>, start_before: i64, end_after: i64, route_id: &str) -> Vec<TripCandidate> {
     trip_query(r#"SELECT trips.trip_id, p.direction, :date as date,
                 (SELECT group_concat(stop_id) FROM (SELECT stop_id FROM stop_times WHERE trip_id=trips.trip_id ORDER BY stop_sequence)) as route,
@@ -97,6 +107,7 @@ pub fn passenger_trip_query(db: &Arc<DBPool>, date: &DateTime<Utc>, start_before
     "#, db, date, start_before, end_after, route_id)
 }
 
+/// Get trip candidates for Lothian realtime vehicle matching
 pub fn lothian_trip_query(db: &Arc<DBPool>, date: &DateTime<Utc>, start_before: i64, end_after: i64, pattern: &str) -> Vec<TripCandidate> {
     trip_query(r#"SELECT trips.trip_id, :date as date,
                 (SELECT group_concat(stop_id) FROM (SELECT stop_id FROM stop_times WHERE trip_id=trips.trip_id ORDER BY stop_sequence)) as route,
@@ -115,6 +126,7 @@ pub fn lothian_trip_query(db: &Arc<DBPool>, date: &DateTime<Utc>, start_before: 
     "#, db, date, start_before, end_after, pattern)
 }
 
+/// GTFS route -> coordinates for each stance on route
 #[memoize(Ignore: db)]
 pub fn get_line_segments(db: &Arc<DBPool>, route_id: String) -> HashMap<String, Point> {
     HashMap::from_iter(get_pool(db).prepare_cached(
@@ -125,24 +137,28 @@ pub fn get_line_segments(db: &Arc<DBPool>, route_id: String) -> HashMap<String, 
         .query_map(params![route_id], |result| Ok((result.get("stop_id")?, Point::new(result.get("x")?, result.get("y")?)))).unwrap().filter_map(|v| v.ok()))
 }
 
+/// Route pattern -> GTFS route
 #[derive(Clone)]
 pub struct LothianDBPattern {
     pub(crate) route: String,
     pub(crate) pattern: String
 }
 
+/// Get list of route pattern -> GTFS route mappings
 pub fn get_lothian_patterns_tuples(db: &Arc<DBPool>) -> Vec<LothianDBPattern> {
     get_pool(db).prepare_cached(r#"SELECT * FROM lothian"#).unwrap()
         .query_map(params![], |row| Ok(LothianDBPattern {route: row.get("route")?, pattern: row.get("pattern")? })).unwrap()
         .filter_map(|x: Result<LothianDBPattern, _>| x.ok()).collect()
 }
 
+/// Lothian route name -> GTFS route ID
 #[memoize(Ignore: db)]
 pub fn get_lothian_route(db: &Arc<DBPool>, route: String) -> Option<String> {
-    get_pool(db).prepare_cached("SELECT route_id FROM routes WHERE route_short_name=? AND agency_id IN (\"OP596\", \"OP597\", \"OP598\")").unwrap()
+    get_pool(db).prepare_cached("SELECT route_id FROM routes WHERE route_short_name=? AND agency_id IN (\"OP596\", \"OP597\", \"OP598\", \"OP549\")").unwrap()
         .query_row(params![route], |row| row.get("route_id")).ok()
 }
 
+/// GTFS trip <-> Stagecoach feed journey mapping
 #[derive(Clone)]
 pub struct StagecoachRoute {
     pub trip_id: String,
@@ -151,6 +167,7 @@ pub struct StagecoachRoute {
     pub stop_id: String
 }
 
+/// Find GTFS trip match from Stagecoach realtime journey
 pub fn get_stagecoach_trip(db: &Arc<DBPool>, agency_id: &str, route_name: &str, next_stop: &str, departure: &DateTime<Utc>) -> Option<StagecoachRoute> {
     get_pool(db).prepare_cached(r#"
         SELECT t.trip_id, r.route_id, stop_times.stop_sequence as stop_seq, stop_times.stop_id FROM stop_times
@@ -164,13 +181,13 @@ pub fn get_stagecoach_trip(db: &Arc<DBPool>, agency_id: &str, route_name: &str, 
           AND ((start_date <= :date AND end_date >= :date AND (validity & (1 << :day)) <> 0) OR exception_type=1)
           AND NOT (exception_type IS NOT NULL AND exception_type = 2)
     "#).unwrap().query_row(named_params! {
-        ":date": u64::from_str(departure.format("%Y%m%d").to_string().as_str()).unwrap(),
-        ":day": departure.weekday().num_days_from_monday(),
-        ":dep_time": zero_day(departure).duration_trunc(TimeDelta::minutes(1)).unwrap().timestamp(),
-        ":agency_id": agency_id,
-        ":route_name": route_name,
-        ":next_stop": next_stop
-    }, |row| {
+            ":date": u64::from_str(departure.format("%Y%m%d").to_string().as_str()).unwrap(),
+            ":day": departure.weekday().num_days_from_monday(),
+            ":dep_time": zero_day(&departure).duration_trunc(TimeDelta::minutes(1)).unwrap().timestamp(),
+            ":agency_id": agency_id,
+            ":route_name": route_name,
+            ":next_stop": next_stop
+        }, |row| {
         Ok(StagecoachRoute {
             trip_id: row.get("trip_id")?,
             route_id: row.get("route_id")?,
@@ -180,6 +197,7 @@ pub fn get_stagecoach_trip(db: &Arc<DBPool>, agency_id: &str, route_name: &str, 
     }).ok()
 }
 
+/// GTFS route
 #[derive(Clone)]
 pub struct CoachRoute {
     pub agency_id: String,
@@ -187,6 +205,7 @@ pub struct CoachRoute {
     pub route_short_name: String
 }
 
+/// Get list of coach routes
 pub fn get_coach_routes(db: &Arc<DBPool>, config: &Arc<BBConfig>) -> Vec<CoachRoute> {
     let values = Rc::new(config.coaches.operators.iter().cloned().map(Value::from).collect::<Vec<Value>>());
     get_pool(db).prepare("SELECT agency_id, route_id, route_short_name FROM routes WHERE agency_id IN (SELECT value from rarray(?1))").unwrap()
@@ -200,6 +219,7 @@ pub fn get_coach_routes(db: &Arc<DBPool>, config: &Arc<BBConfig>) -> Vec<CoachRo
     }).unwrap().filter_map(|c| c.ok()).collect_vec()
 }
 
+/// GTFS trip info
 pub struct CoachTrip {
     pub trip_id: String,
     pub route: Vec<String>,
@@ -209,6 +229,7 @@ pub struct CoachTrip {
     pub sta_loc: String
 }
 
+/// Coach realtime journey -> GTFS trip
 pub fn get_coach_trip(db: &Arc<DBPool>, route: &str, origin: &str, dest: &str, start: &DateTime<Utc>, end: &DateTime<Utc>) -> Option<CoachTrip> {
     get_pool(db).prepare_cached(
         r#"SELECT trips.trip_id,
@@ -228,8 +249,8 @@ pub fn get_coach_trip(db: &Arc<DBPool>, route: &str, origin: &str, dest: &str, s
                     AND NOT (exception_type IS NOT NULL AND exception_type = 2)"#).unwrap()
         .query_row(named_params! {
             ":route": route,
-            ":startTime": zero_day(start).timestamp(),
-            ":endTime": relative_to(start, end).timestamp(),
+            ":startTime": adjust_timestamp(&zero_day(start)).timestamp(),
+            ":endTime": adjust_timestamp(&relative_to(start, end)).timestamp(),
             ":depWildcard": format!("{}%", origin.split_once('(').map(|s| s.0).unwrap_or(origin)),
             ":arrWildcard": format!("{}%", dest.split_once('(').map(|s| s.0).unwrap_or(dest)),
             ":date": usize::from_str(gtfs_date(start).as_str()).unwrap(),
@@ -247,7 +268,10 @@ pub fn get_coach_trip(db: &Arc<DBPool>, route: &str, origin: &str, dest: &str, s
 }
 
 type TripID = String;
+pub type RouteID = String;
+pub type RouteName = String;
 
+/// First realtime journey -> GTFS trip
 pub fn get_first_trip(db: &Arc<DBPool>, route: &str, agency_id: &str, start_stop: &str, start_time: &DateTime<Utc>) -> Option<TripID> {
     get_pool(db).prepare_cached(
         r#"SELECT trips.trip_id FROM trips
@@ -273,18 +297,19 @@ pub fn get_first_trip(db: &Arc<DBPool>, route: &str, agency_id: &str, start_stop
     ).ok()
 }
 
+/// Delete Lothian journey <-> GTFS trip mappings
 pub fn reset_lothian(db: &Arc<DBPool>) {
     get_pool(db).execute("DELETE FROM polar WHERE direction IS NULL", params![]).unwrap();
 }
 
-pub type RouteID = String;
-pub type RouteName = String;
+/// GTFS agency ID -> GTFS routes
 pub fn get_operator_routes(db: &Arc<DBPool>, agency_id: &str) -> Vec<(RouteID, RouteName)> {
     get_pool(db).prepare_cached("SELECT route_id,route_short_name FROM routes WHERE agency_id=?").unwrap()
         .query_map(params![agency_id], |row| Ok((row.get("route_id")?, row.get("route_short_name")?)))
         .unwrap().filter_map(|c| c.ok()).collect_vec()
 }
 
+/// GTFS trip info
 pub struct LothianGTFSTrip {
     pub min_stop_time: i64,
     pub max_stop_time: i64,
@@ -293,6 +318,7 @@ pub struct LothianGTFSTrip {
     pub trip_id: String
 }
 
+/// GTFS route -> GTFS trips
 pub fn get_lothian_timetabled_trips(db: &Arc<DBPool>, date: &DateTime<Utc>, route_id: &str) -> Vec<LothianGTFSTrip> {
     get_pool(db).prepare_cached(
         r#"SELECT start.departure_time as minss, start.stop_id as startStop, finish.departure_time as maxss, finish.stop_id as finishStop, trips.trip_id
@@ -319,7 +345,8 @@ pub fn get_lothian_timetabled_trips(db: &Arc<DBPool>, date: &DateTime<Utc>, rout
         }).unwrap().filter_map(|t| t.ok()).collect_vec()
 }
 
-pub fn save_lothian_pattern_allocations(db: &Arc<DBPool>, pattern: &str, trip_ids: &[String]) -> Result<(), rusqlite::Error> {
+/// Save Lothian journey -> GTFS trip mappings and Lothian pattern -> GTFS route mappings
+pub fn save_lothian_pattern_allocations(db: &Arc<DBPool>, pattern: &str, trip_ids: &[String], gtfs_route_id: &str) -> Result<(), rusqlite::Error> {
     let mut db = get_pool(db);
     let tx = db.transaction()?;
     {
@@ -327,20 +354,25 @@ pub fn save_lothian_pattern_allocations(db: &Arc<DBPool>, pattern: &str, trip_id
         for trip_id in trip_ids {
             stmt.execute(params![trip_id, pattern])?;
         }
+        let mut stmt = tx.prepare_cached("INSERT INTO lothian (pattern, route) VALUES (?, ?)")?;
+        stmt.execute(params![pattern, gtfs_route_id])?;
     }
     tx.commit()
 }
 
+/// Delete Passenger journey <-> GTFS trip mappings
 pub fn reset_passenger(db: &Arc<DBPool>) {
     get_pool(db).execute("DELETE FROM polar WHERE direction IS NOT NULL", params![]).unwrap();
 }
 
+/// GTFS trip and its origin/destination time
 pub struct PassengerRouteTrip {
     pub min_stop_time: i64,
     pub max_stop_time: i64,
     pub trip_id: String
 }
 
+/// Get GTFS route info
 pub fn get_passenger_route_trips(db: &Arc<DBPool>, date: &DateTime<Utc>, route_id: &str) -> Vec<PassengerRouteTrip> {
     get_pool(db).prepare_cached(
         r#"SELECT start.departure_time as minss, finish.departure_time as maxss, trips.trip_id
@@ -365,6 +397,7 @@ pub fn get_passenger_route_trips(db: &Arc<DBPool>, date: &DateTime<Utc>, route_i
         }).unwrap().filter_map(|t| t.ok()).collect_vec()
 }
 
+/// Save Passenger journey <-> GTFS trip mappings
 pub fn save_passenger_trip_allocations(db: &Arc<DBPool>, trips: &Vec<PassengerDirectionInfo>) -> Result<(), rusqlite::Error> {
     let mut db = get_pool(db);
     let tx = db.transaction()?;
