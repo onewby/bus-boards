@@ -1,0 +1,56 @@
+passenger:
+  https://xploredundee.arcticapi.com:
+    Xplore Dundee:
+      gtfs: OP524
+      op_code: TRDU
+  https://mcgills.arcticapi.com:
+    McGill\u0027s:
+      gtfs: OP612
+      op_code: McG
+  https://mcgillsse.arcticapi.com:
+    Midland Bluebird Ltd:
+      gtfs: OP8781
+      op_code: MBLB
+    McGills Scotland East Ltd:
+      gtfs: OP11782
+      op_code: MESC
+  https://westcoastmotors.arcticapi.com:
+    WCMO:
+      gtfs: OP528
+      op_code: WCMO
+stagecoach:
+  regional_operators:
+    - SCFI
+    - SBLB
+    - SCHI
+    - STWS
+  local_operators:
+    SIF: OP550
+    SPH: OP557
+    STY: OP517
+    BB: OP512
+    HI: OP1024
+    OC: OP603
+    SGL: OP582
+    SWB: OP537
+coaches:
+  operators:
+    - OP564
+    - OP545
+    - OP563
+    - OP567
+  route_overrides:
+    71: M10N
+first:
+  operators:
+    FGLA: OP584
+    FABD: OP511
+  bounds:
+    FGLA: [55.7329, -4.7626, 56.0203, -3.8404]
+    FABD: [57.0891, -2.2834, 57.2250, -2.0376]
+lothian:
+  operators:
+      lothian: OP596
+      country: OP597
+      ecb: OP598
+      eve: OP549
