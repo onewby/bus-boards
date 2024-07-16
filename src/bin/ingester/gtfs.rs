@@ -71,7 +71,7 @@ fn import_txt_file(archive: &ZipArchive, dir: &DirectoryContents, file_name: &st
     let headers: HashMap<_, _> = headers.iter().enumerate().map(|(i, hdr)| (hdr, i)).collect();
     let mut record = csv::ByteRecord::new();
     while !rdr.is_done() {
-        let mut tx = db.transaction()?;
+        let tx = db.transaction()?;
         {
             let mut stmt = tx.prepare(stmt_str)?;
             let mut i: u32 = 0;

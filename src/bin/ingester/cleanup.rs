@@ -62,8 +62,8 @@ fn clean_stops(conn: &Connection) -> Result<(), rusqlite::Error> {
 }
 
 fn reset_polar() -> Result<(), Box<dyn Error>> {
-    fs::remove_file(".update.lothian");
-    fs::remove_file(".update.polar");
+    let _ = fs::remove_file(".update.lothian");
+    let _ = fs::remove_file(".update.polar");
     Ok(())
 }
 

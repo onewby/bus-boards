@@ -98,12 +98,12 @@ pub fn download_noc(conn: &mut Connection) -> Result<(), Box<dyn Error>> {
     // Download Traveline zip file
     let traveline_url = "https://www.travelinedata.org.uk/wp-content/themes/desktop/nocadvanced_download.php?reportFormat=csvFlatFile&allTable%5B%5D=table_noc_table&allTable%5B%5D=table_public_name&submit=Submit";
     let traveline_zip = reqwest::blocking::get(traveline_url)?.bytes()?;
-    let mut archive = ZipArchive::new(traveline_zip.as_ref())?;
+    let archive = ZipArchive::new(traveline_zip.as_ref())?;
     let dir = as_tree(archive.entries())?;
     let pnr_file = archive.read(dir.lookup("PublicName.csv")?)?;
     let noc_file = archive.read(dir.lookup("NOCTable.csv")?)?;
 
-    let mut public_name_records = csv::Reader::from_reader(BufReader::new(pnr_file)).deserialize::<PublicNameRecord>().flatten().collect_vec();
+    let public_name_records = csv::Reader::from_reader(BufReader::new(pnr_file)).deserialize::<PublicNameRecord>().flatten().collect_vec();
     let mut noc_records = csv::Reader::from_reader(BufReader::new(noc_file));
     let noc_table: HashMap<_, _> = noc_records.deserialize::<NOCTableRecord>().flatten()
         .group_by(|r| r.noccode.clone()).into_iter().map(|(k, mut v)| (k, v.next().unwrap())).collect();
@@ -155,7 +155,7 @@ pub fn download_noc(conn: &mut Connection) -> Result<(), Box<dyn Error>> {
 
         if cands.is_empty() {
             // If no match, try assigning by operator public name
-            let mut last_ditch_cands: Vec<_> = noc_table.values()
+            let last_ditch_cands: Vec<_> = noc_table.values()
                 .filter(|t| agency.agency_name == t.operator_public_name)
                 .collect();
             if last_ditch_cands.len() == 1 {
