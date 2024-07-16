@@ -36,15 +36,13 @@ function gtfsUpdateLoop() {
 
 // Download GTFS data
 export async function downloadGTFS() {
+    const gtfsURL = env.GTFS_URL ?? "http://localhost:3000/api/gtfsrt/proto";
     try {
-        if((env.GTFS ?? 'disabled') === 'microservice') {
-            const gtfsResp = await fetch(env.GTFS_URL ?? "http://localhost:3948")
-            if(!gtfsResp.ok || !gtfsResp.body) return gtfsCache // Fail nicely - provide previous cache
-            gtfsCache = FeedMessageWithAlerts.decode(new Uint8Array(await gtfsResp.arrayBuffer()))
-        } else if((env.GTFS ?? 'disabled') === 'svelte') {
-            await manualDownloadGTFS()
-        }
+        const gtfsResp = await fetch(gtfsURL)
+        if(!gtfsResp.ok || !gtfsResp.body) return gtfsCache // Fail nicely - provide previous cache
+        gtfsCache = FeedMessageWithAlerts.decode(new Uint8Array(await gtfsResp.arrayBuffer()))
     } catch (e) {
+        console.log("GTFS fetch failed")
         gtfsCache = {header: undefined, entity: [], alerts: []}
     }
     serviceCache = {}

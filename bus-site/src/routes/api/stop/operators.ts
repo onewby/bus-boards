@@ -9,12 +9,13 @@ export const operatorMatches: Record<string, string> = {
     "Rosso": "#f8af00",
     "National Express": "#0175c0",
     "Megabus": "#002f6d",
-    "Flixbus": "#73d700",
+    "FlixBus": "#73d700",
     "Moffat & Williamson": "#f9bf3b",
     "Xplore Dundee": "#83b23e",
     "Ember": "#098f82",
     "Borders Buses": "#df1e2b",
     "Glasgow Citybus": "#df1e2b",
+    "West Coast Motors": "#df1e2b",
     "McGill's Bus Service": "#004788",
     "Flyer": "#e1a600",
     "trentbarton": "#E8480E",
@@ -53,6 +54,7 @@ export const operatorMatches: Record<string, string> = {
     "Lea Interchange Bus Com": "#E1251B",
     "Docklands Buses": "#E1251B",
     "BLUE TRIANGLE BUSES LIM": "#E1251B",
+    "Transport UK": "#E1251B",
     "High Peak": "#f60",
     "D & G Bus": "#da261c",
     "Centrebus": "#f60",
@@ -83,6 +85,7 @@ export const operatorMatches: Record<string, string> = {
     "Metroline Travel": "#E1251B",
     "Red Rose Travel": "#BE0A16",
     "Red Eagle": "#7f221a",
+    "Grant Palmer": "#db4739",
     "Lynx": "#fb0c1a",
     "Konectbus": "#123274",
     "Sanders Coaches": "#f8b91f",
@@ -105,6 +108,12 @@ export const operatorMatches: Record<string, string> = {
     "Nottingham City Transport": "#00857a",
     "Bright Bus": "#ea580c",
     "Bee Network": "#ffdc44",
+    "Northstar": "#0090d5",
+    "Transpora Bus": "#ffffff",
+    "Nexus Ferry": "#27B4E9",
+    "Notts and Derby": "#7C9C19",
+    "South Pennine Community Transport": "#ff0600",
+    "Hulleys of Baslow": "#D0BE83",
     "Avanti West Coast": "#1f4555",
     "c2c": "#bc0087",
     "Caledonian Sleeper": "#003941",
@@ -377,11 +386,12 @@ export const operatorRegex: Record<string, string> = {
     "Arriva.*": "#00becd",
     "Scottish Citylink.*": "#10069f",
     "Diamond.*": "#014790",
-    "METROLINE.*": "#E1251B"
+    "METROLINE.*": "#E1251B",
+    "CitySightseeing.*": "#e21316"
 }
 
 export const intercityOperators: string[] = [
     "National Express",
     "Megabus",
-    "Flixbus"
+    "FlixBus"
 ]

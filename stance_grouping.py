@@ -176,6 +176,9 @@ def group_data(df: pd.DataFrame) -> StopGroupings:
     print("Standardising synonyms and merging arrival bays")
     standardise_synonyms(df)
 
+    # fix dumping non-compliant JSON
+    df = df.replace(np.nan, None)
+
     print("Grouping data")
     return {localityCode: {stopName: stances[["ATCOCode", "Indicator", "Street", "Lat", "Long", "Arrival", "CrsRef"]].to_dict(orient="records") for stopName, stances in stops.groupby("CommonName")} for localityCode, stops in df.groupby("NptgLocalityCode")}
 
@@ -336,7 +339,7 @@ def main():
 
     print("Writing to file")
     with open("localities.json", "w") as file:
-        json.dump(groups, file)
+        json.dump(groups, file, allow_nan=False)
 
 
 if __name__ == "__main__":

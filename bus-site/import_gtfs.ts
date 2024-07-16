@@ -143,7 +143,7 @@ async function insertSource(file: File, sql: Statement, defaults: Object = {}, p
     let batchInsert = db.transaction((records) => {
         for(const record of records) {
             sql.run(record)
-        }
+        }f
     })
     for await (const record of stream_csv(file)) {
         Object.entries(defaults).forEach(([k, v]) => {
