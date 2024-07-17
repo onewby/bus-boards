@@ -106,10 +106,10 @@ realtime data, and a Rust data ingester to populate the database.
    for FirstBus realtime data.
 2. Set the environment variables `TNDS_USERNAME` and `TNDS_PASSWORD` to your FTP
    username and password for the [Traveline National Dataset](https://www.travelinedata.org.uk/traveline-open-data/traveline-national-dataset/).
-3. If crs.csv is out of date in `server/`, run `cargo run --bin stations`
+3. If crs.csv is out of date in `server/`, run `cargo run --release --bin stations`
    from `server/` to update it.
-4. Populate the database using `cargo run --bin ingester` from `server/`.
-5. Run the server using `cargo run --bin realtime` from `server/`.
+4. Populate the database using `cargo run --release --bin ingester` from `server/`.
+5. Run the server using `cargo run --release --bin realtime` from `server/`.
 6. Run the client using `npm run all` from `bus-site/`. Use the
    environment variable `GTFS=OFF` if you do not want to use the realtime server.
 

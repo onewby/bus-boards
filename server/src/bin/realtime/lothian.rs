@@ -25,7 +25,7 @@ use crate::GTFSResponse;
 use crate::siri::create_translated_string;
 use crate::transit_realtime::{Alert, EntitySelector, FeedEntity, Position, TimeRange, TripDescriptor, VehiclePosition};
 use crate::transit_realtime::vehicle_position::VehicleStopStatus;
-use crate::util::{adjust_timestamp, get_url, gtfs_date, load_last_update, relative_to, save_last_update, URLParseError};
+use crate::util::{adjust_timestamp, get_url, get_url_with_retries, gtfs_date, load_last_update, relative_to, save_last_update, URLParseError};
 
 const UPDATE_FILE: &str = ".update.lothian";
 
@@ -199,7 +199,7 @@ pub async fn process_group(db: &Arc<DBPool>, config: &Arc<BBConfig>, group: &Lot
 
 /// Match Lothian journey codes to GTFS trip IDs for a given route
 pub async fn process_route(db: &Arc<DBPool>, (route, gtfs_route_id): (&LothianRoute, &String)) {
-    match get_url::<LothianPatterns, _, _>(format!("https://lothianapi.com/routePatterns?route_name={}", route.name), reqwest::Response::json).await {
+    match get_url_with_retries::<LothianPatterns, _, _>(format!("https://lothianapi.com/routePatterns?route_name={}", route.name), reqwest::Response::json, 2).await {
         Ok(patterns) => {
             for p in patterns.patterns {
                 if let Err(e) = process_route_pattern(&db, gtfs_route_id, p.id.as_str()).await {
@@ -246,7 +246,7 @@ pub async fn process_route_pattern(db: &Arc<DBPool>, gtfs_route_id: &str, patter
 
 /// Utility function - perform timetable fetch for route pattern, return with the date searched for
 async fn get_url_with_date(pattern: &str, date: DateTime<Utc>) -> Result<(DateTime<Utc>, LothianTimetables), URLParseError> {
-    get_url::<LothianTimetables, _, _>(format!("https://lothianapi.com/timetable?route_pattern_id={}&date={}", pattern, gtfs_date(&date)), reqwest::Response::json)
+    get_url_with_retries::<LothianTimetables, _, _>(format!("https://lothianapi.com/timetable?route_pattern_id={}&date={}", pattern, gtfs_date(&date)), reqwest::Response::json, 2)
         .await.map(|url| (date, url))
 }
 

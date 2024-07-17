@@ -8,8 +8,7 @@ edition = "2021"
 [dependencies]
 axum = "0.7.4"
 tokio = { version = "1.36.0", features = ["full"] }
-prost = "0.12.3"
-reqwest = { version = "0.11.24", features = ["json", "stream", "blocking", "gzip"] }
+reqwest = { version = "0.11.24", features = ["json", "stream", "blocking", "gzip", "rustls-tls-native-roots"], default-features = false }
 bytes = "1.5.0"
 serde = { version = "1.0.196", features = ["derive"] }
 serde_json = "1.0.113"
@@ -41,7 +40,7 @@ piz = "0.5.1"
 memmap = "0.7.0"
 csv = "1.3.0"
 polyline = "0.11.0"
-phf = { version = "0.11.2", features = ["macros"] }
+phf = { version = "0.11.1", features = ["macros"] }
 suppaftp = { version = "^6", features = ["rustls"] }
 sorensen = "0.2.0"
 log = "0.4.22"
@@ -50,10 +49,13 @@ rustls = { version = "0.21.12", features = ["dangerous_configuration"] }
 spex = "0.2.1"
 tempfile = "3.10.1"
 polars = { version = "0.41.3", features = ["lazy", "strings", "object", "dtype-struct", "regex", "performant", "is_in", "is_unique", "partition_by"] }
-proj = { version = "0.27.2", features = ["geo-types"] }
+proj4rs = { version = "0.1.3", features = ["geo-types", "crs-definitions"] }
+prost = "0.12.3"
+lonlat_bng = { version = "0.6.33", git = "https://github.com/urschrei/lonlat_bng.git" }
+rand = "0.8.5"
 
 [build-dependencies]
-prost-build = "0.12.3"
+#prost-build = "0.12.3"
 
 [profile.production]
 inherits = "release"

@@ -10,11 +10,15 @@ use std::time::Duration;
 use chrono::{DateTime, DurationRound, TimeDelta, TimeZone, Utc};
 use chrono_tz::Europe::London;
 use chrono_tz::OffsetComponents;
+use futures::future::BoxFuture;
+use futures::FutureExt;
 use geo_types::{CoordNum, Point};
 use memoize::memoize;
 use reqwest::{IntoUrl, StatusCode};
 use serde::de;
 use serde::de::{SeqAccess, Visitor};
+use tokio::time::sleep;
+use rand::{random, Rng, thread_rng};
 
 use crate::util::URLParseError::{DownloadError, ParsingError, StatusCodeError};
 
@@ -40,6 +44,23 @@ impl Display for URLParseError {
             ParsingError(err) => {f.write_fmt(format_args!("Parsing error: {err}"))}
         }
     }
+}
+
+pub fn get_url_with_retries<'a, T: Send, U: IntoUrl + Send + 'a, Fn: Future<Output=reqwest::Result<T>>+Sized + 'a + Send>(url: U, parser: fn(reqwest::Response) -> Fn, retries: u64) -> BoxFuture<'a, Result<T, URLParseError>> {
+    async move {
+        match get_url::<T, _, _>(url.as_str(), parser).await {
+            Ok(result) => Ok(result),
+            Err(e) => {
+                if retries <= 0 {
+                    Err(e)
+                } else {
+                    let random_wait = { thread_rng().gen_range(1000..2000) };
+                    sleep(Duration::from_millis(random_wait)).await;
+                    get_url_with_retries(url, parser, retries - 1).await
+                }
+            }
+        }
+    }.boxed()
 }
 
 pub async fn get_url<T, U: IntoUrl, Fn: Future<Output=reqwest::Result<T>>+Sized>(url: U, parser: fn(reqwest::Response) -> Fn) -> Result<T, URLParseError> {

@@ -1,6 +1,9 @@
 [build]
 rustflags = ["-C", "target-cpu=native", "-Z", "threads=8"]
 
+[target.aarch64-unknown-linux-gnu]
+rustflags = ["-C", "target-feature=+neon", "-C", "linker=aarch64-linux-gnu-gcc", "-Z", "threads=8"]
+
 [profile.production]
 inherits = "release"
 codegen-units = 1

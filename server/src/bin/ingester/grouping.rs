@@ -3,15 +3,14 @@ use std::error::Error;
 use std::fs::File;
 use std::io::BufWriter;
 
-use geo_types::Coord;
 use itertools::Itertools;
 use polars::datatypes::AnyValue;
 use polars::frame::{DataFrame, UniqueKeepStrategy};
 use polars::frame::row::Row;
 use polars::io::SerReader;
-use polars::prelude::{as_struct, coalesce, col, CsvReadOptions, DataFrameJoinOps, DataType, Field, IntoLazy, JoinArgs, JoinType, lit, Literal, NamedFrom, not, NULL, Schema, SchemaRef, SmartString, StringNameSpaceImpl, when};
+use polars::prelude::{as_struct, ChunkCompare, coalesce, col, CsvReadOptions, DataFrameJoinOps, DataType, Field, IntoLazy, JoinArgs, JoinType, lit, Literal, NamedFrom, not, NULL, Schema, SchemaRef, SmartString, StringNameSpaceImpl, when};
 use polars::series::Series;
-use proj::Proj;
+use proj4rs::Proj;
 use regex::{Regex, RegexBuilder};
 use tower_http::compression::Predicate;
 
@@ -39,16 +38,21 @@ fn group_data(df: &mut DataFrame) -> Result<Localities, Box<dyn Error>> {
     let mut df = df.join(&crs, ["ATCOCode"], ["ATCOCode"], JoinArgs::new(JoinType::Left))?;
 
     println!("Converting coordinates");
-    let proj = Proj::new_known_crs("EPSG:27700", "EPSG:4326", None)?;
-    let mut coords: Vec<Coord<f64>> = df.select(["Easting", "Northing"])?
+    // Coordinate conversions done manually for higher precision
+    let (mut lon, mut lat): (Vec<f64>, Vec<f64>) = df.select(["Easting", "Northing"])?
         .into_struct("").iter()
-        .map(|vals| Coord::from((vals[0].try_extract().unwrap(), vals[1].try_extract().unwrap()))).collect();
-    proj.convert_array(&mut coords)?;
-    let lat = coords.iter().map(|c| c.y).collect_vec();
-    let lon = coords.iter().map(|c| c.x).collect_vec();
+        .map(|vals| (vals[0].try_extract::<f64>().unwrap(), vals[1].try_extract::<f64>().unwrap())).unzip();
+    lonlat_bng::convert_to_lonlat_threaded_vec(lon.as_mut_slice(), lat.as_mut_slice());
+    // Fill in invalid easting/northing values with poorer lat/long defaults
     df
         .with_column(Series::new("Lat", lat))?
         .with_column(Series::new("Lon", lon))?;
+    let df = df.lazy()
+        .with_columns(&[
+            col("Lat").fill_nan(col("Latitude")),
+            col("Lon").fill_nan(col("Longitude"))
+        ])
+        .collect()?;
 
     println!("Standardising synonyms");
     let df = standardise_synonyms(df)?;
