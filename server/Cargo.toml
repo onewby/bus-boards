@@ -49,7 +49,6 @@ rustls = { version = "0.21.12", features = ["dangerous_configuration"] }
 spex = "0.2.1"
 tempfile = "3.10.1"
 polars = { version = "0.41.3", features = ["lazy", "strings", "object", "dtype-struct", "regex", "performant", "is_in", "is_unique", "partition_by"] }
-proj4rs = { version = "0.1.3", features = ["geo-types", "crs-definitions"] }
 prost = "0.12.3"
 lonlat_bng = { version = "0.6.33", git = "https://github.com/urschrei/lonlat_bng.git" }
 rand = "0.8.5"

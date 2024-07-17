@@ -8,9 +8,8 @@ use polars::datatypes::AnyValue;
 use polars::frame::{DataFrame, UniqueKeepStrategy};
 use polars::frame::row::Row;
 use polars::io::SerReader;
-use polars::prelude::{as_struct, ChunkCompare, coalesce, col, CsvReadOptions, DataFrameJoinOps, DataType, Field, IntoLazy, JoinArgs, JoinType, lit, Literal, NamedFrom, not, NULL, Schema, SchemaRef, SmartString, StringNameSpaceImpl, when};
+use polars::prelude::{as_struct, coalesce, col, CsvReadOptions, DataFrameJoinOps, DataType, Field, IntoLazy, JoinArgs, JoinType, lit, Literal, NamedFrom, not, NULL, Schema, SchemaRef, SmartString, StringNameSpaceImpl, when};
 use polars::series::Series;
-use proj4rs::Proj;
 use regex::{Regex, RegexBuilder};
 use tower_http::compression::Predicate;
 
@@ -136,11 +135,11 @@ fn standardise_synonyms(df: DataFrame) -> Result<DataFrame, Box<dyn Error>> {
             c.3.map_or(AnyValue::Null, |cc| AnyValue::String(cc))
         ])).iter(), &changes_schema
     )?;
-    let renames_df = DataFrame::from_rows_iter_and_schema(
+    /*let renames_df = DataFrame::from_rows_iter_and_schema(
         MANUAL_RENAMES.map(|c| Row::new(vec![
             AnyValue::String(c.0), AnyValue::String(c.1), AnyValue::String(c.2)
         ])).iter(), &renames_schema
-    )?;
+    )?;*/
     let naptan_df = DataFrame::from_rows_iter_and_schema(
         NAPTAN_OVERRIDES.map(|c| Row::new(vec![
             AnyValue::String(c.0), AnyValue::String(c.1)
@@ -152,18 +151,18 @@ fn standardise_synonyms(df: DataFrame) -> Result<DataFrame, Box<dyn Error>> {
             [col("NptgLocalityCode"), col("CommonName")],
             [col("NptgLocalityCode"), col("CommonName")],
             JoinArgs::new(JoinType::Left)
-        ).join(renames_df.lazy(),
+        )/*.join(renames_df.lazy(),
                [col("NptgLocalityCode"), col("CommonName")],
                [col("NptgLocalityCode"), col("CommonName")],
                JoinArgs::new(JoinType::Left)
-        ).join(naptan_df.lazy(),
+        )*/.join(naptan_df.lazy(),
                [col("NptgLocalityCode")],
                [col("NptgLocalityCode")],
                JoinArgs::new(JoinType::Left)
         ).with_columns([
             coalesce(&[col("NewNptgLocalityCode"), col("NewNptgLocalityCode2"), col("NptgLocalityCode")]).alias("NptgLocalityCode"),
             coalesce(&[col("NewParentLocalityName"), col("ParentLocalityName")]).alias("ParentLocalityName"),
-            coalesce(&[col("NewCommonName"), col("CommonName")]).alias("CommonName"),
+            /*coalesce(&[col("NewCommonName"), col("CommonName")]).alias("CommonName"),*/
             when(col("ATCOCode").is_in(lit(Series::new("ATCOCode", MANUAL_ARRIVALS))))
                 .then(true)
                 .otherwise(col("Arrival"))
@@ -171,6 +170,18 @@ fn standardise_synonyms(df: DataFrame) -> Result<DataFrame, Box<dyn Error>> {
         ])
         .select(&[col("*").exclude(["NewNptgLocalityCode", "NewParentLocalityName", "NewNptgLocalityCode2"])])
         .collect()?;
+    
+    let mut df = df.lazy();
+    let mut when_expr = when(false).then(lit("blah")).when(false).then(lit("blah"));
+    for (loc, old_name, new_name) in MANUAL_RENAMES {
+        when_expr = when_expr.when(
+            col("NptgLocalityCode").eq(lit(loc))
+                .and(col("CommonName").str().contains(lit(old_name), true))
+        ).then(col("CommonName").str().replace(lit(old_name), lit(new_name), false));
+    }
+    let df = df.with_column(
+        when_expr.otherwise(col("CommonName")).alias("CommonName")
+    ).collect()?;
 
     let df = df.lazy().with_column(
         col("CommonName")
