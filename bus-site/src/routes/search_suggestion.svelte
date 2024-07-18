@@ -1,5 +1,11 @@
 <script lang="ts">
-    import {faChevronUp, faChevronDown, faStar as faStarActive} from "@fortawesome/free-solid-svg-icons";
+    import {
+        faChevronUp,
+        faChevronDown,
+        faStar as faStarActive,
+        faBus,
+        faTrain
+    } from "@fortawesome/free-solid-svg-icons";
     import {faStar as faStarInactive} from "@fortawesome/free-regular-svg-icons";
     import Fa from "svelte-fa";
     import type {SearchResult} from "../api.type";
@@ -51,8 +57,15 @@
     role="link"
     on:click|stopPropagation={() => goto(`/stop/${result.locality}/${encodeURIComponent(result.name)}`)}>
     <td class="pl-4 pr-2 pt-2 pb-2 w-full">
-        <div class="text-lg">{result.name}</div>
-        <div class="text-sm">{result.parent}</div>
+        <div class="flex flex-row w-full align-middle items-center">
+            <div class="w-full flex-grow">
+                <div class="text-lg">{result.name}</div>
+                <div class="text-sm">{result.parent}</div>
+            </div>
+            {#if result.station}
+                <Fa icon={faTrain} class="inline-block pr-4 text-xl" />
+            {/if}
+        </div>
     </td>
     <td class="align-middle text-right text-xl pr-4">
         <button on:mouseover={() => isHovered = true} on:focus={() => isHovered = true}

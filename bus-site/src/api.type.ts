@@ -94,7 +94,8 @@ export type SearchResult = {
     name: string,
     parent: string,
     qualifier: string,
-    locality: string
+    locality: string,
+    station?: string
 }
 
 export type SearchData = {
