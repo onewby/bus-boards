@@ -4,7 +4,7 @@ import {db} from "../../../db";
 import { LatLng, LatLngBounds } from "../../../leaflet/geo/index.js";
 
 const queryStmt = db.prepare(
-    "SELECT name,parent,qualifier,locality FROM stops_search WHERE stops_search MATCH ? || '*' ORDER BY rank LIMIT 5 OFFSET ?")
+    "SELECT name,parent,qualifier,locality FROM stops_search WHERE stops_search MATCH ? || '*' ORDER BY rank*priority LIMIT 5 OFFSET ?")
 const locStmt = db.prepare(
     `SELECT s.name, s.locality_name AS parent, qualifier, s.locality FROM stances
                 INNER JOIN main.stops s on s.id = stances.stop INNER JOIN main.localities l on l.code = s.locality

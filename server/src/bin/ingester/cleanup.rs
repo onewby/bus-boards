@@ -56,8 +56,10 @@ fn clean_stops(conn: &Connection) -> Result<(), rusqlite::Error> {
     println!("Rebuilding stops_search");
     // Rebuild stops_search table
     conn.execute("DROP TABLE IF EXISTS stops_search;", [])?;
-    conn.execute("CREATE VIRTUAL TABLE stops_search USING fts5(name, parent, qualifier, id UNINDEXED, locality UNINDEXED);", [])?;
-    conn.execute("INSERT INTO stops_search(name, parent, qualifier, id, locality) SELECT stops.name, stops.locality_name, qualifier, stops.id, stops.locality FROM stops INNER JOIN localities l on l.code = stops.locality;", [])?;
+    conn.execute("CREATE VIRTUAL TABLE stops_search USING fts5(name, parent, qualifier, id UNINDEXED, locality UNINDEXED, priority UNINDEXED, station);", [])?;
+    conn.execute("INSERT INTO stops_search(name, parent, qualifier, id, locality, priority, station) SELECT stops.name, stops.locality_name, qualifier, stops.id, stops.locality, (SELECT count(*) FROM stop_times INNER JOIN stances ON stop_times.stop_id=stances.code WHERE stances.stop=stops.id),crs FROM stops
+                      INNER JOIN localities l on l.code = stops.locality
+                      LEFT JOIN (SELECT id,crs FROM stances INNER JOIN main.stops s on s.id = stances.stop WHERE crs IS NOT NULL) s ON stops.id=s.id;", [])?;
     Ok(())
 }
 
