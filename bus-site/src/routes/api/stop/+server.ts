@@ -115,7 +115,7 @@ export const GET: RequestHandler = async ({url}) => {
     await Promise.all(trackingStops.map(async stop => {
         // @ts-ignore
         let serviceData = await getRTServiceData(stop.trip_id)
-        if(!serviceData || serviceData.branches.length != 1 || !stop.seq) return;
+        if(!serviceData || serviceData.branches.length != 1 || stop.seq === undefined) return;
         // - Update their status
         stop.status = serviceData.branches[0].stops.find(searchingStop => searchingStop.seq === stop.seq)?.status
     }))

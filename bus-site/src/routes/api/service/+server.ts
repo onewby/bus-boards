@@ -180,12 +180,19 @@ export const GET: RequestHandler = async ({url}) => {
 
                     // Apply delay to all stops past the current stop
                     // (don't show 'Departed' if too close to the last stop - may be a GPS error)
-                    let includeLastStop = new LatLng(stops[currentStopIndex - 1].lat, stops[currentStopIndex - 1].long).distanceTo({lat: currentPos.latitude, lng: currentPos.longitude}) <= 25 ? 1 : 0
-                    stops.slice(0, Math.max(currentStopIndex - includeLastStop, 0)).forEach(stop => stop.status = 'Departed')
-                    for (let i = Math.max(currentStopIndex - includeLastStop, 0); i < stops.length; i++) {
+                    let evaluateIndex = Math.max(currentStopIndex - 1, 0);
+                    let includeLastStop = new LatLng(stops[evaluateIndex].lat, stops[evaluateIndex].long).distanceTo({lat: currentPos.latitude, lng: currentPos.longitude}) <= 50 ? 1 : 0
+                    // Only show Departed 5 mins before departure time
+                    for (let i = 0; i < stops.length; i++) {
+                        let scheduledDep = scheduledTimes[i].dep ?? scheduledTimes[i].arr!
+                        let delayedTime = (scheduledTimes[i].arr ?? scheduledTimes[i].dep!).plus(delay)
+
+                        if(i < currentStopIndex - includeLastStop && scheduledDep.diffNow("seconds").get("seconds") < 120) {
+                            stops[i].status = "Departed"
+                            continue
+                        }
+
                         if(delay.toMillis() >= 1000 * 120 || delay.toMillis() <= -1000 * 60) {
-                            let scheduledDep = scheduledTimes[i].dep ?? scheduledTimes[i].arr!
-                            let delayedTime = (scheduledTimes[i].arr ?? scheduledTimes[i].dep!).plus(delay)
                             if(scheduledDep.minute === delayedTime.minute) {
                                 stops[i].status = "On time"
                             } else {

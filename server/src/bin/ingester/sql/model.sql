@@ -67,6 +67,7 @@ create table if not exists routes
         primary key (route_id),
     constraint routes_agency_agency_id_source_fk
         foreign key (agency_id) references agency (agency_id)
+        on delete cascade on update cascade
 );
 
 create table if not exists calendar
@@ -101,6 +102,7 @@ create table if not exists trips
         primary key (trip_id),
     constraint trips_routes_route_id_source_fk
         foreign key (route_id) references routes
+        on delete cascade on update cascade
 );
 
 create table if not exists stop_times
@@ -118,6 +120,7 @@ create table if not exists stop_times
         primary key (trip_id, stop_sequence),*/
     constraint stop_times_trips_source_trip_id_fk
         foreign key (trip_id) references trips
+        on delete cascade on update cascade
 );
 
 create table if not exists file_hashes

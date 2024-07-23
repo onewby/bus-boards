@@ -96,9 +96,48 @@ fn patch_display_names(conn: &mut Connection) -> rusqlite::Result<usize> {
 
 fn remove_traveline_ember(conn: &mut Connection) -> rusqlite::Result<usize> {
     println!("Removing Ember TNDS data");
-    conn.execute("DELETE FROM stop_times WHERE trip_id=(SELECT trip_id FROM trips INNER JOIN main.routes r on r.route_id = trips.route_id WHERE r.agency_id='OP965')", [])?;
-    conn.execute("DELETE FROM trips WHERE trip_id=(SELECT trip_id FROM trips INNER JOIN main.routes r on r.route_id = trips.route_id WHERE r.agency_id='OP965')", [])?;
-    conn.execute("DELETE FROM routes WHERE agency_id='OP965'", [])
+    delete_operator(conn, "OP965")
+}
+
+fn delete_operator(conn: &mut Connection, agency_id: &str) -> rusqlite::Result<usize> {
+    conn.execute("DELETE FROM stop_times WHERE trip_id=(SELECT trip_id FROM trips INNER JOIN main.routes r on r.route_id = trips.route_id WHERE r.agency_id=?)", [agency_id])?;
+    conn.execute("DELETE FROM trips WHERE trip_id=(SELECT trip_id FROM trips INNER JOIN main.routes r on r.route_id = trips.route_id WHERE r.agency_id=?)", [agency_id])?;
+    conn.execute("DELETE FROM routes WHERE agency_id=?", [agency_id])?;
+    conn.execute("DELETE FROM agency WHERE agency_id=?", [agency_id])
+}
+
+fn clean_flix(conn: &mut Connection) -> rusqlite::Result<usize> {
+    println!("Cleaning Flix data");
+    conn.execute("UPDATE trips SET trip_id=replace(trip_id, '#', '-') WHERE EXISTS (SELECT agency_id FROM routes WHERE routes.route_id=trips.route_id AND agency_id='FLIXBUS-eu')", [])?;
+    conn.execute("UPDATE routes SET route_short_name=replace(replace(route_short_name,'UK',''), 'FlixBus ', '') WHERE agency_id='FLIXBUS-eu'", [])?;
+    conn.execute(r#"
+        DELETE FROM routes WHERE routes.agency_id='FLIXBUS-eu' AND routes.route_id NOT IN (SELECT trips.route_id FROM trips
+           INNER JOIN routes r on trips.route_id = r.route_id
+           INNER JOIN stop_times origin on trips.trip_id = origin.trip_id AND origin.stop_sequence=trips.min_stop_seq
+           INNER JOIN stances origin_stance on origin_stance.code = origin.stop_id
+           INNER JOIN stops origin_stop on origin_stop.id = origin_stance.stop
+           INNER JOIN stop_times dest on trips.trip_id = dest.trip_id AND dest.stop_sequence=trips.max_stop_seq
+           INNER JOIN stances dest_stance on dest_stance.code = dest.stop_id
+           INNER JOIN stops dest_stop on dest_stop.id = dest_stance.stop
+        WHERE r.agency_id='FLIXBUS-eu' AND (origin_stop.locality<>'Europe' OR dest_stop.locality<>'Europe'));
+    "#, [])?;
+    conn.execute("UPDATE agency SET agency_name='FlixBus' WHERE agency_id='FLIXBUS-eu'", [])?;
+    conn.execute(r#"
+    UPDATE trips SET trip_headsign=(
+        SELECT CASE WHEN dest_loc_name = 'Europe' THEN dest_name
+        WHEN dest_loc_name = 'Centenary Square' THEN 'Birmingham'
+        ELSE (SELECT IFNULL(substr(s.locality_name, 0, NULLIF(instr(s.locality_name, '›') - 1, -1)), s.locality_name)
+              FROM stances INNER JOIN main.stops s on s.id = stances.stop WHERE code=dest_stop_id) END
+        FROM (SELECT trips.trip_id, dest_stop.locality_name AS dest_loc_name, dest_stop.name AS dest_name, dest.stop_id AS dest_stop_id FROM trips
+                                INNER JOIN main.stop_times dest on (trips.trip_id = dest.trip_id AND trips.max_stop_seq=dest.stop_sequence)
+                                INNER JOIN main.stances st on st.code=dest.stop_id
+                                INNER JOIN main.stops dest_stop on dest_stop.id = st.stop
+             ) AS trip_subquery
+        WHERE trips.trip_id=trip_subquery.trip_id
+    ) WHERE (SELECT agency_id FROM routes WHERE trips.route_id=routes.route_id)='FLIXBUS-eu'
+    "#, [])?;
+    delete_operator(conn, "OP5051")?;
+    delete_operator(conn, "FLIXTRAIN-eu")
 }
 
 pub fn cleanup(conn: &mut Connection) -> Result<(), Box<dyn Error>> {
@@ -106,6 +145,7 @@ pub fn cleanup(conn: &mut Connection) -> Result<(), Box<dyn Error>> {
     conn.execute("UPDATE trips SET min_stop_seq=(SELECT min(stop_sequence) FROM stop_times WHERE stop_times.trip_id=trips.trip_id)", ())?;
     conn.execute("UPDATE trips SET max_stop_seq=(SELECT max(stop_sequence) FROM stop_times WHERE stop_times.trip_id=trips.trip_id)", ())?;
     clean_arrivals(conn).expect("Clean arrivals");
+    clean_flix(conn).expect("Clean Flix");
     clean_stops(conn).expect("Clean stops");
     reset_polar().expect("Reset Polar");
     patch_display_names(conn).expect("Display name patching");

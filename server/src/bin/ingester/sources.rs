@@ -19,3 +19,10 @@ pub const SOURCES: [Source; 2] = [
         path: "gtfs/ember.zip",
     }
 ];
+
+pub const FLIX_SOURCE: Source = Source {
+    name: "Flix",
+    prefix: "F",
+    url: "https://gtfs.gis.flix.tech/gtfs_generic_eu.zip",
+    path: "gtfs/flix.zip"
+};

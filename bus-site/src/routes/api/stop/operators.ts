@@ -114,6 +114,7 @@ export const operatorMatches: Record<string, string> = {
     "Notts and Derby": "#7C9C19",
     "South Pennine Community Transport": "#ff0600",
     "Hulleys of Baslow": "#D0BE83",
+    "Whippet Coaches": "#003783",
     "Avanti West Coast": "#1f4555",
     "c2c": "#bc0087",
     "Caledonian Sleeper": "#003941",

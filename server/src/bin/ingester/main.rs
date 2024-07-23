@@ -5,7 +5,9 @@ mod traveline;
 mod localities;
 mod grouping;
 mod locality_changes;
+mod flix;
 
+use std::collections::HashMap;
 use std::error::Error;
 
 
@@ -17,10 +19,11 @@ use rusqlite::Connection;
 
 
 use crate::cleanup::cleanup;
+use crate::flix::map_flix_stops;
 use crate::grouping::group_stances;
 use crate::gtfs::process_source;
 use crate::localities::{insert_localities, insert_stops};
-use crate::sources::SOURCES;
+use crate::sources::{FLIX_SOURCE, SOURCES};
 use crate::traveline::download_noc;
 
 const DEFAULT_DB_PATH: &str = "stops.sqlite";
@@ -35,13 +38,21 @@ fn main() {
 
     group_stances().expect("Stance grouping error");
 
+    println!("Opening database");
     let mut connection = open_db(db_path.as_str()).expect("DB init error");
+    
     create_tables(&connection).expect("Table create error");
     insert_localities(&mut connection).expect("Locality insert error");
     insert_stops(&mut connection).expect("Stop insert error");
+    
+    let no_overrides = HashMap::new();
     for source in SOURCES {
-        process_source(&mut connection, &source).expect("Download error");
+        process_source(&mut connection, &source, &no_overrides).expect("Download error");
     }
+    let mut flix_overrides = HashMap::new();
+    flix_overrides.insert("stop_id".to_string(), map_flix_stops(&mut connection, db_path.as_str()).expect("Flix mapping error"));
+    process_source(&mut connection, &FLIX_SOURCE, &flix_overrides).expect("Download error");
+    
     create_indexes(&mut connection).expect("Index creation error");
     cleanup(&mut connection).expect("Cleanup error");
     download_noc(&mut connection).expect("Traveline error");
@@ -50,7 +61,6 @@ fn main() {
 }
 
 fn open_db(db_path: &str) -> Result<Connection, rusqlite::Error> {
-    println!("Opening database");
     let conn = Connection::open(db_path)?;
     conn.pragma_update(None, "journal_mode", "WAL")?;
     conn.pragma_update(None, "foreign_keys", "ON")?;

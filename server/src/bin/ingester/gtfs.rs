@@ -18,27 +18,27 @@ use BusBoardsServer::download_if_old;
 
 use crate::sources::Source;
 
-pub fn process_source(db: &mut Connection, source: &Source) -> Result<(), Box<dyn Error>> {
+pub fn process_source(db: &mut Connection, source: &Source, overrides: &Overrides) -> Result<(), Box<dyn Error>> {
     // Download source
     fs::create_dir_all("gtfs")?;
     download_if_old(source.url, source.path)?;
     // Import zip
-    import_zip(db, source)
+    import_zip(db, source, overrides)
 }
 
-fn import_zip(db: &mut Connection, source: &Source) -> Result<(), Box<dyn Error>> {
+fn import_zip(db: &mut Connection, source: &Source, overrides: &Overrides) -> Result<(), Box<dyn Error>> {
     let path = Path::new(source.path);
     let timer = Instant::now();
     let imports: Imports = [
         ("agency.txt", "REPLACE INTO agency (agency_id, agency_name, agency_url, agency_timezone, agency_lang) VALUES (?, ?, ?, ?, ?)",
          vec!["agency_id", "agency_name", "agency_url", "agency_timezone", "agency_lang"], phf_map! {}, false),
-        ("routes.txt", "REPLACE INTO routes (route_id, agency_id, route_short_name, route_long_name, route_type) VALUES (?, ?, ?, ?, ?)",
-         vec!["route_id", "agency_id", "route_short_name", "route_long_name", "route_type"], phf_map! {"agency_id" => "Ember"}, false),
+        ("routes.txt", "REPLACE INTO routes (route_id, agency_id, route_short_name, route_long_name, route_type) VALUES (?6||?1, ?2, ?3, ?4, ?5)",
+         vec!["route_id", "agency_id", "route_short_name", "route_long_name", "route_type"], phf_map! {"agency_id" => "Ember"}, true),
         ("calendar.txt", "REPLACE INTO calendar (service_id, start_date, end_date, validity) VALUES (?11||?1, cast(?2 as integer), ?3, (?4 + (?5 << 1) + (?6 << 2) + (?7 << 3) + (?8 << 4) + (?9 << 5) + (?10 << 6)))",
          vec!["service_id", "start_date", "end_date", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"], phf_map! {}, true),
         ("calendar_dates.txt", "REPLACE INTO calendar_dates (service_id, date, exception_type) VALUES (?4||?1, ?2, ?3)",
          vec!["service_id", "date", "exception_type"], phf_map! {}, true),
-        ("trips.txt", "REPLACE INTO trips (route_id, service_id, trip_id, trip_headsign, shape_id) VALUES (?1, ?6||?2, ?6||?3, ?4, ?6||?5)",
+        ("trips.txt", "REPLACE INTO trips (route_id, service_id, trip_id, trip_headsign, shape_id) VALUES (?6||?1, ?6||?2, ?6||?3, ?4, ?6||?5)",
          vec!["route_id", "service_id", "trip_id", "trip_headsign", "shape_id"], phf_map! {}, true),
         ("stop_times.txt", "REPLACE INTO stop_times (trip_id, arrival_time, departure_time, stop_id, stop_sequence, timepoint, stop_headsign, pickup_type, drop_off_type) VALUES (?10||?1, substr(?2, 1, 2)*3600+substr(?2, 4, 2)*60+substr(?2, 7, 2), substr(?3, 1, 2)*3600+substr(?3, 4, 2)*60+substr(?3, 7, 2), ?4, ?5, ?6, NULLIF(?7, ''), ?8, ?9)",
          vec!["trip_id", "arrival_time", "departure_time", "stop_id", "stop_sequence", "timepoint", "stop_headsign", "pickup_type", "drop_off_type"], phf_map! {}, true)
@@ -52,7 +52,7 @@ fn import_zip(db: &mut Connection, source: &Source) -> Result<(), Box<dyn Error>
 
     for (subfile_name, stmt, indexes, defaults, add_prefix) in imports {
         println!("Importing {} for {}", subfile_name, file_name);
-        import_txt_file(&archive, &dir, subfile_name, db, stmt, &indexes, &defaults, if add_prefix { Some(source.prefix) } else { None }).expect(subfile_name);
+        import_txt_file(&archive, &dir, subfile_name, db, stmt, &indexes, &defaults, if add_prefix { Some(source.prefix) } else { None }, overrides).expect(subfile_name);
     }
 
     println!("Importing shapes.txt for {}", file_name);
@@ -63,7 +63,7 @@ fn import_zip(db: &mut Connection, source: &Source) -> Result<(), Box<dyn Error>
     Ok(())
 }
 
-fn import_txt_file(archive: &ZipArchive, dir: &DirectoryContents, file_name: &str, db: &mut Connection, stmt_str: &str, indexes: &Vec<&str>, defaults: &phf::Map<&str, &str>, prefix: Option<&str>) -> Result<(), Box<dyn Error>> {
+fn import_txt_file(archive: &ZipArchive, dir: &DirectoryContents, file_name: &str, db: &mut Connection, stmt_str: &str, indexes: &Vec<&str>, defaults: &phf::Map<&str, &str>, prefix: Option<&str>, overrides: &Overrides) -> Result<(), Box<dyn Error>> {
     let file = dir.lookup(file_name)?;
     let stream_reader = BufReader::new(archive.read(file)?);
     let mut rdr = csv::Reader::from_reader(stream_reader);
@@ -86,7 +86,8 @@ fn import_txt_file(archive: &ZipArchive, dir: &DirectoryContents, file_name: &st
                         if located_value.is_empty() {
                             defaults.get(hdr_name).map(|str| *str)
                         } else {
-                            Some(located_value)
+                            Some(overrides.get(&hdr_name.to_string()).and_then(|o| o.get(located_value).map(|s| s.as_str()))
+                                .unwrap_or(located_value))
                         }
                     })
                     .chain(optional_prefix_iter);
@@ -139,3 +140,4 @@ struct ShapeFileRecord {
 
 const EMPTY_SLICE: &[u8] = &[];
 type Imports<'a, 'b> = [(&'a str, &'a str, Vec<&'a str>, phf::Map<&'a str, &'a str>, bool); 6];
+type Overrides = HashMap<String, HashMap<String, String>>;
