@@ -53,6 +53,14 @@ prost = "0.12.3"
 lonlat_bng = { version = "0.6.33", git = "https://github.com/urschrei/lonlat_bng.git" }
 rand = "0.8.5"
 geographiclib-rs = "0.2.4"
+serde_regex = "1.1.0"
+serde_nested_with = "0.2.5"
+serde_with = { version = "3.9.0", features = ["chrono"] }
+yaserde = "0.10.1"
+yaserde_derive = "0.10.1"
+async-trait = "0.1.81"
+xml-rs = "0.8.20"
+dashmap = { version = "6.0.1", features = ["rayon"] }
 
 [build-dependencies]
 #prost-build = "0.12.3"

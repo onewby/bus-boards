@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use chrono::{DateTime, TimeDelta, Timelike, Utc};
 use config::Map;
-use geo::{EuclideanDistance, LineLocatePoint};
+use geo::{Closest, GeodesicDistance, HaversineClosestPoint, LineLocatePoint};
 use geo_types::Point;
 use itertools::Itertools;
 
@@ -13,7 +13,7 @@ use util::zero_day;
 
 use crate::db::DBPool;
 use crate::util;
-use crate::util::f64_cmp;
+use crate::util::{f64_cmp, get_geo_linepoint_distance};
 
 type TripCandidateDBFunction = fn(&Arc<DBPool>, &DateTime<Utc>, i64, i64, &str) -> Vec<TripCandidate>;
 
@@ -49,7 +49,8 @@ pub fn get_trip_info(candidate: &TripCandidate, candidate_i: usize, points: &Map
     let segments: Vec<geo_types::Line<f64>> = (0..route.len()-1).map(|i| {
         geo_types::Line::new(points.get(&route[i]).copied().unwrap_or_default(), points.get(&route[i+1]).copied().unwrap_or_default())
     }).collect();
-    let closest_segment = segments.iter().map(|s| loc.euclidean_distance(s)).position_min_by(f64_cmp).unwrap_or(0);
+    let closest_segment = segments.iter().map(|s| get_geo_linepoint_distance(s, loc))
+        .position_min_by(f64_cmp).unwrap_or(0);
 
     // Find how far along the line segment this point is
     let pct = segments[closest_segment].line_locate_point(loc).unwrap_or(0.0);

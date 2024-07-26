@@ -19,6 +19,7 @@
     import {browser} from "$app/environment";
     import Alert from "../../../Alert.svelte";
     import polyline from "google-polyline";
+    import {invalidateAll} from "$app/navigation";
 
     export let data: PageData
     let expand = false
@@ -45,9 +46,7 @@
     onMount(() => {
         if(branch.realtime) {
             tickerNumber = setInterval(async () => {
-                const resp = await fetch(`/api/${train ? "train" : "service"}?id=` + $page.params['service'])
-                if(!resp.ok) return
-                data = await resp.json()
+                await invalidateAll()
             }, 30000)
         }
     })

@@ -1,4 +1,5 @@
-export const operatorMatches: Record<string, string> = {
+{
+  "operator_matches": {
     "East Yorkshire": "#8a2433",
     "Coastliner": "#00508f",
     "The Burnley Bus Company": "#e74e0f",
@@ -153,246 +154,255 @@ export const operatorMatches: Record<string, string> = {
     "Woolwich Free Ferry": "#00a0df",
     "London Tramlink": "#76bc21",
     "SPT Subway": "#ff6200"
-}
-
-export const routeOverrides: Record<string, Record<string, string>> = {
+  },
+  "route_overrides": {
     "Metrolink": {
-        "Green Line": "#318C2C",
-        "Purple Line": "#7B2082",
-        "Blue Line": "#59C6F2",
-        "Orange Line": "#F18800",
-        "Yellow Line": "#EFBB00",
-        "Pink Line": "#FE79B0",
-        "Brown Line": "#82735E",
-        "Red Line": "#E70310",
-        "Navy Line": "#0069B4"
+      "Green Line": "#318C2C",
+      "Purple Line": "#7B2082",
+      "Blue Line": "#59C6F2",
+      "Orange Line": "#F18800",
+      "Yellow Line": "#EFBB00",
+      "Pink Line": "#FE79B0",
+      "Brown Line": "#82735E",
+      "Red Line": "#E70310",
+      "Navy Line": "#0069B4"
     },
     "First York": {
-        "2": "#008000",
-        "2A": "#008000",
-        "3": "#FFF",
-        "7": "#F00",
-        "8": "#FF0",
-        "9": "#808080",
-        "59": "#0bc4bf",
-        "HSB": "#b9c800"
+      "2": "#008000",
+      "2A": "#008000",
+      "3": "#FFF",
+      "7": "#F00",
+      "8": "#FF0",
+      "9": "#808080",
+      "59": "#0bc4bf",
+      "HSB": "#b9c800"
     },
     "Reading Buses": {
-        "1": "#000000",
-        "2": "#43A429",
-        "2a": "#43A429",
-        "3": "#EABC4B",
-        "4": "#A38142",
-        "X4": "#A38142",
-        "5": "#007670",
-        "6": "#007670",
-        "6a": "#007670",
-        "9": "#766A62",
-        "10": "#C41118",
-        "11": "#DB9330",
-        "13": "#F26421",
-        "14": "#F26421",
-        "15": "#00A0F0",
-        "15a": "#00A0F0",
-        "16": "#00A0F0",
-        "17": "#4B2580",
-        "19a": "#FF6417",
-        "19b": "#FF6417",
-        "19c": "#FF6417",
-        "21": "#8E0F52",
-        "21a": "#8E0F52",
-        "22": "#CC007A",
-        "23": "#A55B9B",
-        "24": "#A55B9B",
-        "25": "#CC007A",
-        "26": "#FFDD00",
-        "27": "#A55B9B",
-        "29": "#A55B9B",
-        "33": "#0F378A",
-        "42": "#048539",
-        "50": "#004534"
+      "1": "#000000",
+      "2": "#43A429",
+      "2a": "#43A429",
+      "3": "#EABC4B",
+      "4": "#A38142",
+      "X4": "#A38142",
+      "5": "#007670",
+      "6": "#007670",
+      "6a": "#007670",
+      "9": "#766A62",
+      "10": "#C41118",
+      "11": "#DB9330",
+      "13": "#F26421",
+      "14": "#F26421",
+      "15": "#00A0F0",
+      "15a": "#00A0F0",
+      "16": "#00A0F0",
+      "17": "#4B2580",
+      "19a": "#FF6417",
+      "19b": "#FF6417",
+      "19c": "#FF6417",
+      "21": "#8E0F52",
+      "21a": "#8E0F52",
+      "22": "#CC007A",
+      "23": "#A55B9B",
+      "24": "#A55B9B",
+      "25": "#CC007A",
+      "26": "#FFDD00",
+      "27": "#A55B9B",
+      "29": "#A55B9B",
+      "33": "#0F378A",
+      "42": "#048539",
+      "50": "#004534"
     },
     "trentbarton": {
-        "TA": "#0563ae",
-        "CC": "#2b3640",
-        "C": "#d5811d",
-        "CMT": "#373536",
-        "COT": "#429194",
-        "H1": "#004E4F",
-        "HQ": "#a82c71",
-        "i4": "#005F75",
-        "IF": "#007caf",
-        "IGO": "#1A1D56",
-        "KC": "#a82c71",
-        "RM": "#97b732",
-        "TM": "#E5007A",
-        "RA": "#c1001f",
-        "my15": "#f7a900",
-        "9.1": "#EE7222",
-        "9.3": "#EE7222",
-        "1": "#004a98",
-        "RV1": "#97b732",
-        "6.0": "#cb971b",
-        "6.1": "#cb971b",
-        "6.2": "#cb971b",
-        "6.3": "#cb971b",
-        "6.4": "#cb971b",
-        "SNX": "#808083",
-        "SN": "#007bbd",
-        "SW": "#00983b",
-        "3A": "#db921a",
-        "3B": "#db921a",
-        "3C": "#db921a",
-        "TWO": "#eec72d",
-        "V1": "#ffd400",
-        "X38": "#0091b0"
+      "TA": "#0563ae",
+      "CC": "#2b3640",
+      "C": "#d5811d",
+      "CMT": "#373536",
+      "COT": "#429194",
+      "H1": "#004E4F",
+      "HQ": "#a82c71",
+      "i4": "#005F75",
+      "IF": "#007caf",
+      "IGO": "#1A1D56",
+      "KC": "#a82c71",
+      "RM": "#97b732",
+      "TM": "#E5007A",
+      "RA": "#c1001f",
+      "my15": "#f7a900",
+      "9.1": "#EE7222",
+      "9.3": "#EE7222",
+      "1": "#004a98",
+      "RV1": "#97b732",
+      "6.0": "#cb971b",
+      "6.1": "#cb971b",
+      "6.2": "#cb971b",
+      "6.3": "#cb971b",
+      "6.4": "#cb971b",
+      "SNX": "#808083",
+      "SN": "#007bbd",
+      "SW": "#00983b",
+      "3A": "#db921a",
+      "3B": "#db921a",
+      "3C": "#db921a",
+      "TWO": "#eec72d",
+      "V1": "#ffd400",
+      "X38": "#0091b0"
     },
     "Nottingham City Transport": {
-        "4": "#002663",
-        "5": "#007A4D",
-        "6": "#007A4D",
-        "15": "#935E3A",
-        "17": "#935E3A",
-        "24": "#C1AFE5",
-        "27": "#C1AFE5",
-        "28": "#DA487E",
-        "30": "#DA487E",
-        "39": "#00A1DE",
-        "41": "#00A1DE",
-        "42": "#00A1DE",
-        "44": "#CD202C",
-        "45": "#6AADE4",
-        "46": "#6AADE4",
-        "47": "#6AADE4",
-        "50": "#CD202C",
-        "59": "#92D400",
-        "78": "#3FCFD5",
-        "87": "#522398",
-        "88": "#522398",
-        "N4": "#002663",
-        "N26": "#C1AFE5",
-        "N34": "#E37222"
+      "4": "#002663",
+      "5": "#007A4D",
+      "6": "#007A4D",
+      "15": "#935E3A",
+      "17": "#935E3A",
+      "24": "#C1AFE5",
+      "27": "#C1AFE5",
+      "28": "#DA487E",
+      "30": "#DA487E",
+      "39": "#00A1DE",
+      "41": "#00A1DE",
+      "42": "#00A1DE",
+      "44": "#CD202C",
+      "45": "#6AADE4",
+      "46": "#6AADE4",
+      "47": "#6AADE4",
+      "50": "#CD202C",
+      "59": "#92D400",
+      "78": "#3FCFD5",
+      "87": "#522398",
+      "88": "#522398",
+      "N4": "#002663",
+      "N26": "#C1AFE5",
+      "N34": "#E37222"
     },
     "Tyne and Wear Metro" : {
-        "YEL": "#f2bc4a",
-        "GRN": "#5eb05f"
+      "YEL": "#f2bc4a",
+      "GRN": "#5eb05f"
     },
-    "Stagecoach Supertram": {
-        "YELL": "#ECB739",
-        "TT": "#000000",
-        "BLUE": "#0277c1",
-        "PURP": "#772b90"
+    "South Yorkshire Future Tram": {
+      "YELL": "#ECB739",
+      "TT": "#000000",
+      "BLUE": "#0277c1",
+      "PURP": "#772b90"
     },
     "First South & West Wales": {
-        "T1": "#55ae38",
-        "T1A": "#55ae38",
-        "T1S": "#55ae38",
-        "T1X": "#55ae38"
+      "T1": "#55ae38",
+      "T1A": "#55ae38",
+      "T1S": "#55ae38",
+      "T1X": "#55ae38"
     },
     "Mid Wales Travel": {
-        "T1C": "#55ae38"
+      "T1C": "#55ae38"
     },
     "Lloyds Coaches": {
-        "T2": "#55ae38",
-        "T3": "#55ae38",
-        "T12": "#55ae38"
+      "T2": "#55ae38",
+      "T3": "#55ae38",
+      "T12": "#55ae38"
     },
     "Stagecoach South Wales": {
-        "T4": "#55ae38",
-        "T14": "#55ae38"
+      "T4": "#55ae38",
+      "T14": "#55ae38"
     },
     "Tanat Valley Coaches": {
-        "T12": "#55ae38"
+      "T12": "#55ae38"
     },
     "Richards Bros": {
-        "T5": "#55ae38",
-        "T11": "#55ae38",
-        "460": "#55ae38"
+      "T5": "#55ae38",
+      "T11": "#55ae38",
+      "460": "#55ae38"
     },
     "Adventure Travel": {
-        "T6": "#55ae38"
+      "T6": "#55ae38"
     },
     "Newport Bus": {
-        "T7": "#55ae38"
+      "T7": "#55ae38"
     },
     "M & H Coaches": {
-        "T8": "#55ae38"
+      "T8": "#55ae38"
     },
     "K&P Coaches": {
-        "T10": "#55ae38"
+      "T10": "#55ae38"
     },
     "Llew Jones Coaches": {
-        "T10": "#55ae38"
+      "T10": "#55ae38"
     },
     "Coastliner": {
-        "A1": "#e1a600",
-        "A2": "#e1a600",
-        "A3": "#e1a600"
+      "A1": "#e1a600",
+      "A2": "#e1a600",
+      "A3": "#e1a600"
     },
     "London Underground (TfL)": {
-        "Bakerloo": "#a65a2a",
-        "Central": "#e1251b",
-        "Circle": "#ffcd00",
-        "District": "#007934",
-        "Hammersmith & City": "#ec9bad",
-        "Jubilee": "#7b868c",
-        "Metropolitan": "#870f54",
-        "Northern": "#000000",
-        "Piccadilly": "#000f9f",
-        "Victoria": "#00a0df",
-        "Waterloo & City": "#6bcdb2"
+      "Bakerloo": "#a65a2a",
+      "Central": "#e1251b",
+      "Circle": "#ffcd00",
+      "District": "#007934",
+      "Hammersmith & City": "#ec9bad",
+      "Jubilee": "#7b868c",
+      "Metropolitan": "#870f54",
+      "Northern": "#000000",
+      "Piccadilly": "#000f9f",
+      "Victoria": "#00a0df",
+      "Waterloo & City": "#6bcdb2"
     }
-}
-
-export const routeOverridesPrefixes: Record<string, Record<string, string>> = {
+  },
+  "route_overrides_prefixes": {
     "First South & West Wales": {
-        "T1": "#55ae38",
+      "T1": "#55ae38"
     },
     "Nottingham City Transport": {
-        "1": "#002663",
-        "3": "#002663",
-        "7": "#007A4D",
-        "8": "#007A4D",
-        "9": "#007A4D",
-        "10": "#007A4D",
-        "11": "#007A4D",
-        "16": "#935E3A",
-        "25": "#C1AFE5",
-        "26": "#C1AFE5",
-        "34": "#E37222",
-        "35": "#E37222",
-        "36": "#E37222",
-        "40": "#00A1DE",
-        "44": "#CD202C",
-        "48": "#002663",
-        "49": "#002663",
-        "56": "#92D400",
-        "57": "#92D400",
-        "58": "#92D400",
-        "68": "#FED100",
-        "69": "#FED100",
-        "70": "#FED100",
-        "71": "#FED100",
-        "77": "#3FCFD5",
-        "79": "#3FCFD5",
-        "89": "#522398"
+      "1": "#002663",
+      "3": "#002663",
+      "7": "#007A4D",
+      "8": "#007A4D",
+      "9": "#007A4D",
+      "10": "#007A4D",
+      "11": "#007A4D",
+      "16": "#935E3A",
+      "25": "#C1AFE5",
+      "26": "#C1AFE5",
+      "34": "#E37222",
+      "35": "#E37222",
+      "36": "#E37222",
+      "40": "#00A1DE",
+      "44": "#CD202C",
+      "48": "#002663",
+      "49": "#002663",
+      "56": "#92D400",
+      "57": "#92D400",
+      "58": "#92D400",
+      "68": "#FED100",
+      "69": "#FED100",
+      "70": "#FED100",
+      "71": "#FED100",
+      "77": "#3FCFD5",
+      "79": "#3FCFD5",
+      "89": "#522398"
     }
-}
-
-export const operatorRegex: Record<string, string> = {
-    ".*LONDON.*": "#E1251B",
-    ".*London.*": "#E1251B",
-    "Stagecoach.*": "#009b77",
-    "First .*": "#e5017d",
-    "Arriva.*": "#00becd",
-    "Scottish Citylink.*": "#10069f",
-    "Diamond.*": "#014790",
-    "METROLINE.*": "#E1251B",
-    "CitySightseeing.*": "#e21316"
-}
-
-export const intercityOperators: string[] = [
+  },
+  "operator_regex": [
+    [".*LONDON.*", "#E1251B"],
+    [".*London.*", "#E1251B"],
+    ["Stagecoach.*", "#009b77"],
+    ["First .*", "#e5017d"],
+    ["Arriva.*", "#00becd"],
+    ["Scottish Citylink.*", "#10069f"],
+    ["Diamond.*", "#014790"],
+    ["METROLINE.*", "#E1251B"],
+    ["CitySightseeing.*", "#e21316"]
+  ],
+  "intercity_operators": [
     "National Express",
     "Megabus",
     "FlixBus"
-]
+  ],
+  "suffixes": {
+    "Edinburgh Trams": "",
+    "Metrolink": " Metrolink Stop",
+    "West Midlands Metro": "\\(.*\\)",
+    "Nottingham Express Transit (Tram)": " Tram Stop",
+    "Tyne and Wear Metro": " \\(Tyne and Wear Metro Station\\)",
+    "South Yorkshire Future Tram": " \\(S Yorks Supertram\\)| \\(South Yorkshire Supertram\\)",
+    "London Docklands Light Railway - TfL": " DLR Station",
+    "London Tramlink": " Tram Stop",
+    "SPT Subway": " SPT Subway Station",
+    "London Underground (TfL)": " Underground Station"
+  }
+}

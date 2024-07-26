@@ -12,7 +12,8 @@ use chrono_tz::Europe::London;
 use chrono_tz::OffsetComponents;
 use futures::future::BoxFuture;
 use futures::FutureExt;
-use geo_types::{CoordNum, Point};
+use geo::{Closest, GeodesicDistance, HaversineClosestPoint};
+use geo_types::{CoordNum, Line, Point};
 use memoize::memoize;
 use reqwest::{IntoUrl, StatusCode};
 use serde::de;
@@ -142,4 +143,16 @@ pub fn adjust_timestamp(time: &DateTime<Utc>) -> DateTime<Utc> {
 #[memoize(TimeToLive: Duration::from_secs(3600))]
 pub fn get_bst_offset() -> chrono::Duration {
     London.offset_from_utc_datetime(&Utc::now().naive_utc()).dst_offset()
+}
+
+pub fn haversine_closest_point(s: &Line<f64>, loc: &Point<f64>) -> Point<f64> {
+    match s.haversine_closest_point(loc) {
+        Closest::Intersection(point) => point,
+        Closest::SinglePoint(point) => point,
+        Closest::Indeterminate => Point(s.start)
+    }
+}
+
+pub fn get_geo_linepoint_distance(s: &Line<f64>, loc: &Point<f64>) -> f64 {
+    loc.geodesic_distance(&haversine_closest_point(s, loc))
 }

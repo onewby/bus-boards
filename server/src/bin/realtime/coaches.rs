@@ -17,7 +17,7 @@ use crate::GTFSResponse;
 use crate::transit_realtime::{FeedEntity, Position, TripDescriptor, VehiclePosition};
 use crate::transit_realtime::trip_descriptor::ScheduleRelationship::{Canceled, Scheduled};
 use crate::transit_realtime::vehicle_position::VehicleStopStatus::InTransitTo;
-use crate::util::{f64_cmp, get_url, gtfs_date, gtfs_time};
+use crate::util::{f64_cmp, get_geo_linepoint_distance, get_url, gtfs_date, gtfs_time};
 
 pub async fn coaches_listener(tx: Sender<GTFSResponse>, config: Arc<BBConfig>, db: Arc<DBPool>) {
     // Get API info
@@ -67,7 +67,10 @@ async fn get_routes(db: &Arc<DBPool>, route: CoachRoute, api_url: &str, api_key:
 
                         // Map vehicle to nearest line segment to find the next stop
                         let index = (0..trip.route.len() - 2).map(|i| {
-                            Line::new(points[&trip.route[i]], points[&trip.route[i+1]]).euclidean_distance(&Point::<f64>::new(vehicle.current_wgs84_longitude_degrees, vehicle.current_wgs84_latitude_degrees))
+                            get_geo_linepoint_distance(
+                                &Line::new(points[&trip.route[i]], points[&trip.route[i+1]]),
+                                &Point::<f64>::new(vehicle.current_wgs84_longitude_degrees, vehicle.current_wgs84_latitude_degrees)
+                            )
                         }).position_min_by(f64_cmp).map(|pos| pos + 1).unwrap_or_default();
 
                         // Map matched journey to GTFS

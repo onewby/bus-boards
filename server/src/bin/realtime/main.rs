@@ -13,17 +13,21 @@ mod lothian;
 mod coaches;
 mod stagecoach;
 mod first;
+mod api;
 
 #[macro_use]
 extern crate serde;
 
 use std::collections::HashMap;
+use std::fs::File;
 use std::future::Future;
+use std::io::BufReader;
 use std::sync::{Arc, RwLock};
 use std::time::{SystemTime};
 use axum::extract::State;
 use axum::Router;
 use axum::routing::{get};
+use dashmap::DashMap;
 use log::{debug, info};
 use nu_ansi_term::Color::{Green, Red};
 use prost::Message;
@@ -34,6 +38,8 @@ use crate::bods::bods_listener;
 use crate::coaches::coaches_listener;
 use BusBoardsServer::config::{BBConfig, load_config};
 use BusBoardsServer::GTFSResponder;
+use crate::api::service::{get_service, OperatorColours, ServiceData};
+use crate::api::stop::get_stop;
 use crate::db::{DBPool, open_db};
 use crate::disruptions::{disruptions_listener};
 use crate::ember::ember_listener;
@@ -41,6 +47,7 @@ use crate::first::first_listener;
 use crate::GTFSResponder::{BODS, COACHES, DISRUPTIONS, EMBER, FIRST, LOTHIAN, PASSENGER, STAGECOACH};
 use crate::lothian::lothian_listener;
 use crate::passenger::passenger_listener;
+use crate::siri::Operators;
 use crate::stagecoach::stagecoach_listener;
 use crate::transit_realtime::{Alert, FeedEntity, FeedMessage};
 
@@ -53,17 +60,24 @@ pub mod transit_realtime {
 type GTFSResponse = (GTFSResponder, Vec<FeedEntity>, Vec<Alert>);
 type GTFSVehicles = HashMap<GTFSResponder, Vec<FeedEntity>>;
 type GTFSAlerts = HashMap<GTFSResponder, Vec<Alert>>;
+type RealtimeCache = DashMap<GTFSResponder, DashMap<String, ServiceData>>;
 
 struct GTFSState {
     vehicles: RwLock<GTFSVehicles>,
-    alerts: RwLock<GTFSAlerts>
+    alerts: RwLock<GTFSAlerts>,
+    realtime_cache: Arc<RealtimeCache>,
+    operators: OperatorColours,
+    db: Arc<DBPool>
 }
 
 impl Default for GTFSState {
     fn default() -> Self {
         GTFSState {
             vehicles: RwLock::new(HashMap::new()),
-            alerts: RwLock::new(HashMap::new())
+            alerts: RwLock::new(HashMap::new()),
+            realtime_cache: Arc::new(RealtimeCache::new()),
+            operators: serde_json::from_reader(BufReader::new(File::open("operators.json").unwrap())).unwrap(),
+            db: Arc::new(open_db())
         }
     }
 }
@@ -82,6 +96,7 @@ async fn main() {
             debug!("Received from {}", response.0);
             gtfs_ref.vehicles.write().unwrap().insert(response.0, response.1);
             gtfs_ref.alerts.write().unwrap().insert(response.0, response.2);
+            gtfs_ref.realtime_cache.insert(response.0, DashMap::new());
         }
     });
 
@@ -104,6 +119,8 @@ async fn main() {
     let app = Router::new()
         .route("/api/gtfsrt/proto", get(gtfs_realtime_proto))
         .route("/api/gtfsrt/json", get(gtfs_realtime_json))
+        .route("/api/service", get(get_service))
+        .route("/api/stop", get(get_stop))
         .with_state(gtfs_state)
         .layer(CompressionLayer::new());
 

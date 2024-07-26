@@ -1,16 +1,20 @@
 use std::collections::HashMap;
+use std::ops::Add;
 use std::rc::Rc;
 use std::str::FromStr;
 use std::sync::Arc;
 
-use chrono::{Datelike, DateTime, DurationRound, TimeDelta, Utc};
-use geo_types::Point;
+use chrono::{Datelike, DateTime, Duration, DurationRound, TimeDelta, Utc};
+use geo_types::{Coord, coord, Point};
 use itertools::Itertools;
 use memoize::memoize;
 use r2d2::{Pool, PooledConnection};
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::{named_params, Params, params};
 use rusqlite::types::Value;
+use serde::{de, Deserialize, Deserializer, Serializer};
+use serde_with::serde_as;
+use serde_with::DurationSeconds;
 
 use BusBoardsServer::config::BBConfig;
 
@@ -408,4 +412,288 @@ pub fn save_passenger_trip_allocations(db: &Arc<DBPool>, trips: &Vec<PassengerDi
         }
     }
     tx.commit()
+}
+
+pub fn query_service(db: &Arc<DBPool>, trip_id: &str) -> rusqlite::Result<ServiceQuery> {
+    let db = get_pool(db);
+    let mut stmt = db.prepare_cached(
+        "SELECT r.route_id as route_id, route_short_name as code, trip_headsign as dest, max_stop_seq as mss FROM trips
+                INNER JOIN main.routes r on r.route_id = trips.route_id
+                WHERE trip_id=?")?;
+    stmt.query_row([trip_id], |row| Ok(ServiceQuery {
+        route_id: row.get(0)?,
+        code: row.get(1)?,
+        dest: row.get(2)?,
+        mss: row.get(3)?,
+    }))
+}
+
+pub struct ServiceQuery {
+    pub route_id: String,
+    pub code: String,
+    pub dest: String,
+    pub mss: u64
+}
+
+pub fn query_stops(db: &Arc<DBPool>, trip_id: &str) -> rusqlite::Result<Vec<StopsQuery>> {
+    let db = get_pool(db);
+    let mut stmt = db.prepare_cached(
+        "SELECT stops.name, stops.name as display_name, stops.locality, indicator as ind, arrival_time as arr,
+                    departure_time as dep, l.name as loc, timepoint as major, drop_off_type as doo, pickup_type as puo,
+                    stances.lat as lat, stances.long as long, stop_sequence as seq, stops.locality_name AS full_loc
+                FROM stop_times
+                    INNER JOIN stances on stances.code = stop_times.stop_id
+                    INNER JOIN stops on stops.id = stances.stop
+                    INNER JOIN localities l on l.code = stops.locality
+                WHERE trip_id=? ORDER BY stop_sequence")?;
+    let result = Ok(stmt.query_map([trip_id], |row| Ok(StopsQuery {
+        name: row.get(0)?,
+        display_name: row.get(1)?,
+        locality: row.get(2)?,
+        ind: row.get(3).ok(),
+        arr: TimeDelta::seconds(row.get(4)?),
+        dep: TimeDelta::seconds(row.get(5)?),
+        loc: row.get(6).ok(),
+        major: row.get(7)?,
+        doo: row.get(8)?,
+        puo: row.get(9)?,
+        lat: row.get(10)?,
+        long: row.get(11)?,
+        seq: row.get(12)?,
+        full_loc: row.get(13)?,
+        status: None
+    }))?.filter_map(Result::ok).collect_vec());
+    result
+}
+
+#[derive(Deserialize, Serialize, Clone)]
+pub struct StopsQuery {
+    pub name: String,
+    pub display_name: String,
+    pub locality: String,
+    pub ind: Option<String>,
+    #[serde(deserialize_with = ":: serde_with :: As :: < DurationSeconds < i64 > > :: deserialize")]
+    #[serde(serialize_with="duration_to_fmt")]
+    pub arr: Duration,
+    #[serde(deserialize_with = ":: serde_with :: As :: < DurationSeconds < i64 > > :: deserialize")]
+    #[serde(serialize_with="duration_to_fmt")]
+    pub dep: Duration,
+    pub loc: Option<String>,
+    pub major: bool,
+    #[serde(deserialize_with="bool_from_u8")]
+    pub puo: bool,
+    #[serde(deserialize_with="bool_from_u8")]
+    pub doo: bool,
+    pub long: f64,
+    pub lat: f64,
+    pub seq: u64,
+    #[serde(skip_serializing)]
+    pub full_loc: String,
+    pub status: Option<String>
+}
+
+impl StopsQuery {
+    pub(crate) fn position(&self) -> Coord {
+        coord! {x: self.lat, y: self.long }
+    }
+}
+
+fn bool_from_u8<'de, D>(deserializer: D) -> Result<bool, D::Error>
+    where
+        D: Deserializer<'de>,
+{
+    match u8::deserialize(deserializer)? {
+        0 => Ok(false),
+        1 => Ok(true),
+        other => Err(de::Error::invalid_value(de::Unexpected::Unsigned(other as u64), &"0/1"))
+    }
+}
+
+fn duration_to_fmt<S>(duration: &Duration, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer
+{
+    serializer.serialize_str(format!("{}", (DateTime::<Utc>::default() + *duration).format("%H:%M")).as_str())
+}
+
+pub fn query_service_operator(db: &Arc<DBPool>, trip_id: &str) -> rusqlite::Result<OperatorsQuery> {
+    let db = get_pool(db);
+    let result = db.prepare_cached(
+        "SELECT a.agency_id as id, agency_name as name, COALESCE(website, agency_url) as url FROM trips
+                 INNER JOIN main.routes r on r.route_id = trips.route_id
+                 INNER JOIN main.agency a on r.agency_id = a.agency_id
+                 LEFT OUTER JOIN main.traveline t on a.agency_id = t.agency_id
+             WHERE trip_id = ?").unwrap()
+        .query_row([trip_id], |row| Ok(OperatorsQuery {
+            id: row.get(0)?,
+            name: row.get(1)?,
+            url: row.get(2)?,
+        }));
+    result
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct OperatorsQuery {
+    #[serde(skip_serializing)]
+    pub id: String,
+    pub name: String,
+    pub url: String
+}
+
+pub fn get_service_shape(db: &Arc<DBPool>, trip_id: &str) -> rusqlite::Result<String> {
+    let db = get_pool(db);
+    let result = db.prepare_cached("SELECT polyline FROM shapes INNER JOIN trips t on shapes.shape_id = t.shape_id WHERE trip_id=?").unwrap()
+        .query_row([trip_id], |row| row.get(0));
+    result
+}
+
+pub fn get_stop_positions(db: &Arc<DBPool>, current_stop: u32, trip_id: &str) -> Vec<StopPosition> {
+    let db = get_pool(db);
+    let result = db.prepare_cached("SELECT stop_sequence,long,lat FROM stop_times
+        INNER JOIN stances on stances.code = stop_times.stop_id
+        WHERE (stop_sequence=?1 - 1 OR stop_sequence=?1) AND trip_id=?2 ORDER BY stop_sequence").unwrap()
+        .query_map(params![current_stop, trip_id], |row| Ok(StopPosition {
+            stop_sequence: row.get(0)?,
+            pos: coord! {x: row.get(1)?, y: row.get(2)? }
+        })).unwrap().filter_map(Result::ok).collect_vec();
+    result
+}
+
+pub struct StopPosition {
+    pub stop_sequence: usize,
+    pub pos: Coord<f64>
+}
+
+pub fn get_stop_info(db: &Arc<DBPool>, name: &str, locality: &str) -> rusqlite::Result<StopInfoQuery> {
+    let db = get_pool(db);
+    let result = db.prepare_cached("SELECT id, name, locality_name, locality as locality_code FROM stops WHERE name=? AND locality=?")?
+        .query_row([name, locality], |row| Ok(StopInfoQuery {
+            id: row.get(0)?,
+            name: row.get(1)?,
+            locality_name: row.get(2)?,
+            locality: row.get(3)?,
+        }));
+    result.inspect_err(|e| println!("{e}"))
+}
+
+#[derive(Serialize)]
+pub struct StopInfoQuery {
+    pub id: u64,
+    pub name: String,
+    pub locality_name: String,
+    pub locality: String
+}
+
+pub fn get_stance_info(db: &Arc<DBPool>, id: u64) -> rusqlite::Result<Vec<StanceInfo>> {
+    let db = get_pool(db);
+    let result = db.prepare_cached("SELECT code, indicator, street, crs, lat, long FROM stances WHERE stop=?")?
+        .query_map([id], |row| Ok(StanceInfo {
+            code: row.get(0)?,
+            indicator: row.get(1).ok(),
+            street: row.get(2).ok(),
+            crs: row.get(3).ok(),
+            lat: row.get(4)?,
+            long: row.get(5)?,
+        }))?.filter_map(Result::ok).collect_vec();
+    Ok(result)
+}
+
+pub fn get_services_between(db: &Arc<DBPool>, from: &DateTime<Utc>, to: &DateTime<Utc>, stop: u64, filter: bool, filter_name: Option<&String>, filter_loc: Option<&String>) -> rusqlite::Result<Vec<StopService>> {
+    if from.day() != to.day() {
+        let mut day0 = _get_services_between(db, &(*from - TimeDelta::days(1)), from, to, stop, filter, filter_name, filter_loc)?;
+        let mut day1 = _get_services_between(db, from, from, to, stop, filter, filter_name, filter_loc)?;
+        let mut day2 =  _get_services_between(db, to, from, to, stop, filter, filter_name, filter_loc)?;
+        day0.append(&mut day1);
+        day0.append(&mut day2);
+        Ok(day0)
+    } else {
+        let mut day0 = _get_services_between(db, &(*from - TimeDelta::days(1)), from, to, stop, filter, filter_name, filter_loc)?;
+        let mut day1 = _get_services_between(db, from, from, to, stop, filter, filter_name, filter_loc)?;
+        day0.append(&mut day1);
+        Ok(day0)
+    }
+}
+
+fn _get_services_between(db: &Arc<DBPool>, day: &DateTime<Utc>, from: &DateTime<Utc>, to: &DateTime<Utc>, stop: u64, filter: bool, filter_name: Option<&String>, filter_loc: Option<&String>) -> rusqlite::Result<Vec<StopService>> {
+    let day_date = zero_time(day);
+    let from_num = (*from - day_date).num_seconds().max(0);
+    let to_num = (*to - day_date).num_seconds();
+    if to_num < 0 {
+        return Ok(Vec::new());
+    }
+    
+    let db = get_pool(db);
+    let result = db.prepare_cached("SELECT stop_times.trip_id,coalesce(stop_headsign,t.trip_headsign,'') as trip_headsign, departure_time,
+                    s.indicator,r.route_short_name,a.agency_id as operator_id,a.agency_name as operator_name,stop_sequence as seq
+                FROM stop_times
+                    INNER JOIN trips t on stop_times.trip_id = t.trip_id
+                    INNER JOIN stances s ON stop_times.stop_id = s.code
+                    INNER JOIN routes r on r.route_id = t.route_id
+                    INNER JOIN main.agency a on r.agency_id = a.agency_id
+                    LEFT OUTER JOIN main.calendar c on t.service_id = c.service_id
+                    LEFT OUTER JOIN main.calendar_dates d on (c.service_id = d.service_id AND d.date=:date)
+                WHERE
+                    s.stop=?1 AND
+                    stop_times.stop_sequence <> t.max_stop_seq AND
+                    departure_time IS NOT NULL
+                    AND ((start_date <= ?2 AND end_date >= ?2 AND (validity & (1 << ?3)) <> 0) OR exception_type=1)
+                    AND NOT (exception_type IS NOT NULL AND exception_type = 2)
+                    AND departure_time >= ?4 AND departure_time <= ?5
+                    AND pickup_type <> 1
+                    AND (?6 <> 1 OR EXISTS (SELECT stop_sequence AS inner_seq FROM stop_times WHERE trip_id=t.trip_id AND inner_seq > seq AND stop_id IN (SELECT code FROM stances WHERE stop=(SELECT id FROM stops WHERE locality=?8 AND name=?7))))
+                ORDER BY departure_time")?
+        .query_map(params![
+            stop, u64::from_str(day.format("%Y%m%d").to_string().as_str()).unwrap(), day.weekday().num_days_from_sunday(),
+            from_num, to_num, u64::from(filter), filter_name, filter_loc
+        ], |row| Ok(StopService {
+            trip_id: row.get(0)?,
+            trip_headsign: row.get(1)?,
+            departure_time: day_date + TimeDelta::seconds(row.get::<_, i64>(2)?),
+            indicator: row.get(3).ok(),
+            route_short_name: row.get(4)?,
+            operator_id: row.get(5)?,
+            operator_name: row.get(6)?,
+            stop_sequence: row.get(7)?,
+            _type: "bus".to_string(),
+            colour: "#777".to_string(),
+            status: None
+        }))?.filter_map(Result::ok).collect_vec();
+    Ok(result)
+}
+
+#[derive(Serialize)]
+pub struct StanceInfo {
+    pub code: String,
+    pub indicator: Option<String>,
+    pub street: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub crs: Option<String>,
+    pub lat: f64,
+    pub long: f64
+}
+
+#[derive(Serialize, PartialEq, PartialOrd)]
+pub struct StopService {
+    pub trip_id: String,
+    pub trip_headsign: String,
+    #[serde(serialize_with = "serialize_as_hhmm")]
+    pub departure_time: DateTime<Utc>,
+    pub indicator: Option<String>,
+    pub route_short_name: String,
+    pub operator_id: String,
+    pub operator_name: String,
+    #[serde(rename = "seq")]
+    pub stop_sequence: u64,
+    #[serde(rename = "type")]
+    pub _type: String,
+    pub colour: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub status: Option<String>
+}
+
+fn serialize_as_hhmm<S>(date: &DateTime<Utc>, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+{
+    serializer.serialize_str(format!("{}", date.format("%H:%M")).as_str())
 }
