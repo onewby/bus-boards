@@ -18,6 +18,9 @@ mod api;
 #[macro_use]
 extern crate serde;
 
+#[macro_use]
+extern crate yaserde_derive;
+
 use std::collections::HashMap;
 use std::fs::File;
 use std::future::Future;

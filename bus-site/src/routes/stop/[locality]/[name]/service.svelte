@@ -9,7 +9,7 @@
 <a href="/service/{service.type}/{service.trip_id}">
     <div class="w-full flex flex-row gap-x-2 text-left hover:bg-amber-700/5 dark:hover:bg-gray-500/20 pt-2 pb-2">
         <div class="w-1 ml-2" style="background-color: {service.colour}">&nbsp;</div>
-        <div class="pt-2 pb-2 ml-1 min-w-[4ch] flex flex-col justify-center">{service.departure_time}</div>
+        <div class="pt-2 pb-2 ml-1 min-w-[4ch] flex flex-col justify-center">{service.departure_time[0]}</div>
         <div class="font-bold min-w-[3.5ch] flex flex-col justify-center">
             {#if service.type === "bus"}
                 <div class="ml-2 pt-2 pb-2">
@@ -23,7 +23,7 @@
         </div>
         <div class="flex-grow pt-2 pb-2 flex flex-col justify-center">{service.trip_headsign}</div>
         <div class="mr-4 flex flex-col justify-center text-right">
-            {#if service.indicator && service.status !== 'Cancelled'}{service.indicator}{/if}
+            {#if service.indicator && service.status !== 'Cancelled'}{service.indicator.join(", ")}{/if}
             {#if service.status}
                 {#if service.indicator && service.status !== 'Cancelled'}<br>{/if}
                 {@const skipped = service.status === 'Skipped'}

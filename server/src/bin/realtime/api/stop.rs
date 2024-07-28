@@ -1,6 +1,4 @@
 use std::collections::{HashMap, HashSet};
-use std::future::Future;
-use std::str::FromStr;
 use std::sync::{Arc, RwLock};
 
 use axum::extract::{Query, State};
@@ -16,14 +14,11 @@ use polars::export::rayon::iter::IntoParallelRefMutIterator;
 use polars::export::rayon::iter::ParallelIterator;
 use regex::Regex;
 use tokio::task::JoinHandle;
+
 use BusBoardsServer::GTFSResponder;
 
 use crate::{GTFSAlerts, GTFSState, uw};
-use crate::api::darwin::bindings::LdbserviceSoap12;
-use crate::api::darwin::messages::GetDepartureBoardSoapIn;
-use crate::api::darwin::ports::{GetDepartureBoardSoapOut, LdbserviceSoap};
-use crate::api::darwin::SoapFault;
-use crate::api::darwin::types::{ArrayOfServiceLocations, Crstype, GetDepartureBoardRequest, StationBoard};
+use crate::api::darwin::{GetDepartureBoardRequest, GetDepartureBoardResponse, LDBService, SoapFault, StationBoard};
 use crate::api::service::{find_best_match, StopAlert};
 use crate::api::util::{find_realtime_trip_with_gtfs, get_or_cache_service_data, INTERNAL_ERROR, ServiceError};
 use crate::db::{get_services_between, get_stance_info, get_stop_info, StanceInfo, StopInfoQuery, StopService};
@@ -35,8 +30,8 @@ pub async fn get_stop(Query(params): Query<HashMap<String, String>>, State(state
     let name = params.get("name").or_error(INVALID_QUERY)?;
     if name == "" || locality == "" { return Err(ErrorResponse::from(INVALID_QUERY.into_response())) }
     let date = match params.get("date") {
-        None => Utc::now(),
-        Some(date_str) => NaiveDateTime::from_str(date_str).map(|t| t.and_utc())
+        None => adjust_timestamp(&Utc::now()).with_second(0).unwrap().with_nanosecond(0).unwrap(),
+        Some(date_str) => NaiveDateTime::parse_from_str(date_str, "%Y-%m-%dT%H:%M").map(|t| t.and_utc())
             .or_error((StatusCode::BAD_REQUEST, "Invalid date"))?,
     };
     let filter_loc = params.get("filterLoc");
@@ -49,15 +44,14 @@ pub async fn get_stop(Query(params): Query<HashMap<String, String>>, State(state
 pub async fn get_stop_data(state: &Arc<GTFSState>, locality: &String, name: &String, date: &DateTime<Utc>, filter_loc: Option<&String>, filter_name: Option<&String>) -> Result<StopResponse, ErrorResponse> {
     let filter = filter_loc.is_some() && filter_name.is_some();
 
-    let date_preadjust = date;
-    let date = adjust_timestamp(&date);
-    let start_time = date - TimeDelta::hours(2);
-    let end_time = date + TimeDelta::hours(2);
-    let offset = ((*date_preadjust - Utc::now()).num_seconds() as f32 / 60.0).ceil();
+    let start_time = *date - TimeDelta::hours(2);
+    let end_time = *date + TimeDelta::hours(2);
+    let offset = ((*date - Utc::now()).num_seconds() as f32 / 60.0).ceil();
 
     let stop_info = get_stop_info(&state.db, name, locality).or_error((StatusCode::NOT_FOUND, "Stop not found"))?;
     let mut stance_info = get_stance_info(&state.db, stop_info.id).or_error(INTERNAL_ERROR)?;
 
+    // Get stop alerts
     let alerts = stance_info.iter()
         .flat_map(|stance| get_stop_alerts(&state.alerts, stance.code.as_str()))
         .collect_vec();
@@ -78,11 +72,11 @@ pub async fn get_stop_data(state: &Arc<GTFSState>, locality: &String, name: &Str
         None
     };
 
+    // Get actual service list
     let mut services = get_services_between(&state.db, &start_time, &end_time, stop_info.id, filter, filter_name, filter_loc).or_error(INTERNAL_ERROR)?;
 
     // Coastliner/Flyer workaround (duplicate services under Coastliner + Flyer names, only Coastliner ones track)
     let mut replaced: Vec<String> = vec![];
-    
     for i in 0..services.len() {
         if services[i].operator_name == "Coastliner" && services[i].route_short_name.starts_with("A") {
             let to_replace = services.iter().find(
@@ -93,50 +87,52 @@ pub async fn get_stop_data(state: &Arc<GTFSState>, locality: &String, name: &Str
             }
         }
     }
-
     // Remove Flyer duplicates, and an SPT Subway duplicate entry workaround
     services.retain(|service| replaced.iter().find(|s| service.trip_id == **s).is_none()
-        && (service.operator_name != "SPT Subway" || service.indicator.is_some()));
+        && (service.operator_name != "SPT Subway" || service.indicator.len() > 0));
 
+    // Get delay status (On time, Exp. XX:XX)
     let mut tracking_stops = services.iter_mut().filter_map(|stop|
         find_realtime_trip_with_gtfs(stop.trip_id.as_str(), &state.vehicles).map(|(r, fe)| (stop, r, fe))).collect_vec();
     tracking_stops.par_iter_mut().for_each(|stop| set_status_by_realtime(state, stop));
-    services.retain(|stop| stop.departure_time >= date ||
+    services.retain(|stop| stop.departure_time[0] >= *date ||
         stop.status.as_ref().map(|status| status.starts_with("Exp. ") || status == "Cancelled").unwrap_or(false));
 
+    // Add train times if applicable
     let stations = match stations {
         None => vec![],
         Some(stations) => stations.await.unwrap_or_else(|_| vec![])
     };
-    let mut train_times = stations.iter().filter_map(|board| Some(board.train_services.as_ref()?.service.clone()))
-        .flatten().filter(|service| service.operator_code.body != "TW")
+    let mut train_times = stations.iter().flat_map(|s| s.train_services.iter().cloned())
+        .filter(|service| service.operator_code != "TW")
         .map(|service| {
-            let dep_time = NaiveTime::parse_from_str(&service.std.or(service.sta).unwrap().body, "%H:%M").unwrap();
+            let dep_time = NaiveTime::parse_from_str(&service.std.or(service.sta).unwrap(), "%H:%M").unwrap();
             let dep_datetime = if dep_time.hour() < date.hour() {
                 (date.date_naive() + TimeDelta::days(1)).and_time(dep_time).and_utc()
             } else {
                 date.date_naive().and_time(dep_time).and_utc()
             };
             StopService {
-                trip_id: service.service_id.body,
-                trip_headsign: service.destination.unwrap_or_else(|| ArrayOfServiceLocations::default()).location.iter().map(|loc| loc.location_name.body.clone()).join(" & "),
-                departure_time: dep_datetime,
-                indicator: Some(service.platform.map(|p| p.body).unwrap_or("Platform TBC".to_string())),
+                trip_id: service.service_id,
+                trip_headsign: service.destination.locations.iter().map(|loc| loc.location_name.clone()).join(" & "),
+                departure_time: vec![dep_datetime],
+                indicator: vec![service.platform.map(|p| format!("Platform {p}").to_string()).unwrap_or("Platform TBC".to_string())],
                 route_short_name: "".to_string(),
-                operator_id: service.operator_code.body,
-                operator_name: service.operator.body,
+                operator_id: service.operator_code,
+                operator_name: service.operator,
                 stop_sequence: 0,
                 _type: "train".to_string(),
                 colour: "#777".to_string(),
-                status: service.etd.clone().map(|etd| { etd.body })
+                status: service.etd.clone()
                     .take_if(|etd| etd.chars().next().unwrap().is_numeric())
-                    .map(|etd| format!("Exp. {etd}")).or(service.etd.as_ref().map(|etd| etd.body.to_string()))
+                    .map(|etd| format!("Exp. {etd}")).or(service.etd.as_ref().map(|etd| etd.to_string()))
             }
         }).collect_vec();
 
     services.append(&mut train_times);
-    services.sort_by_key(|service| service.departure_time);
+    services.sort_by_key(|service| service.departure_time[0]);
     
+    // Set agency colours
     let agencies: HashSet<String> = services.iter().map(|time| time.operator_name.clone()).collect();
     let colours: HashMap<String, String> = agencies.iter().map(|a| {
         (a.to_string(), state.operators.operator_matches.get(a).cloned()
@@ -151,6 +147,32 @@ pub async fn get_stop_data(state: &Arc<GTFSState>, locality: &String, name: &Str
             .or(colours.get(&time.operator_name))
             .unwrap().to_string();
     });
+    
+    // Merge consecutive stops
+    let mut i = 0;
+    while i < services.len() {
+        let mut duplicates = vec![];
+        for j in i+1..services.len() {
+            if services[i].trip_id == services[j].trip_id {
+                if services[*duplicates.last().unwrap_or(&i)].stop_sequence + 1 == services[j].stop_sequence {
+                    duplicates.push(j);
+                } else {
+                    break;
+                }
+            }
+        }
+        
+        duplicates.iter().for_each(|&service| {
+            let dep_time = services[service].departure_time[0].clone();
+            let indicator = services[service].indicator[0].clone();
+            services[i].departure_time.push(dep_time);
+            services[i].indicator.push(indicator);
+        });
+        duplicates.iter().rev().for_each(|&service| {
+            services.remove(service);
+        });
+        i += 1;
+    }
 
     Ok(StopResponse {
         stop: stop_info,
@@ -174,7 +196,7 @@ async fn get_station_departures(offset: f32, crs: Vec<String>) -> Vec<StationBoa
         let departure_boards: Vec<StationBoard> = stream::iter(crs)
             .filter_map(|crs| async move {
                 get_station(crs, offset as i32).await.ok().and_then(|board| {
-                    board.parameters.get_station_board_result
+                    board.response
                 })
             })
             .collect().await;
@@ -201,16 +223,16 @@ fn get_stop_alerts(cache: &RwLock<GTFSAlerts>, code: &str) -> Vec<StopAlert> {
         }).collect_vec()
 }
 
-pub async fn get_station(crs: String, offset: i32) -> Result<GetDepartureBoardSoapOut, Option<SoapFault>> {
-    let ldb = LdbserviceSoap12::new("https://lite.realtime.nationalrail.co.uk/OpenLDBWS/wsdl.aspx?ver=2021-11-01", std::env::var("DARWIN_API_KEY").ok());
-    ldb.get_departure_board(GetDepartureBoardSoapIn { parameters: GetDepartureBoardRequest {
+pub async fn get_station(crs: String, offset: i32) -> Result<GetDepartureBoardResponse, Option<SoapFault>> {
+    let ldb = LDBService::new(std::env::var("DARWIN_API_KEY").unwrap_or("".to_string()));
+    ldb.get_departure_board(GetDepartureBoardRequest {
         num_rows: 150,
-        crs: Crstype { body: crs },
+        crs,
         filter_crs: None,
         filter_type: None,
         time_offset: Some(offset),
         time_window: None,
-    } }).await
+    }).await
 }
 
 #[derive(Serialize)]

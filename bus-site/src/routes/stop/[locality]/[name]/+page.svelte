@@ -54,7 +54,7 @@
 
     $: filteredTimes = data.times.filter(stop =>
         (operatorFilter === "" || (operators[operatorFilter] !== undefined && operators[operatorFilter].has(stop.operator_id)))
-        && (stanceFilter === "" || stop.indicator === stanceFilter))
+        && (stanceFilter === "" || stop.indicator.find(ind => ind === stanceFilter) !== undefined))
 
     let showMap = false;
     let zoom = 20

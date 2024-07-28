@@ -135,7 +135,6 @@ fn realtime_from_position(state: &Arc<GTFSState>, id: &String, stops: &mut Vec<S
         let pct = line_point.geodesic_distance(&Point::from(prev_curr.start)) / prev_curr.geodesic_length();
         let pct = if pct.is_nan() { 1.0 } else { pct };
         
-        println!("pct: {pct}");
         if !cancelled {
             let date = get_start_date(&trip, &time_now);
             let scheduled_times = stops.iter().map(|stop| {

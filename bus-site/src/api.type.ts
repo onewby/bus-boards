@@ -3,8 +3,8 @@ import type {DateTime} from "luxon";
 export type StopDeparture = {
     trip_id: string,
     trip_headsign: string,
-    departure_time: string,
-    indicator: string,
+    departure_time: string[],
+    indicator: string[],
     route_short_name: string,
     colour: string,
     operator_id: string,

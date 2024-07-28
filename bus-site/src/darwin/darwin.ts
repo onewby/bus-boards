@@ -40,7 +40,11 @@ export class DarwinAPI {
     }
 
     async getServiceDetails(service: string): Promise<ServiceDetails> {
-        let details: ServiceDetails = (await (await this.getClient()).GetServiceDetailsAsync({serviceID: service}))[0].GetServiceDetailsResult
+        let client = await this.getClient()
+        let details: ServiceDetails = (await client.GetServiceDetailsAsync({serviceID: service}))[0].GetServiceDetailsResult
+        console.log(client.lastRequest)
+        console.log(client.lastRequestHeaders)
+        console.log(client.lastResponse)
         if(!details.previousCallingPoints) details.previousCallingPoints = {callingPointList: []}
         if(!details.subsequentCallingPoints) details.subsequentCallingPoints = {callingPointList: []}
         DarwinAPI._fixCallingPoints(details.previousCallingPoints)

@@ -1,15 +1,17 @@
+use serde_nested_with::serde_nested;
 use std::collections::HashMap;
 use std::ops::Add;
 use std::rc::Rc;
 use std::str::FromStr;
 use std::sync::Arc;
-
+use std::thread::sleep;
 use chrono::{Datelike, DateTime, Duration, DurationRound, TimeDelta, Utc};
 use geo_types::{Coord, coord, Point};
 use itertools::Itertools;
 use memoize::memoize;
 use r2d2::{Pool, PooledConnection};
 use r2d2_sqlite::SqliteConnectionManager;
+use rand::Rng;
 use rusqlite::{named_params, Params, params};
 use rusqlite::types::Value;
 use serde::{de, Deserialize, Deserializer, Serializer};
@@ -29,7 +31,7 @@ pub type PooledConn = PooledConnection<SqliteConnectionManager>;
 pub fn open_db() -> Pool<SqliteConnectionManager> {
     let manager = SqliteConnectionManager::file("stops.sqlite")
         .with_init(|s| rusqlite::vtab::array::load_module(s));
-    Pool::new(manager).unwrap()
+    Pool::new(manager).unwrap_or_else(|e| open_db())
 }
 
 /// Get connection from database pool
@@ -37,6 +39,9 @@ pub fn get_pool(db: &Arc<DBPool>) -> PooledConn {
     let mut conn: Result<PooledConnection<SqliteConnectionManager>, r2d2::Error>;
     while {
         conn = db.get();
+        if conn.is_err() {
+            sleep(std::time::Duration::from_millis(rand::thread_rng().gen_range(500..1500)))
+        }
         conn.is_err()
     } {}
     conn.unwrap()
@@ -571,7 +576,7 @@ pub fn get_stop_info(db: &Arc<DBPool>, name: &str, locality: &str) -> rusqlite::
             id: row.get(0)?,
             name: row.get(1)?,
             locality_name: row.get(2)?,
-            locality: row.get(3)?,
+            locality_code: row.get(3)?,
         }));
     result.inspect_err(|e| println!("{e}"))
 }
@@ -581,7 +586,7 @@ pub struct StopInfoQuery {
     pub id: u64,
     pub name: String,
     pub locality_name: String,
-    pub locality: String
+    pub locality_code: String
 }
 
 pub fn get_stance_info(db: &Arc<DBPool>, id: u64) -> rusqlite::Result<Vec<StanceInfo>> {
@@ -643,13 +648,13 @@ fn _get_services_between(db: &Arc<DBPool>, day: &DateTime<Utc>, from: &DateTime<
                     AND (?6 <> 1 OR EXISTS (SELECT stop_sequence AS inner_seq FROM stop_times WHERE trip_id=t.trip_id AND inner_seq > seq AND stop_id IN (SELECT code FROM stances WHERE stop=(SELECT id FROM stops WHERE locality=?8 AND name=?7))))
                 ORDER BY departure_time")?
         .query_map(params![
-            stop, u64::from_str(day.format("%Y%m%d").to_string().as_str()).unwrap(), day.weekday().num_days_from_sunday(),
+            stop, u64::from_str(day.format("%Y%m%d").to_string().as_str()).unwrap(), day.weekday().num_days_from_monday(),
             from_num, to_num, u64::from(filter), filter_name, filter_loc
         ], |row| Ok(StopService {
             trip_id: row.get(0)?,
             trip_headsign: row.get(1)?,
-            departure_time: day_date + TimeDelta::seconds(row.get::<_, i64>(2)?),
-            indicator: row.get(3).ok(),
+            departure_time: vec![day_date + TimeDelta::seconds(row.get::<_, i64>(2)?)],
+            indicator: row.get::<_, String>(3).map(|ind| vec![ind]).unwrap_or(vec![]),
             route_short_name: row.get(4)?,
             operator_id: row.get(5)?,
             operator_name: row.get(6)?,
@@ -672,13 +677,14 @@ pub struct StanceInfo {
     pub long: f64
 }
 
+#[serde_nested]
 #[derive(Serialize, PartialEq, PartialOrd)]
 pub struct StopService {
     pub trip_id: String,
     pub trip_headsign: String,
-    #[serde(serialize_with = "serialize_as_hhmm")]
-    pub departure_time: DateTime<Utc>,
-    pub indicator: Option<String>,
+    #[serde_nested(sub="DateTime<Utc>", serde(serialize_with = "serialize_as_hhmm"))]
+    pub departure_time: Vec<DateTime<Utc>>,
+    pub indicator: Vec<String>,
     pub route_short_name: String,
     pub operator_id: String,
     pub operator_name: String,

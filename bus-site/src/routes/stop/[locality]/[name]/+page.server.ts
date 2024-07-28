@@ -1,6 +1,7 @@
 import type {PageServerLoad} from "./$types"
 import {error} from "@sveltejs/kit";
 import type {SearchResult, StopData} from "../../../../api.type";
+import {API_URL} from "$env/static/private";
 
 export const ssr = false;
 
@@ -18,7 +19,7 @@ export const load: PageServerLoad<StopData> = async ({params, fetch, url}) => {
         apiParams.set("filterName", filterName)
     }
 
-    let resp = await fetch(`/api/stop?${apiParams}`)
+    let resp = await fetch(`${API_URL}/api/stop?${apiParams}`)
     if(!resp.ok) error(resp.status < 500 ? resp.status : 503, await resp.json());
     let data: StopData = await resp.json()
 
@@ -26,7 +27,7 @@ export const load: PageServerLoad<StopData> = async ({params, fetch, url}) => {
         let apiParams = new URLSearchParams()
         apiParams.set("locality", filterLoc)
         apiParams.set("name", filterName)
-        let filterResp = await fetch(`/api/stop?${apiParams}`)
+        let filterResp = await fetch(`${API_URL}/api/stop?${apiParams}`)
         if(filterResp.ok) {
             let filterData: StopData = await filterResp.json()
             data.filter = {
