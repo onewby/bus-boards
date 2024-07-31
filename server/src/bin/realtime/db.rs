@@ -459,7 +459,7 @@ pub fn query_stops(db: &Arc<DBPool>, trip_id: &str) -> rusqlite::Result<Vec<Stop
         arr: TimeDelta::seconds(row.get(4)?),
         dep: TimeDelta::seconds(row.get(5)?),
         loc: row.get(6).ok(),
-        major: row.get(7)?,
+        major: row.get(7).unwrap_or(true),
         doo: row.get(8)?,
         puo: row.get(9)?,
         lat: row.get(10)?,

@@ -134,7 +134,7 @@ fn realtime_from_position(state: &Arc<GTFSState>, id: &String, stops: &mut Vec<S
         let line_point = haversine_closest_point(&prev_curr, &current_pos_point);
         let pct = line_point.geodesic_distance(&Point::from(prev_curr.start)) / prev_curr.geodesic_length();
         let pct = if pct.is_nan() { 1.0 } else { pct };
-        
+
         if !cancelled {
             let date = get_start_date(&trip, &time_now);
             let scheduled_times = stops.iter().map(|stop| {
@@ -219,7 +219,7 @@ fn realtime_from_trip_update(stops: &mut Vec<StopsQuery>, trip: &FeedEntity, cur
             }
             let time = update.departure.as_ref().or(update.arrival.as_ref());
             if let Some(time) = uw!(time?.time) {
-                return DateTime::from_timestamp(time, 0);
+                return DateTime::from_timestamp(time, 0).map(|d| adjust_timestamp(&d));
             }
         }
         return Some(scheduled_times[i]);
@@ -232,18 +232,21 @@ fn realtime_from_trip_update(stops: &mut Vec<StopsQuery>, trip: &FeedEntity, cur
         } else if (actual_time.unwrap() - scheduled_times[i]).num_milliseconds() < 60 * 1000 {
             stops[i].status = Some("On time".to_string())
         } else {
-            stops[i].status = Some(format!("Exp. {}", actual_time.unwrap().format("%H:&M")))
+            stops[i].status = Some(format!("Exp. {}", actual_time.unwrap().format("%H:%M")))
         }
     });
     let actual_times = actual_times.into_iter().filter_map(|x| x).collect_vec();
     assert_eq!(scheduled_times.len(), actual_times.len());
 
-    let current = actual_times.iter().find_position(|t| t >= &&time_now).map(|c| c.0).unwrap_or(0);
+    let adjusted_now = adjust_timestamp(time_now);
+    let current = actual_times.iter().find_position(|&t| t >= &adjusted_now).map(|c| c.0);
     let pct = match current {
-        0 => 0.0,
-        i => (actual_times[i] - time_now).num_milliseconds() as f64 / (actual_times[i] - actual_times[i - 1]).num_milliseconds() as f64,
+        None => 1.0,
+        Some(0) => 0.0,
+        Some(i) => (adjusted_now - actual_times[i - 1]).num_milliseconds() as f64 / (actual_times[i] - actual_times[i - 1]).num_milliseconds() as f64,
     };
 
+    let current = current.unwrap_or(0);
     stops.iter_mut().enumerate().take(current).for_each(|(i, stop)| {
         stop.status = Some(format!("Dep. {}", actual_times[i].format("%H:%M")));
     });

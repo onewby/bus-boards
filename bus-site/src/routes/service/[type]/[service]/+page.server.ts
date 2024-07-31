@@ -1,15 +1,15 @@
 import type {ServiceData} from "../../../../api.type";
 import {error} from "@sveltejs/kit";
 import type {PageServerLoad} from "./$types";
-import {env} from "$env/dynamic/private";
+import {API_URL} from "$env/static/private";
 
 export const ssr = false;
 
 export const load: PageServerLoad<ServiceData> = async ({params, fetch}) => {
     if(params.type === "bus") {
-        return await fetchData(`${env.API_URL}/api/service?id=` + params.service, fetch)
+        return await fetchData(`${API_URL}/api/service?id=${params.service}`, fetch)
     } else if(params.type === "train") {
-        return await fetchData(`/api/train?id=` + params.service, fetch)
+        return await fetchData(`/api/train?id=${params.service}`, fetch)
     }
 
     error(404, "Service type not found.");

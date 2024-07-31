@@ -56,7 +56,7 @@ pub const MANUAL_RENAMES: [(&str, &str, &str); 65] = [
     ("N0075057", "Manchester Airport The Station", "Rail Station"),
     ("N0075057", "^Manchester Airport \\(Manchester Metrolink\\)$", "Manchester Airport Rail Station"),
     ("E0034917", "^London Victoria Coach Station$", "Victoria Coach Station"),
-    ("N0073334", "^Broxden Park\\+Ride$", "Park and Ride"),
+    ("N0073334", "Broxden Park\\+Ride", "Park and Ride"),
     ("N0071638", "^Luton Rail Station$", "Rail Station Interchange"),
     ("N0071638", "^Luton Station Interchange$", "Rail Station Interchange"),
     ("N0071638", "^Rail Station Entrance$", "Rail Station Interchange"),

@@ -46,7 +46,7 @@ pub async fn get_stop_data(state: &Arc<GTFSState>, locality: &String, name: &Str
 
     let start_time = *date - TimeDelta::hours(2);
     let end_time = *date + TimeDelta::hours(2);
-    let offset = ((*date - Utc::now()).num_seconds() as f32 / 60.0).ceil();
+    let offset = ((*date - adjust_timestamp(&Utc::now())).num_seconds() as f32 / 60.0).ceil();
 
     let stop_info = get_stop_info(&state.db, name, locality).or_error((StatusCode::NOT_FOUND, "Stop not found"))?;
     let mut stance_info = get_stance_info(&state.db, stop_info.id).or_error(INTERNAL_ERROR)?;
@@ -131,7 +131,7 @@ pub async fn get_stop_data(state: &Arc<GTFSState>, locality: &String, name: &Str
 
     services.append(&mut train_times);
     services.sort_by_key(|service| service.departure_time[0]);
-    
+
     // Set agency colours
     let agencies: HashSet<String> = services.iter().map(|time| time.operator_name.clone()).collect();
     let colours: HashMap<String, String> = agencies.iter().map(|a| {
@@ -147,7 +147,7 @@ pub async fn get_stop_data(state: &Arc<GTFSState>, locality: &String, name: &Str
             .or(colours.get(&time.operator_name))
             .unwrap().to_string();
     });
-    
+
     // Merge consecutive stops
     let mut i = 0;
     while i < services.len() {
@@ -161,7 +161,7 @@ pub async fn get_stop_data(state: &Arc<GTFSState>, locality: &String, name: &Str
                 }
             }
         }
-        
+
         duplicates.iter().for_each(|&service| {
             let dep_time = services[service].departure_time[0].clone();
             let indicator = services[service].indicator[0].clone();

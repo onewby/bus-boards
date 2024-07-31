@@ -71,7 +71,7 @@ fn reset_polar() -> Result<(), Box<dyn Error>> {
 
 fn patch_display_names(conn: &mut Connection) -> rusqlite::Result<usize> {
     println!("Patching route display names");
-    conn.execute("UPDATE routes SET route_short_name=route_id WHERE agency_id='Ember'", [])?;
+    conn.execute("UPDATE routes SET route_short_name=substr(route_id, 2) WHERE agency_id='Ember'", [])?;
     conn.execute(
         r#"UPDATE trips SET trip_headsign=(SELECT CASE
                     WHEN original = 'Tokyngton' THEN 'Wembley Stadium'
