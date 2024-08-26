@@ -55,7 +55,7 @@ rand = "0.8.5"
 geographiclib-rs = "0.2.4"
 serde_regex = "1.1.0"
 serde_nested_with = "0.2.5"
-serde_with = { version = "3.9.0", features = ["chrono"] }
+serde_with = { version = "3.9.0", features = ["chrono", "base64"] }
 yaserde = "0.10.1"
 yaserde_derive = "0.10.1"
 async-trait = "0.1.81"

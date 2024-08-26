@@ -65,7 +65,7 @@ pub async fn get_stop_data(state: &Arc<GTFSState>, locality: &String, name: &Str
     stance_info.sort_by(|a, b| a.indicator.as_ref().unwrap().to_ascii_lowercase().cmp(&b.indicator.as_ref().unwrap().to_ascii_lowercase()));
 
     // Get station results
-    let crs = stance_info.iter().filter_map(|stance| stance.crs.clone()).collect_vec();
+    let crs = stance_info.iter().filter_map(|stance| stance.crs.clone()).unique().collect_vec();
     let stations: Option<JoinHandle<Vec<StationBoard>>> = if crs.len() > 0 {
         Some(tokio::spawn(async move { get_station_departures(offset, crs).await }))
     } else {
@@ -125,7 +125,8 @@ pub async fn get_stop_data(state: &Arc<GTFSState>, locality: &String, name: &Str
                 colour: "#777".to_string(),
                 status: service.etd.clone()
                     .take_if(|etd| etd.chars().next().unwrap().is_numeric())
-                    .map(|etd| format!("Exp. {etd}")).or(service.etd.as_ref().map(|etd| etd.to_string()))
+                    .map(|etd| format!("Exp. {etd}")).or(service.etd.as_ref().map(|etd| etd.to_string())),
+                then_headsign: None,
             }
         }).collect_vec();
 

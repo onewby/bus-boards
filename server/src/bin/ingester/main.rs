@@ -6,6 +6,7 @@ mod localities;
 mod grouping;
 mod locality_changes;
 mod flix;
+mod linking;
 
 use std::collections::HashMap;
 use std::error::Error;
@@ -22,6 +23,7 @@ use crate::cleanup::cleanup;
 use crate::flix::map_flix_stops;
 use crate::grouping::group_stances;
 use crate::gtfs::process_source;
+use crate::linking::link_trips;
 use crate::localities::{insert_localities, insert_stops};
 use crate::sources::{FLIX_SOURCE, SOURCES};
 use crate::traveline::download_noc;
@@ -55,6 +57,7 @@ fn main() {
     
     create_indexes(&mut connection).expect("Index creation error");
     cleanup(&mut connection).expect("Cleanup error");
+    link_trips(db_path.as_str()).expect("Trip linking error");
     download_noc(&mut connection).expect("Traveline error");
     connection.close().expect("Could not close connection");
     println!("Done!")

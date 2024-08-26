@@ -280,7 +280,7 @@ fn standardise_synonyms(df: DataFrame) -> Result<DataFrame, Box<dyn Error>> {
 
 // Handle situations like XYZ Interchange/X00 having different stops
 fn fix_groupings(localities: &mut Localities) -> Result<(), Box<dyn Error>> {
-    let stances_regex = RegexBuilder::new(r"^(?P<stop>.*[^-]) *[-/ ] *(?P<stance>(?:Stance |Stand |Stop ) *[a-zA-Z]?\d{0,2})$").case_insensitive(true).build()?;
+    let stances_regex = RegexBuilder::new(r"^(?P<stop>.*[^-]) *[-/ ] *(?P<stance>(?:Stance |Stand |Stop |Bay ) *[a-zA-Z]?\d{0,2})$").case_insensitive(true).build()?;
     let interchange_regex = Regex::new(r"^(?P<stop>.*[^-])/(?P<stance>[a-zA-Z]?\d{0,2})$")?;
     let leeds_regex = Regex::new(r"^(?P<stop>[a-zA-Z ]+) (?P<stance>[a-zA-Z]?\d{0,2})$")?;
     let station_regex = Regex::new(r"^(?P<stop>[a-zA-Z]+) (?P<stance>[a-zA-Z]\d{1,2})$")?;

@@ -104,7 +104,7 @@
 
     <div class="panel w-full mt-2 flex flex-col">
         {#each data.results as result, i}
-            <a class="pl-4 pr-4 pt-2.5 pb-2.5 transition-colors hover:bg-gray-50 dark:hover:bg-slate-900" href="/stop/{result.locality}/{result.name}">
+            <a class="pl-4 pr-4 pt-2.5 pb-2.5 transition-colors hover:bg-gray-50 dark:hover:bg-slate-900" href="/stop/{result.locality}/{encodeURIComponent(result.name)}">
                 <p class="text-lg">{result.name}</p>
             </a>
             {#if i !== data.results.length - 1}

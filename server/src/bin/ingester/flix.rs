@@ -54,7 +54,7 @@ pub fn map_flix_stops(db: &mut Connection, db_path: &str) -> Result<HashMap<Stri
             }
         } else {
             // try to find existing stop
-            let stop_id: f64 = db.query_row("SELECT id FROM stops WHERE name=? AND locality='Europe'", [&record.stop_name], |row| row.get(0))
+            let stop_id: u64 = db.query_row("SELECT id FROM stops WHERE name=? AND locality='Europe'", [&record.stop_name], |row| row.get(0))
                 .unwrap_or_else(|e| {
                     // ...or create stop if this is not found
                     // try to find a suitable locality
@@ -79,13 +79,19 @@ pub fn map_flix_stops(db: &mut Connection, db_path: &str) -> Result<HashMap<Stri
                     let loc_prefix = locality_name.split(" › ").next().unwrap_or(locality_name.as_str());
                     let stop_name = record.stop_name.strip_prefix(format!("{loc_prefix} ").as_str())
                         .unwrap_or(record.stop_name.as_str());
-                    // then create the stop
-                    let mut stmt = db.prepare_cached("INSERT INTO stops (name, locality, locality_name) VALUES (?, ?, ?) RETURNING id").unwrap();
-                    stmt.query_row([stop_name, &locality_code, &locality_name], |row| row.get(0)).expect("Stop create fail")
+                    // try to find something with that locality code before we do this
+                    let potential_stop_id: rusqlite::Result<u64> = {
+                        let mut stmt = db.prepare_cached("SELECT id FROM stops WHERE name=? AND locality=?").unwrap();
+                        stmt.query_row([stop_name, &locality_code], |row| row.get(0))
+                    };
+                    if let Ok(stop_id) = potential_stop_id {
+                        stop_id
+                    } else {
+                        // or if all else fails, create a new stop
+                        let mut stmt = db.prepare_cached("INSERT INTO stops (name, locality, locality_name) VALUES (?, ?, ?) RETURNING id").unwrap();
+                        stmt.query_row([stop_name, &locality_code, &locality_name], |row| row.get(0)).expect("Stop create fail")
+                    }
                 });
-            if record.stop_name == "Manchester Airport" {
-                println!("Inserting Manchester Airport into stop {}", stop_id);
-            }
             // create stance
             let mut stmt = db.prepare_cached("INSERT INTO stances (code, street, indicator, lat, long, stop, crs) VALUES (?, NULL, 'at', ?, ?, ?, NULL)").unwrap();
             stmt.execute(params![&record.stop_id, &record.stop_lat, &record.stop_lon, stop_id]).expect("Stance create fail without existing stop");

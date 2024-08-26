@@ -159,3 +159,20 @@ CREATE TABLE IF NOT EXISTS traveline
     website   TEXT
 );
 
+CREATE TABLE IF NOT EXISTS links
+(
+    "from" TEXT
+        constraint links_pk
+            unique
+                on conflict replace
+        constraint links_trips_trip_id_fk
+            references trips,
+    "to"   TEXT
+        constraint links_pk_2
+            unique
+                on conflict replace
+        constraint links_trips_trip_id_fk_2
+            references trips,
+    show_then BOOLEAN
+);
+

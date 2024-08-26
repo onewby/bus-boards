@@ -14,7 +14,7 @@ pub mod config;
 #[derive(Eq, Hash, PartialEq)]
 #[derive(Serialize, Deserialize)]
 pub enum GTFSResponder {
-    BODS, DISRUPTIONS, EMBER, PASSENGER, LOTHIAN, STAGECOACH, COACHES, FIRST
+    BODS, DISRUPTIONS, EMBER, PASSENGER, LOTHIAN, STAGECOACH, COACHES, FIRST, TFL
 }
 
 #[derive(Serialize, Deserialize, Debug, Copy, Clone)]

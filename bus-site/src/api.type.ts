@@ -12,7 +12,8 @@ export type StopDeparture = {
     type: "bus" | "train",
     status?: string,
     _timestamp: DateTime,
-    seq?: number
+    seq?: number,
+    then_headsign?: string
 }
 
 export type StopAlert = {
@@ -71,7 +72,8 @@ export type ServiceBranch = {
         },
         pct?: number
     },
-    route: string
+    route: string,
+    connections: Connections
 }
 
 export type ServiceInfo = {
@@ -88,6 +90,17 @@ export type ServiceData = {
     },
     branches: ServiceBranch[],
     alerts: StopAlert[]
+}
+
+export type Connections = {
+    from?: LinkedService,
+    to?: LinkedService
+}
+
+export type LinkedService = {
+    trip_id: string,
+    location: string,
+    dep_time: string
 }
 
 export type SearchResult = {

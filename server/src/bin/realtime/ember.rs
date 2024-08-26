@@ -4,7 +4,7 @@ use tokio::sync::mpsc::Sender;
 use tokio::time;
 use BusBoardsServer::config::BBConfig;
 use crate::GTFSResponder::EMBER;
-use crate::GTFSResponse;
+use crate::{GTFSResponse, uw};
 use crate::transit_realtime::{Alert, EntitySelector, FeedEntity, FeedMessage, TripDescriptor, TripUpdate, VehiclePosition};
 
 pub async fn ember_listener(tx: Sender<GTFSResponse>, _: Arc<BBConfig>) {
@@ -65,7 +65,7 @@ pub async fn ember_listener(tx: Sender<GTFSResponse>, _: Arc<BBConfig>) {
         let (tus, mut vehicles): (Vec<FeedEntity>, Vec<FeedEntity>) = entities.iter_mut().map(|e| e.clone()).partition(|e| e.trip_update.is_some() && e.vehicle.is_none());
         // Combine vehicle data with trip updates for the same trip
         vehicles.iter_mut().filter(|e| e.trip_update.is_none()).for_each(|trip| {
-            if let Some(vehicleless) = tus.iter().find(|vehicleless| trip.vehicle.as_ref().and_then(|vp| vp.trip.as_ref()).and_then(|trip| trip.trip_id.as_ref()) == vehicleless.trip_update.as_ref().and_then(|tu| tu.trip.trip_id.as_ref())) {
+            if let Some(vehicleless) = tus.iter().find(|vehicleless| uw!(trip.vehicle.clone()?.trip?.trip_id) == uw!(vehicleless.trip_update.clone()?.trip.trip_id)) {
                 trip.trip_update = vehicleless.trip_update.clone();
             }
         });

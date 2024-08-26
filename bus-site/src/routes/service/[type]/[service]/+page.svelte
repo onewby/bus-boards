@@ -2,6 +2,7 @@
     import Header from "../../../header.svelte";
     import Stop from "./stop.svelte";
     import type {PageData} from "./$types"
+    import Connection from "./connection.svelte";
 
     import Fa from "svelte-fa";
     import {faBus, faChevronRight, faExclamationCircle, faExclamationTriangle} from "@fortawesome/free-solid-svg-icons";
@@ -161,13 +162,19 @@
             </div>
         {/if}
         {#key branch.stops}
+            {#if branch.connections.from}
+                <Connection service={branch.connections.from} type="from"></Connection>
+            {/if}
             {#each branch.stops as stop, i}
                 {#if expand || stop.major || i === 0 || i === branch.stops.length - 1}
-                    <Stop type={i === 0 ? "origin" : i === branch.stops.length - 1 ? "destination" : "stop"} stop={stop}
+                    <Stop type={i === 0 && !branch.connections.from ? "origin" : i === branch.stops.length - 1 && !branch.connections.to ? "destination" : "stop"} stop={stop}
                           realtime={i === realtimeData.stop && branch.realtime ? realtimeData.pct : undefined}
                           divider={i !== 0 && train}  />
                 {/if}
             {/each}
+            {#if branch.connections.to}
+                <Connection service={branch.connections.to} type="to"></Connection>
+            {/if}
         {/key}
     </div>
 

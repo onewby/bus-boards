@@ -92,7 +92,8 @@ export const GET: RequestHandler = async ({url}) => {
             "dest": dest,
             "stops": stops,
             "realtime": realtime,
-            "route": route
+            "route": route,
+            "connections": {}
         })
     }
 

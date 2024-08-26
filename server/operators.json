@@ -149,7 +149,7 @@
     "Transport for Wales": "#FF0000",
     "West Midlands Railway": "#ff8200",
     "West Midlands Trains": "#ff8200",
-    "London Docklands Light Railway - TfL": "#00afaa",
+    "Docklands Light Railway": "#00afaa",
     "MBNA THAMES CLIPPERS": "#000000",
     "Woolwich Free Ferry": "#00a0df",
     "London Tramlink": "#76bc21",
@@ -329,7 +329,7 @@
       "A2": "#e1a600",
       "A3": "#e1a600"
     },
-    "London Underground (TfL)": {
+    "London Underground": {
       "Bakerloo": "#a65a2a",
       "Central": "#e1251b",
       "Circle": "#ffcd00",
@@ -400,9 +400,9 @@
     "Nottingham Express Transit (Tram)": " Tram Stop",
     "Tyne and Wear Metro": " \\(Tyne and Wear Metro Station\\)",
     "South Yorkshire Future Tram": " \\(S Yorks Supertram\\)| \\(South Yorkshire Supertram\\)",
-    "London Docklands Light Railway - TfL": " DLR Station",
+    "Docklands Light Railway": " DLR Station",
     "London Tramlink": " Tram Stop",
     "SPT Subway": " SPT Subway Station",
-    "London Underground (TfL)": " Underground Station"
+    "London Underground": " Underground Station"
   }
 }

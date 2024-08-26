@@ -1,5 +1,6 @@
 use serde_nested_with::serde_nested;
 use std::collections::HashMap;
+use std::error::Error;
 use std::ops::Add;
 use std::rc::Rc;
 use std::str::FromStr;
@@ -12,7 +13,7 @@ use memoize::memoize;
 use r2d2::{Pool, PooledConnection};
 use r2d2_sqlite::SqliteConnectionManager;
 use rand::Rng;
-use rusqlite::{named_params, Params, params};
+use rusqlite::{named_params, Params, params, CachedStatement};
 use rusqlite::types::Value;
 use serde::{de, Deserialize, Deserializer, Serializer};
 use serde_with::serde_as;
@@ -628,8 +629,9 @@ fn _get_services_between(db: &Arc<DBPool>, day: &DateTime<Utc>, from: &DateTime<
     }
     
     let db = get_pool(db);
-    let result = db.prepare_cached("SELECT stop_times.trip_id,coalesce(stop_headsign,t.trip_headsign,'') as trip_headsign, departure_time,
-                    s.indicator,r.route_short_name,a.agency_id as operator_id,a.agency_name as operator_name,stop_sequence as seq
+    let result = db.prepare_cached(r#"SELECT stop_times.trip_id,coalesce(stop_headsign,t.trip_headsign,'') as trip_headsign, departure_time,
+                    s.indicator,r.route_short_name,a.agency_id as operator_id,a.agency_name as operator_name,stop_sequence as seq,
+                    (CASE WHEN l.show_then=0 THEN NULL ELSE tto.trip_headsign END) as then_headsign
                 FROM stop_times
                     INNER JOIN trips t on stop_times.trip_id = t.trip_id
                     INNER JOIN stances s ON stop_times.stop_id = s.code
@@ -637,6 +639,8 @@ fn _get_services_between(db: &Arc<DBPool>, day: &DateTime<Utc>, from: &DateTime<
                     INNER JOIN main.agency a on r.agency_id = a.agency_id
                     LEFT OUTER JOIN main.calendar c on t.service_id = c.service_id
                     LEFT OUTER JOIN main.calendar_dates d on (c.service_id = d.service_id AND d.date=:date)
+                    LEFT OUTER JOIN main.links l on t.trip_id = l."from"
+                    LEFT OUTER JOIN main.trips tto on tto.trip_id = l."to"
                 WHERE
                     s.stop=?1 AND
                     stop_times.stop_sequence <> t.max_stop_seq AND
@@ -646,7 +650,7 @@ fn _get_services_between(db: &Arc<DBPool>, day: &DateTime<Utc>, from: &DateTime<
                     AND departure_time >= ?4 AND departure_time <= ?5
                     AND pickup_type <> 1
                     AND (?6 <> 1 OR EXISTS (SELECT stop_sequence AS inner_seq FROM stop_times WHERE trip_id=t.trip_id AND inner_seq > seq AND stop_id IN (SELECT code FROM stances WHERE stop=(SELECT id FROM stops WHERE locality=?8 AND name=?7))))
-                ORDER BY departure_time")?
+                ORDER BY departure_time"#)?
         .query_map(params![
             stop, u64::from_str(day.format("%Y%m%d").to_string().as_str()).unwrap(), day.weekday().num_days_from_monday(),
             from_num, to_num, u64::from(filter), filter_name, filter_loc
@@ -661,7 +665,8 @@ fn _get_services_between(db: &Arc<DBPool>, day: &DateTime<Utc>, from: &DateTime<
             stop_sequence: row.get(7)?,
             _type: "bus".to_string(),
             colour: "#777".to_string(),
-            status: None
+            status: None,
+            then_headsign: row.get(8).ok(),
         }))?.filter_map(Result::ok).collect_vec();
     Ok(result)
 }
@@ -694,7 +699,9 @@ pub struct StopService {
     pub _type: String,
     pub colour: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub status: Option<String>
+    pub status: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub then_headsign: Option<String>
 }
 
 fn serialize_as_hhmm<S>(date: &DateTime<Utc>, serializer: S) -> Result<S::Ok, S::Error>
@@ -702,4 +709,55 @@ fn serialize_as_hhmm<S>(date: &DateTime<Utc>, serializer: S) -> Result<S::Ok, S:
         S: Serializer,
 {
     serializer.serialize_str(format!("{}", date.format("%H:%M")).as_str())
+}
+
+pub fn find_links(db: &Arc<DBPool>, trip_id: &str) -> Result<Connections, Box<dyn Error>> {
+    let db = get_pool(db);
+    let from = db.prepare_cached(r#"
+        SELECT t.trip_id, l.name, st.departure_time FROM links
+            INNER JOIN main.trips t on t.trip_id = links."from"
+            INNER JOIN stop_times st on st.trip_id=t.trip_id AND st.stop_sequence=t.min_stop_seq
+            INNER JOIN stances stance on stance.code=st.stop_id
+            INNER JOIN main.stops s on stance.stop = s.id
+            INNER JOIN main.localities l on s.locality = l.code
+        WHERE "to"=?
+    "#)?.get_linked_service(trip_id).ok();
+    let to = db.prepare_cached(r#"
+        SELECT t.trip_id, t.trip_headsign, st.departure_time FROM links
+            INNER JOIN main.trips t on t.trip_id = links."to"
+            INNER JOIN stop_times st on st.trip_id=t.trip_id AND st.stop_sequence=t.min_stop_seq
+        WHERE "from"=?
+    "#)?.get_linked_service(trip_id).ok();
+    
+    Ok(Connections { from, to })
+}
+
+trait GetLinkedService {
+    fn get_linked_service(&mut self, trip_id: &str) -> rusqlite::Result<LinkedService>;
+}
+
+impl <'t> GetLinkedService for CachedStatement<'t> {
+    fn get_linked_service(&mut self, trip_id: &str) -> rusqlite::Result<LinkedService> {
+        self.query_row(
+            [trip_id],
+            |row| Ok(LinkedService {
+                trip_id: row.get(0)?,
+                location: row.get(1)?,
+                dep_time: DateTime::from_timestamp(row.get(2)?, 0).unwrap(),
+            }))
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct LinkedService {
+    pub trip_id: String,
+    pub location: String,
+    #[serde(serialize_with = "serialize_as_hhmm")]
+    pub dep_time: DateTime<Utc>
+}
+
+#[derive(Serialize, Deserialize, Clone, Default)]
+pub struct Connections {
+    pub from: Option<LinkedService>,
+    pub to: Option<LinkedService>
 }

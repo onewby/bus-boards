@@ -17,7 +17,7 @@ use serde_nested_with::serde_nested;
 use crate::{GTFSAlerts, GTFSState, uw};
 use crate::api::util;
 use crate::api::util::{cache_service_data, INTERNAL_ERROR, ServiceError};
-use crate::db::{get_service_shape, get_stop_positions, OperatorsQuery, query_service, query_service_operator, query_stops, StopsQuery};
+use crate::db::{get_service_shape, get_stop_positions, OperatorsQuery, query_service, query_service_operator, query_stops, StopsQuery, find_links, Connections};
 use crate::transit_realtime::{FeedEntity, Position, TranslatedString, TripUpdate};
 use crate::transit_realtime::trip_descriptor::ScheduleRelationship::Canceled;
 use crate::transit_realtime::trip_update::stop_time_update::ScheduleRelationship::Skipped;
@@ -34,6 +34,7 @@ pub fn get_service_data(state: &Arc<GTFSState>, id: &String) -> Result<ServiceDa
     let mut stops = query_stops(&state.db, id).or_error(INTERNAL_ERROR)?;
     let operator = query_service_operator(&state.db, id).or_error(INTERNAL_ERROR)?;
     let shape = get_service_shape(&state.db, id);
+    let links = find_links(&state.db, id);
 
     // Better coach listings - show root locality name
     if state.operators.intercity_operators.contains(&operator.name) {
@@ -86,6 +87,7 @@ pub fn get_service_data(state: &Arc<GTFSState>, id: &String) -> Result<ServiceDa
                 stops,
                 realtime,
                 route,
+                connections: links.unwrap_or_default(),
             }
         ],
         alerts
@@ -265,13 +267,13 @@ fn get_start_date(trip: &FeedEntity, time_now: &DateTime<Utc>) -> DateTime<Utc> 
 
 fn simplify_tram_names(stops: &mut Vec<StopsQuery>, operator: &OperatorsQuery, operators: &OperatorColours) {
     match operator.name.as_str() {
-        "Edinburgh Trams" | "Tyne & Wear Metro" | "Metrolink" | "SPT Subway" | "London Underground (TfL)" =>
+        "Edinburgh Trams" | "Tyne & Wear Metro" | "Metrolink" | "SPT Subway" | "London Underground" =>
             stops.iter_mut().for_each(|stop| {
                 stop.ind = None;
                 stop.display_name = operators.suffixes[&operator.name].replace(stop.name.as_str(), "").to_string();
                 if stop.name != "Rail Station" { stop.loc = None; }
             }),
-        "West Midlands Metro" | "Nottingham Express Transit (Tram)" | "London Docklands Light Railway - TfL"
+        "West Midlands Metro" | "Nottingham Express Transit (Tram)" | "Docklands Light Railway"
         | "London Tramlink" =>
             stops.iter_mut().for_each(|stop| {
                 stop.display_name = operators.suffixes[&operator.name].replace(stop.name.as_str(), "").to_string();
@@ -341,7 +343,8 @@ pub struct ServiceBranch {
     pub dest: String,
     pub stops: Vec<StopsQuery>,
     pub realtime: Option<RealtimeInfo>,
-    pub route: String
+    pub route: String,
+    pub connections: Connections
 }
 
 #[derive(Serialize, Clone)]

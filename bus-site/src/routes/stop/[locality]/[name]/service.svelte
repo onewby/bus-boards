@@ -21,7 +21,11 @@
                 </div>
             {/if}
         </div>
-        <div class="flex-grow pt-2 pb-2 flex flex-col justify-center">{service.trip_headsign}</div>
+        <div class="flex-grow pt-2 pb-2 flex flex-col justify-center">
+            <span>{service.trip_headsign}
+                {#if service.then_headsign}<span class="text-sm text-gray-600 dark:text-gray-300">&nbsp;then {service.then_headsign}</span>{/if}
+            </span>
+        </div>
         <div class="mr-4 flex flex-col justify-center text-right">
             {#if service.indicator && service.status !== 'Cancelled'}{service.indicator.join(", ")}{/if}
             {#if service.status}
