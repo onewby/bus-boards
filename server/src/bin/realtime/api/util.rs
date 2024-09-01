@@ -5,7 +5,7 @@ use axum::http::StatusCode;
 use axum::Json;
 use axum::response::{ErrorResponse, IntoResponse, Response};
 use dashmap::DashMap;
-
+use strum::IntoEnumIterator;
 use BusBoardsServer::GTFSResponder;
 
 use crate::{GTFSState, GTFSVehicles, RealtimeCache};
@@ -79,6 +79,14 @@ pub fn get_or_cache_service_data<'a>(state: &Arc<GTFSState>, responder: GTFSResp
     } else {
         get_service_data(state, &trip_id.to_string()).ok()
     }
+}
+
+pub fn get_or_cache_all_service_data<'a>(state: &Arc<GTFSState>, trip_id: &str) -> Option<ServiceData> {
+    state.realtime_cache.iter().find_map(|x| {
+        x.get(trip_id).map(|x| x.clone())
+    }).or_else(|| {
+        get_service_data(state, &trip_id.to_string()).ok()
+    })
 }
 
 pub fn cache_service_data(cache: &Arc<RealtimeCache>, responder: GTFSResponder, trip_id: &str, service_data: &ServiceData) {

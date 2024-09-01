@@ -70,7 +70,8 @@ export type ServiceBranch = {
             odometer: number,
             speed: number
         },
-        pct?: number
+        pct?: number,
+        on_previous: boolean
     },
     route: string,
     connections: Connections

@@ -15,6 +15,7 @@ mod stagecoach;
 mod first;
 mod api;
 mod tfl;
+#[allow(dead_code)]
 mod tflapi;
 
 #[macro_use]

@@ -18,3 +18,6 @@ create index if not exists polar_polar_index
 
 create unique index if not exists traveline_agency_id_uindex
     on traveline (agency_id);
+
+create index if not exists trips_route_id_index
+    on trips (route_id);

@@ -213,7 +213,7 @@ pub fn download_noc(conn: &mut Connection) -> Result<(), Box<dyn Error>> {
 
     let tx = conn.transaction()?;
     {
-        let mut stmt = tx.prepare("INSERT INTO traveline (code, agency_id, website) VALUES (?1, ?2, ?3)")?;
+        let mut stmt = tx.prepare("INSERT OR IGNORE INTO traveline (code, agency_id, website) VALUES (?1, ?2, ?3)")?;
         for record in assigned_codes.iter().filter(|c| c.code.is_some()) {
             stmt.execute(params![
                 &record.code,
@@ -232,7 +232,8 @@ pub fn download_noc(conn: &mut Connection) -> Result<(), Box<dyn Error>> {
         {
             let mut stmt = tx.prepare("INSERT OR IGNORE INTO traveline (code, agency_id) VALUES (?1, ?2)")?;
             for (traveline, gtfs) in overrides {
-                stmt.execute(params![traveline, gtfs])?;
+                stmt.execute(params![traveline, gtfs])
+                    .inspect_err(|e| eprintln!("Override failed: {} - {}", traveline, gtfs))?;
             }
         }
     }

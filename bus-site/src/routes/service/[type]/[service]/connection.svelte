@@ -5,6 +5,7 @@
 
     export let service: LinkedService
     export let type: ConnectionType
+    export let on_previous = false;
 </script>
 
 <a data-sveltekit-reload href="/service/bus/{service.trip_id}" class="w-full relative">
@@ -18,6 +19,7 @@
                 <span class="font-medium">{service.dep_time}</span>
                  {type}
                 <span class="font-medium">{service.location}</span>
+                {#if on_previous} (vehicle currently on this service){/if}
             </div>
         </div>
     </div>

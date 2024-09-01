@@ -85,7 +85,8 @@ export const GET: RequestHandler = async ({url}) => {
             stop: nextStop,
             pos: undefined,
             pct: currStop == -1 ? undefined : nextStop === cps.length ? 1
-                : Math.min(Math.abs(currTime.diffNow().milliseconds / (currTime.diff(getTime(cps[nextStop]))).milliseconds), 1)
+                : Math.min(Math.abs(currTime.diffNow().milliseconds / (currTime.diff(getTime(cps[nextStop]))).milliseconds), 1),
+            on_previous: false
         }
         const route: string = polyline.encode(cps.filter(cp => coords[cp.crs]?.['lat']).map(cp => [coords[cp.crs]?.["lat"] ?? UK_CTR_LAT, coords[cp.crs]?.["long"] ?? UK_CTR_LONG]))
         branches.push({

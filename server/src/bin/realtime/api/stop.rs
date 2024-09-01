@@ -20,7 +20,7 @@ use BusBoardsServer::GTFSResponder;
 use crate::{GTFSAlerts, GTFSState, uw};
 use crate::api::darwin::{GetDepartureBoardRequest, GetDepartureBoardResponse, LDBService, SoapFault, StationBoard};
 use crate::api::service::{find_best_match, StopAlert};
-use crate::api::util::{find_realtime_trip_with_gtfs, get_or_cache_service_data, INTERNAL_ERROR, ServiceError};
+use crate::api::util::{find_realtime_trip_with_gtfs, get_or_cache_service_data, INTERNAL_ERROR, ServiceError, get_or_cache_all_service_data};
 use crate::db::{get_services_between, get_stance_info, get_stop_info, StanceInfo, StopInfoQuery, StopService};
 use crate::transit_realtime::FeedEntity;
 use crate::util::adjust_timestamp;
@@ -92,8 +92,14 @@ pub async fn get_stop_data(state: &Arc<GTFSState>, locality: &String, name: &Str
         && (service.operator_name != "SPT Subway" || service.indicator.len() > 0));
 
     // Get delay status (On time, Exp. XX:XX)
-    let mut tracking_stops = services.iter_mut().filter_map(|stop|
-        find_realtime_trip_with_gtfs(stop.trip_id.as_str(), &state.vehicles).map(|(r, fe)| (stop, r, fe))).collect_vec();
+    let mut tracking_stops = services.iter_mut()
+        .map(|stop|
+            {
+                let trip_id = stop.trip_id.clone();
+                (stop, find_realtime_trip_with_gtfs(trip_id.as_str(), &state.vehicles)
+                    .map(|(r, fe)| r))
+            })
+        .collect_vec();
     tracking_stops.par_iter_mut().for_each(|stop| set_status_by_realtime(state, stop));
     services.retain(|stop| stop.departure_time[0] >= *date ||
         stop.status.as_ref().map(|status| status.starts_with("Exp. ") || status == "Cancelled").unwrap_or(false));
@@ -183,8 +189,12 @@ pub async fn get_stop_data(state: &Arc<GTFSState>, locality: &String, name: &Str
     })
 }
 
-fn set_status_by_realtime(state: &Arc<GTFSState>, (stop, resp, fe): &mut (&mut StopService, GTFSResponder, FeedEntity)) {
-    if let Some(service) = get_or_cache_service_data(&state, *resp, stop.trip_id.as_str()) {
+fn set_status_by_realtime(state: &Arc<GTFSState>, (stop, resp): &mut (&mut StopService, Option<GTFSResponder>)) {
+    let service_data = match resp {
+        None => get_or_cache_all_service_data(state, stop.trip_id.as_str()),
+        Some(resp) => get_or_cache_service_data(&state, *resp, stop.trip_id.as_str())
+    };
+    if let Some(service) = service_data {
         if service.branches.len() != 1 {
             return;
         }

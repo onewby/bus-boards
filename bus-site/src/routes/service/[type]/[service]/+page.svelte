@@ -163,7 +163,7 @@
         {/if}
         {#key branch.stops}
             {#if branch.connections.from}
-                <Connection service={branch.connections.from} type="from"></Connection>
+                <Connection service={branch.connections.from} type="from" on_previous={branch.realtime?.on_previous ?? false}></Connection>
             {/if}
             {#each branch.stops as stop, i}
                 {#if expand || stop.major || i === 0 || i === branch.stops.length - 1}

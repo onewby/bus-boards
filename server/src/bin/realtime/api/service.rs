@@ -1,5 +1,7 @@
 use std::cmp::max;
 use std::collections::HashMap;
+use std::error::Error;
+use std::ops::Add;
 use std::str;
 use std::sync::{Arc, RwLock};
 
@@ -7,18 +9,19 @@ use axum::extract::{Query, State};
 use axum::http::StatusCode;
 use axum::Json;
 use axum::response::ErrorResponse;
-use chrono::{DateTime, NaiveDate, NaiveTime, TimeDelta, Timelike, Utc};
+use chrono::{Date, DateTime, NaiveDate, NaiveTime, TimeDelta, Timelike, Utc};
 use geo::{GeodesicDistance, GeodesicLength, HaversineClosestPoint, HaversineDistance, LineInterpolatePoint, LineLocatePoint};
 use geo_types::{coord, Line, Point};
 use itertools::Itertools;
+use polars::export::arrow::temporal_conversions::MILLISECONDS_IN_DAY;
 use regex::Regex;
 use serde_nested_with::serde_nested;
-
+use util::find_realtime_trip_with_gtfs;
 use crate::{GTFSAlerts, GTFSState, uw};
 use crate::api::util;
-use crate::api::util::{cache_service_data, INTERNAL_ERROR, ServiceError};
+use crate::api::util::{cache_service_data, INTERNAL_ERROR, ServiceError, get_or_cache_service_data, get_or_cache_all_service_data};
 use crate::db::{get_service_shape, get_stop_positions, OperatorsQuery, query_service, query_service_operator, query_stops, StopsQuery, find_links, Connections};
-use crate::transit_realtime::{FeedEntity, Position, TranslatedString, TripUpdate};
+use crate::transit_realtime::{FeedEntity, Position, TranslatedString, TripDescriptor, TripUpdate};
 use crate::transit_realtime::trip_descriptor::ScheduleRelationship::Canceled;
 use crate::transit_realtime::trip_update::stop_time_update::ScheduleRelationship::Skipped;
 use crate::util::{adjust_timestamp, haversine_closest_point};
@@ -49,7 +52,7 @@ pub fn get_service_data(state: &Arc<GTFSState>, id: &String) -> Result<ServiceDa
         stops.iter().map(|s| coord! {x: s.long, y: s.lat}), 5).unwrap());
 
     let mut cancelled = false;
-    let find_realtime_trip = util::find_realtime_trip_with_gtfs(id, &state.vehicles);
+    let find_realtime_trip = find_realtime_trip_with_gtfs(id, &state.vehicles);
     let realtime = if let Some((_, ref trip)) = find_realtime_trip {
         cancelled = uw! {trip.vehicle.as_ref()?.trip.as_ref()?.schedule_relationship} == Some(Canceled.into())
             || uw! {trip.trip_update.as_ref()?.trip.schedule_relationship} == Some(Canceled.into());
@@ -70,7 +73,7 @@ pub fn get_service_data(state: &Arc<GTFSState>, id: &String) -> Result<ServiceDa
         }
     } else {
         None
-    };
+    }.or_else(|| realtime_from_links(state, &mut stops, &links));
 
     let alerts = get_alerts(&state.alerts, Some(id), Some(&service.route_id), Some(&operator.id));
 
@@ -95,9 +98,101 @@ pub fn get_service_data(state: &Arc<GTFSState>, id: &String) -> Result<ServiceDa
     
     if let Some((resp, _)) = find_realtime_trip.as_ref() {
         cache_service_data(&state.realtime_cache, resp.clone(), id.as_str(), &data);
+    } else if data.branches.first().unwrap().realtime.is_some()
+        && let Some(from) = uw!(data.branches.first().unwrap().connections.from.as_ref())
+        && let Some((resp, _)) = find_realtime_trip_with_gtfs(from.trip_id.as_str(), &state.vehicles) {
+        cache_service_data(&state.realtime_cache, resp.clone(), id.as_str(), &data);
     }
     
     Ok(data)
+}
+
+fn realtime_from_links(state: &Arc<GTFSState>, mut stops: &mut Vec<StopsQuery>, links: &Result<Connections, Box<dyn Error>>) -> Option<RealtimeInfo> {
+    if let Some(previous_service) = uw!(links.as_ref().ok()?.from.as_ref()) {
+        if let Some(previous_service_data) = get_or_cache_all_service_data(state, previous_service.trip_id.as_str()) {
+            let branch = previous_service_data.branches.first()?;
+            if let Some(realtime) = branch.realtime.as_ref() {
+                if let Some(delay) = realtime.delay {
+                    let prev_last_stop = branch.stops.last()?;
+                    let curr_first_stop = stops.first()?;
+
+                    let mut delay = TimeDelta::milliseconds(delay);
+
+                    // Figure out what date this starts on (today or tomorrow, if on the edge of midnight)
+                    let last_stop_time = realtime.date.and_time(NaiveTime::default()).and_utc().add(prev_last_stop.arr);
+                    let time_diff =
+                        (curr_first_stop.dep.num_milliseconds() % MILLISECONDS_IN_DAY)
+                            - (prev_last_stop.arr.num_milliseconds() % MILLISECONDS_IN_DAY);
+                    let time_diff = if time_diff < 0 {
+                        TimeDelta::minutes(10) + TimeDelta::milliseconds(time_diff % (1000 * 60 * 10))
+                    } else {
+                        TimeDelta::milliseconds(time_diff)
+                    };
+                    let date = (last_stop_time + time_diff).with_time(NaiveTime::default()).unwrap();
+
+                    // Apply date to these times for delay calc
+                    let scheduled_times = stops.iter().map(|stop| {
+                        ScheduledTime {
+                            arr: date + stop.arr,
+                            dep: date + stop.dep
+                        }
+                    }).collect_vec();
+
+                    // Subtract delay between the last service ending and this starting
+                    delay = delay - (scheduled_times.first().unwrap().dep - last_stop_time);
+
+                    // Usual delay calculation
+                    for i in 0..stops.len() {
+                        let scheduled_time = &scheduled_times[i];
+                        let delayed_time = scheduled_time.arr + delay;
+                        stops[i].status = Some(calculate_delay_status(&mut delay, scheduled_time, delayed_time));
+                    };
+
+                    let on_previous_journey = realtime.stop > 0;
+
+                    return Some(RealtimeInfo {
+                        stop: 0,
+                        pct: 0.0,
+                        // Show vehicle position if the last vehicle has set off
+                        pos: if on_previous_journey {
+                            realtime.pos.clone()
+                        } else {
+                            None
+                        },
+                        delay: Some(max(delay.num_milliseconds(), 0)),
+                        date: date.date_naive(),
+                        on_previous: on_previous_journey
+                    });
+                }
+            }
+        }
+    }
+    None
+}
+
+fn calculate_delay_status(delay: &mut TimeDelta, scheduled_time: &ScheduledTime, delayed_time: DateTime<Utc>) -> String {
+    let mut status = "".to_string();
+    if *delay >= TimeDelta::milliseconds(1000 * 120) || *delay <= TimeDelta::milliseconds(-1000 * 60) {
+        status = if scheduled_time.dep.minute() == delayed_time.minute() {
+            "On time".to_string()
+        } else {
+            format!("Exp. {}", delayed_time.format("%H:%M"))
+        };
+
+        // Absorb delay in longer layovers
+        *delay = *delay - (scheduled_time.dep - scheduled_time.arr);
+        if delay.num_milliseconds() < 0 {
+            *delay = TimeDelta::default();
+            status = "On time".to_string();
+        }
+    } else {
+        *delay = *delay - (scheduled_time.dep - scheduled_time.arr);
+        if delay.num_milliseconds() < 0 {
+            *delay = TimeDelta::default();
+        }
+        status = "On time".to_string();
+    }
+    status
 }
 
 pub fn get_alerts(alerts: &RwLock<GTFSAlerts>, trip_id: Option<&String>, route_id: Option<&String>, agency_id: Option<&String>) -> Vec<StopAlert> {
@@ -169,22 +264,7 @@ fn realtime_from_position(state: &Arc<GTFSState>, id: &String, stops: &mut Vec<S
                     continue;
                 }
 
-                if delay >= TimeDelta::milliseconds(1000 * 120) || delay <= TimeDelta::milliseconds(-1000 * 60) {
-                    stops[i].status = if scheduled_time.dep.minute() == delayed_time.minute() {
-                        Some("On time".to_string())
-                    } else {
-                        Some(format!("Exp. {}", delayed_time.format("%H:%M")))
-                    };
-
-                    // Absorb delay in longer layovers
-                    delay = delay - (scheduled_time.dep - scheduled_time.arr);
-                    if delay.num_milliseconds() < 0 {
-                        delay = TimeDelta::default();
-                        stops[i].status = Some("On time".to_string());
-                    }
-                } else {
-                    stops[i].status = Some("On time".to_string());
-                }
+                stops[i].status = Some(calculate_delay_status(&mut delay, scheduled_time, delayed_time));
 
                 // Show current delayed stop in major stops list for context (since previous stops don't show delay, can look on time when delayed)
                 if stops[current_stop_index].status != Some("On time".to_string()) {
@@ -196,6 +276,9 @@ fn realtime_from_position(state: &Arc<GTFSState>, id: &String, stops: &mut Vec<S
                 stop: current_stop_index as i64,
                 pct,
                 pos: Some(current_pos),
+                delay: Some(delay.num_milliseconds()),
+                date: scheduled_times.first().unwrap().dep.date_naive(),
+                on_previous: false
             })
         } else {
             None
@@ -205,6 +288,9 @@ fn realtime_from_position(state: &Arc<GTFSState>, id: &String, stops: &mut Vec<S
             stop: -1,
             pct: 0.0,
             pos: Some(current_pos),
+            delay: None,
+            date: time_now.date_naive(),
+            on_previous: false
         })
     }
 }
@@ -256,7 +342,10 @@ fn realtime_from_trip_update(stops: &mut Vec<StopsQuery>, trip: &FeedEntity, cur
     RealtimeInfo {
         stop: current as i64,
         pct,
-        pos: current_pos
+        pos: current_pos,
+        delay: Some((*actual_times.last().unwrap() - *scheduled_times.last().unwrap()).num_milliseconds()),
+        date: date.date_naive(),
+        on_previous: false
     }
 }
 
@@ -316,7 +405,10 @@ pub struct OperatorColours {
 pub struct RealtimeInfo {
     stop: i64,
     pct: f64,
-    pos: Option<Position>
+    pos: Option<Position>,
+    delay: Option<i64>,
+    date: NaiveDate,
+    on_previous: bool
 }
 
 pub struct ScheduledTime {
