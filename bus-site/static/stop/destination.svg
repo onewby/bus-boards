@@ -1,9 +1,8 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
-<!-- Created with Vectornator (http://vectornator.io/) -->
 <svg height="100%" stroke-miterlimit="10" style="fill-rule:nonzero;clip-rule:evenodd;stroke-linecap:round;stroke-linejoin:round;" version="1.1" viewBox="0 0 128 128" width="100%" xml:space="preserve" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
 <defs>
-<path d="M22 64C22 40.804 40.804 22 64 22C87.196 22 106 40.804 106 64C106 87.196 87.196 106 64 106C40.804 106 22 87.196 22 64Z" id="Fill"/>
+<circle cx="64" cy="64" r="40" stroke-linejoin="bevel" style="paint-order:normal" id="Fill" />
 </defs>
 <clipPath id="ArtboardFrame">
 <rect height="128" width="128" x="0" y="0"/>
