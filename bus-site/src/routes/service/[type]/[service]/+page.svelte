@@ -126,7 +126,7 @@
     }
 </script>
 
-<div class="w-full h-fit overflow-scroll flex flex-col justify-start items-center max-w-full pt-4 pb-8 dark:text-white">
+<div class="w-full h-fit flex flex-col justify-start items-center max-w-full pt-4 pb-8 dark:text-white">
     <Header showBack={true}>
         <div class="text-2xl">
             <span class="font-bold">{data.service.code}</span> to <span class="font-semibold">{data.service.dest}</span>

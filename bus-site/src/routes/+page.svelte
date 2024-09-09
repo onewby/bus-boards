@@ -48,7 +48,7 @@
     }
 </script>
 
-<div class="w-full h-full overflow-scroll prose dark:prose-invert flex flex-col justify-center items-center self-center text-center max-w-full pt-16 pb-16">
+<div class="w-full h-full prose dark:prose-invert flex flex-col justify-center items-center self-center text-center max-w-full pt-16 pb-16">
     <h1 class="text-5xl text-gray-50/90 drop-shadow"><Fa icon={faBus} class="inline-block mr-2" /> Bus Boards</h1>
     <div class="panel w-full mt-2 p-8">
         <form on:submit|preventDefault={onSubmit}>
