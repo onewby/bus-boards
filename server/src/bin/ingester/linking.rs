@@ -23,6 +23,7 @@ pub fn link_trips(db_path: &str) -> Result<(), Box<dyn Error>> {
 
     println!("Running database optimise");
     get_pool(&db_pool).execute("pragma optimize", []).unwrap();
+    get_pool(&db_pool).execute_batch("ANALYZE trips; ANALYZE stop_times; ANALYZE stances; ANALYZE trips_route_id_index; ANALYZE stop_times_trip_id_stop_sequence_index;").unwrap();
 
     println!("Finding routes");
     let routes = get_pool(&db_pool).prepare("SELECT route_id, origin.stop_id, postorigin_stance.stop, predest_stance.stop, dest.stop_id, group_concat(trips.trip_id,',')

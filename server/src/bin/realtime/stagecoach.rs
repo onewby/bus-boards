@@ -36,7 +36,7 @@ pub async fn get_region(region: &str, config: &Arc<BBConfig>, db: &Arc<DBPool>) 
                 match resp.json::<StagecoachVehicles>().await {
                     Ok(vehicles) => {
                         return vehicles.services.iter()
-                            .filter(|sc| !sc.journey_completed || sc.cancelled)
+                            .filter(|sc| !sc.journey_completed.unwrap_or(false) || sc.cancelled)
                             .filter_map(|sc| {
                                 if !config.stagecoach.local_operators.contains_key(&sc.local_operator.to_lowercase()) {
                                     error!("Could not find Stagecoach operator mapping for {}", sc.local_operator);
@@ -179,8 +179,8 @@ pub struct Service {
     current_stop: String,
     #[serde(rename = "ns")]
     next_stop: String,
-    #[serde(rename = "jc", deserialize_with = "deserialize_bool")]
-    journey_completed: bool,
+    #[serde(default, rename = "jc", deserialize_with = "deserialize_bool_opt")]
+    journey_completed: Option<bool>,
     #[serde(rename = "do", deserialize_with = "deserialize_usize_opt")]
     distance: Option<usize>,
     #[serde(rename = "sg", deserialize_with = "deserialize_f64_opt")]
@@ -202,6 +202,20 @@ fn deserialize_bool<'de, D>(deserializer: D) -> Result<bool, D::Error>
     match s {
         "True" => Ok(true),
         "False" => Ok(false),
+        _ => Err(de::Error::unknown_variant(s, &["True", "False"])),
+    }
+}
+
+fn deserialize_bool_opt<'de, D>(deserializer: D) -> Result<Option<bool>, D::Error>
+where
+    D: de::Deserializer<'de>,
+{
+    let s: &str = de::Deserialize::deserialize(deserializer)?;
+
+    match s {
+        "" => Ok(None),
+        "True" => Ok(Some(true)),
+        "False" => Ok(Some(false)),
         _ => Err(de::Error::unknown_variant(s, &["True", "False"])),
     }
 }
