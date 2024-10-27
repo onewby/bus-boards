@@ -96,7 +96,7 @@ fn patch_display_names(conn: &mut Connection) -> rusqlite::Result<usize> {
 
 fn remove_traveline_ember(conn: &mut Connection) -> rusqlite::Result<usize> {
     println!("Removing Ember TNDS data");
-    delete_operator(conn, "OP965")
+    delete_operator(conn, "OP8058")
 }
 
 fn delete_operator(conn: &mut Connection, agency_id: &str) -> rusqlite::Result<usize> {

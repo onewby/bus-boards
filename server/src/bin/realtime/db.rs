@@ -174,13 +174,18 @@ pub struct StagecoachRoute {
     pub trip_id: String,
     pub route_id: String,
     pub stop_seq: u64,
-    pub stop_id: String
+    pub stop_id: String,
+    pub trip_route: Vec<String>,
+    pub trip_seqs: Vec<u32>
 }
 
 /// Find GTFS trip match from Stagecoach realtime journey
 pub fn get_stagecoach_trip(db: &Arc<DBPool>, agency_id: &str, route_name: &str, next_stop: &str, departure: &DateTime<Utc>) -> Option<StagecoachRoute> {
     get_pool(db).prepare_cached(r#"
-        SELECT t.trip_id, r.route_id, stop_times.stop_sequence as stop_seq, stop_times.stop_id FROM stop_times
+        SELECT t.trip_id, r.route_id, stop_times.stop_sequence as stop_seq, stop_times.stop_id,
+            (SELECT group_concat(stop_id) FROM (SELECT stop_id FROM stop_times WHERE trip_id=t.trip_id ORDER BY stop_sequence)) as route,
+            (SELECT group_concat(stop_sequence) FROM (SELECT stop_sequence FROM stop_times WHERE trip_id=t.trip_id ORDER BY stop_sequence)) as seqs
+        FROM stop_times
             INNER JOIN trips t on t.trip_id = stop_times.trip_id
             INNER JOIN main.routes r on t.route_id = r.route_id
             INNER JOIN stop_times origin on (origin.trip_id=t.trip_id AND origin.stop_sequence=t.min_stop_seq)
@@ -203,6 +208,8 @@ pub fn get_stagecoach_trip(db: &Arc<DBPool>, agency_id: &str, route_name: &str, 
             route_id: row.get("route_id")?,
             stop_seq: row.get("stop_seq")?,
             stop_id: row.get("stop_id")?,
+            trip_route: row.get::<&str, String>("route")?.split(',').map(|s| s.to_string()).collect(),
+            trip_seqs: row.get::<&str, String>("seqs")?.split(',').map(|s| u32::from_str(s).unwrap()).collect()
         })
     }).ok()
 }

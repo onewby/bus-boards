@@ -33,8 +33,7 @@ pub struct PassengerSource {
 
 #[derive(Serialize, Deserialize, Default)]
 pub struct StagecoachConfig {
-    pub regional_operators: Vec<String>,
-    pub local_operators: Map<String, String>
+    pub regional_operators: Map<String, String>
 }
 
 #[derive(Serialize, Deserialize, Default)]

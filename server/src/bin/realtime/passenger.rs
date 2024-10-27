@@ -408,11 +408,11 @@ pub struct VehiclesMeta {
     make: String,
     model: String,
     number_plate: String,
-    payments_contactless: bool,
+    payments_contactless: Option<bool>,
     tenant: Option<String>,
     #[serde(rename = "type")]
     meta_type: String,
-    wheelchair_capacity: i64,
+    wheelchair_capacity: Option<i64>,
     name: Option<String>,
     power_usb: Option<bool>,
     wifi: Option<bool>,

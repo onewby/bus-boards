@@ -20,19 +20,10 @@ passenger:
       op_code: WCMO
 stagecoach:
   regional_operators:
-    - SCFI
-    - SBLB
-    - SCHI
-    - STWS
-  local_operators:
-    SIF: OP550
-    SPH: OP557
-    STY: OP517
-    BB: OP512
-    HI: OP1024
-    OC: OP603
-    SGL: OP582
-    SWB: OP537
+    SCFI: OP550
+    SBLB: OP512
+    SCHI: OP1024
+    STWS: OP537
 coaches:
   operators:
     - OP564

@@ -2,24 +2,25 @@ use std::str::FromStr;
 use std::sync::Arc;
 use chrono::{DateTime, Utc};
 use futures::{stream, StreamExt};
+use geo_types::Point;
 use itertools::Itertools;
 use log::error;
 use serde::de;
 use tokio::sync::mpsc::Sender;
 use tokio::time;
 use BusBoardsServer::config::BBConfig;
-use crate::db::{DBPool, get_stagecoach_trip};
+use crate::db::{DBPool, get_stagecoach_trip, get_line_segments};
 use crate::GTFSResponder::{STAGECOACH};
 use crate::GTFSResponse;
 use crate::transit_realtime::{FeedEntity, Position, TripDescriptor, VehiclePosition};
 use crate::transit_realtime::trip_descriptor::ScheduleRelationship;
-use crate::util::{adjust_timestamp, gtfs_date, gtfs_time};
+use crate::util::{adjust_timestamp, f64_cmp, get_geo_linepoint_distance, gtfs_date, gtfs_time};
 
 pub async fn stagecoach_listener(tx: Sender<GTFSResponse>, config: Arc<BBConfig>, db: Arc<DBPool>) {
     loop {
         // Get entities for each Stagecoach operator
         let entities = stream::iter(config.stagecoach.regional_operators.iter())
-            .then(|c| get_region(c.as_str(), &config, &db)).collect::<Vec<Vec<FeedEntity>>>().await.concat();
+            .then(|(c, gtfs)| get_region(c.as_str(), gtfs.as_str(), &db)).collect::<Vec<Vec<FeedEntity>>>().await.concat();
 
         // Send to main feed
         tx.send((STAGECOACH, entities, vec![])).await.unwrap_or_else(|err| eprintln!("{}", err));
@@ -29,7 +30,7 @@ pub async fn stagecoach_listener(tx: Sender<GTFSResponse>, config: Arc<BBConfig>
 }
 
 /// Map journeys for the given Stagecoach region
-pub async fn get_region(region: &str, config: &Arc<BBConfig>, db: &Arc<DBPool>) -> Vec<FeedEntity> {
+pub async fn get_region(region: &str, gtfs: &str, db: &Arc<DBPool>) -> Vec<FeedEntity> {
     match reqwest::get(format!("https://api.stagecoach-technology.net/vehicle-tracking/v1/vehicles?services=:{region}:::")).await {
         Ok(resp) => {
             if resp.status().is_success() {
@@ -38,14 +39,20 @@ pub async fn get_region(region: &str, config: &Arc<BBConfig>, db: &Arc<DBPool>) 
                         return vehicles.services.iter()
                             .filter(|sc| !sc.journey_completed.unwrap_or(false) || sc.cancelled)
                             .filter_map(|sc| {
-                                if !config.stagecoach.local_operators.contains_key(&sc.local_operator.to_lowercase()) {
-                                    error!("Could not find Stagecoach operator mapping for {}", sc.local_operator);
-                                    return None
-                                }
                                 get_stagecoach_trip(
-                                    db, config.stagecoach.local_operators[&sc.local_operator.to_lowercase()].as_str(),
-                                    sc.line_number.as_str(), sc.next_stop.as_str(), &adjust_timestamp(&sc.origin_std?)
+                                    db, gtfs,
+                                    sc.line_number.as_str(), sc.next_stop_code.as_str(), &adjust_timestamp(&sc.origin_std?)
                                 ).map(|trip| {
+                                    let loc = Point::new(sc.longitude, sc.latitude);
+                                    let points = get_line_segments(db, trip.route_id.to_string());
+                                    let route = &trip.trip_route;
+                                    let seqs = &trip.trip_seqs;
+                                    let segments: Vec<geo_types::Line<f64>> = (0..route.len()-1).map(|i| {
+                                        geo_types::Line::new(points.get(&route[i]).copied().unwrap_or_default(), points.get(&route[i+1]).copied().unwrap_or_default())
+                                    }).collect();
+                                    let closest_segment = segments.iter().map(|s| get_geo_linepoint_distance(s, &loc))
+                                        .position_min_by(f64_cmp).unwrap_or(0);
+                                    
                                     FeedEntity {
                                         id: sc.trip_id.to_string(),
                                         is_deleted: None,
@@ -67,8 +74,8 @@ pub async fn get_region(region: &str, config: &Arc<BBConfig>, db: &Arc<DBPool>) 
                                                 odometer: None,
                                                 speed: None,
                                             }),
-                                            current_stop_sequence: Some(trip.stop_seq as u32),
-                                            stop_id: Some(sc.next_stop_code.to_string()),
+                                            current_stop_sequence: Some(seqs[closest_segment]),
+                                            stop_id: Some(route[closest_segment].to_string()),
                                             current_status: None,
                                             timestamp: Some(sc.update_time.timestamp() as u64),
                                             congestion_level: None,
