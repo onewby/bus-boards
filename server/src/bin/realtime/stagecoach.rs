@@ -74,7 +74,7 @@ pub async fn get_region(region: &str, gtfs: &str, db: &Arc<DBPool>) -> Vec<FeedE
                                                 odometer: None,
                                                 speed: None,
                                             }),
-                                            current_stop_sequence: Some(seqs[closest_segment]),
+                                            current_stop_sequence: Some((seqs[closest_segment] + 1).min(*seqs.last().unwrap())),
                                             stop_id: Some(route[closest_segment].to_string()),
                                             current_status: None,
                                             timestamp: Some(sc.update_time.timestamp() as u64),
