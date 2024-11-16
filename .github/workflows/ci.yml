@@ -50,7 +50,10 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: client
-        path: server/target/**/*.exe
+        path: |
+          server/target/x86_64-pc-windows-gnu/release/ingester
+          server/target/x86_64-pc-windows-gnu/release/realtime
+          server/target/x86_64-pc-windows-gnu/release/stations
 
 
   build-client:
@@ -63,7 +66,7 @@ jobs:
       run: sqlite3 server/stops.sqlite < server/src/bin/ingester/sql/model.sql
     - name: Build client
       working-directory: ./bus-site
-      run: npm run build
+      run: npm install && npm run build
     - name: Upload client
       uses: actions/upload-artifact@v4
       with:
