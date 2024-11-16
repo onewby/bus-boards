@@ -1,0 +1,71 @@
+name: BusBoards
+
+on:
+  push:
+    branches: [ $default-branch ]
+  pull_request:
+    branches: [ $default-branch ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-linux:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Switch to nightly
+      run: rustup default nightly-2024-07-25
+    - name: Build server
+      working-directory: ./server
+      run: cargo build --verbose
+    - name: Upload server
+      uses: actions/upload-artifact@v4
+      with:
+        name: client
+        path: |
+          server/target/release/ingester
+          server/target/release/realtime
+          server/target/release/stations
+
+
+  build-windows:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Switch to nightly
+      run: rustup default nightly-2024-07-25
+    - name: Install mingw64
+      run: sudo apt-get install -y mingw-w64
+    - name: Add Windows target
+      run: rustup target add x86_64-pc-windows-gnu
+    - name: Build server
+      working-directory: ./server
+      run: cargo build --verbose --target x86_64-pc-windows-gnu
+    - name: Upload server
+      uses: actions/upload-artifact@v4
+      with:
+        name: client
+        path: server/target/**/*.exe
+
+
+  build-client:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Initialise blank database
+      run: sqlite3 server/stops.sqlite < server/src/bin/ingester/sql/model.sql
+    - name: Build client
+      working-directory: ./bus-site
+      run: npm run build
+    - name: Upload client
+      uses: actions/upload-artifact@v4
+      with:
+        name: client
+        path: bus-site/build
