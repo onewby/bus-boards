@@ -161,7 +161,8 @@ fn realtime_from_links(state: &Arc<GTFSState>, mut stops: &mut Vec<StopsQuery>, 
                         },
                         delay: Some(max(delay.num_milliseconds(), 0)),
                         date: date.date_naive(),
-                        on_previous: on_previous_journey
+                        on_previous: on_previous_journey,
+                        vehicle: realtime.vehicle.clone(),
                     });
                 }
             }
@@ -278,7 +279,8 @@ fn realtime_from_position(state: &Arc<GTFSState>, id: &String, stops: &mut Vec<S
                 pos: Some(current_pos),
                 delay: Some(delay.num_milliseconds()),
                 date: scheduled_times.first().unwrap().dep.date_naive(),
-                on_previous: false
+                on_previous: false,
+                vehicle: get_vehicle_info(trip)
             })
         } else {
             None
@@ -290,7 +292,8 @@ fn realtime_from_position(state: &Arc<GTFSState>, id: &String, stops: &mut Vec<S
             pos: Some(current_pos),
             delay: None,
             date: time_now.date_naive(),
-            on_previous: false
+            on_previous: false,
+            vehicle: get_vehicle_info(trip)
         })
     }
 }
@@ -345,7 +348,16 @@ fn realtime_from_trip_update(stops: &mut Vec<StopsQuery>, trip: &FeedEntity, cur
         pos: current_pos,
         delay: Some((*actual_times.last().unwrap() - *scheduled_times.last().unwrap()).num_milliseconds()),
         date: date.date_naive(),
-        on_previous: false
+        on_previous: false,
+        vehicle: get_vehicle_info(trip)
+    }
+}
+
+fn get_vehicle_info(trip: &FeedEntity) -> VehicleInfo {
+    VehicleInfo {
+        name: uw!(trip.vehicle.as_ref()?.vehicle.as_ref()).and_then(|vd| vd.label.clone()),
+        license: uw!(trip.vehicle.as_ref()?.vehicle.as_ref()).and_then(|vd| vd.license_plate.clone()),
+        occupancy_pct: uw!(trip.vehicle.as_ref()?.occupancy_percentage).clone()
     }
 }
 
@@ -408,7 +420,15 @@ pub struct RealtimeInfo {
     pos: Option<Position>,
     delay: Option<i64>,
     date: NaiveDate,
-    on_previous: bool
+    on_previous: bool,
+    vehicle: VehicleInfo
+}
+
+#[derive(Serialize, Clone)]
+pub struct VehicleInfo {
+    license: Option<String>,
+    name: Option<String>,
+    occupancy_pct: Option<u32>
 }
 
 pub struct ScheduledTime {

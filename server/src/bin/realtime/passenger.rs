@@ -24,7 +24,7 @@ use crate::bus_prediction::{TripCandidate, TripCandidateList, TripInfo};
 use crate::db::{DBPool, get_line_segments, get_operator_routes, get_passenger_route_trips, get_route_id, passenger_trip_query, PassengerRouteTrip, reset_passenger, RouteID, RouteName, save_passenger_trip_allocations};
 use crate::GTFSResponder::PASSENGER;
 use crate::siri::create_translated_string;
-use crate::transit_realtime::{Alert, EntitySelector, FeedEntity, Position, TimeRange, TripDescriptor, VehiclePosition};
+use crate::transit_realtime::{Alert, EntitySelector, FeedEntity, Position, TimeRange, TripDescriptor, VehicleDescriptor, VehiclePosition};
 use crate::transit_realtime::vehicle_position::VehicleStopStatus;
 use crate::util::{adjust_timestamp, get_url, load_last_update, relative_to, save_last_update, URLParseError};
 
@@ -84,7 +84,7 @@ pub async fn get_source_vehicles((url, operators): (&SourceURL, &Map<OperatorNam
 
 /// Map vehicles on a given route to GTFS
 pub fn process_line_vehicles<FeatureIterator>(db: &Arc<DBPool>, operators: &Map<OperatorName, PassengerSource>, (operator, line): (String, String), vehicles_iter: FeatureIterator) -> Vec<FeedEntity>
-    where FeatureIterator: Iterator<Item = VehiclesFeature> {
+where FeatureIterator: Iterator<Item = VehiclesFeature> {
     // Get GTFS route ID for the given route
     let operator_data = operators.get(&operator.to_lowercase()).unwrap();
     let route_id_result = get_route_id(db, operator_data.gtfs.to_owned(), line.to_owned());
@@ -135,7 +135,14 @@ fn to_feed_entity(trip: &TripInfo, vehicle: &VehiclesFeature, candidates: &[Trip
                 start_date: Some(candidates[trip.candidate].date.to_string()),
                 schedule_relationship: None,
             }),
-            vehicle: None,
+            vehicle: vehicle.properties.meta.as_ref().map(|meta| {
+                VehicleDescriptor {
+                    id: Some(vehicle.properties.vehicle.clone()),
+                    label: meta.name.clone(),
+                    license_plate: Some(meta.number_plate.clone()),
+                    wheelchair_accessible: meta.wheelchair_capacity.map(|num| num.max(1) as i32),
+                }
+            }),
             position: Some(Position {
                 latitude: vehicle.geometry.coordinates.y() as f32,
                 longitude: vehicle.geometry.coordinates.x() as f32,

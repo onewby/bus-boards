@@ -190,7 +190,11 @@
                 {#if branch.realtime?.pos}
                     <HTMLMarker lon={lon} lat={lat} divIcon={{
                             html: `<div class='bg-white border border-black h-full w-full rounded-tr-full' style='transform: rotate(${rotation}deg) ${flip}'></div>`,
-                            className: "", iconSize: [20, 12] }} />
+                            className: "", iconSize: [20, 12] }}
+                            popup="{branch.realtime.vehicle.license ? '<b>' + branch.realtime.vehicle.license + '</b><br>' : ''}
+                                   {branch.realtime.vehicle.name ? '<i>' + branch.realtime.vehicle.name + '</i><br>' : ''}
+                                   {(!branch.realtime.vehicle.license && !branch.realtime.vehicle.name && !branch.realtime.vehicle.occupancy_pct) ? 'No vehicle information available' : ''}
+                                   {branch.realtime.vehicle.occupancy_pct ? 'Occupancy: ' + branch.realtime.vehicle.occupancy_pct + '%' : ''}" />
                 {/if}
             </Map>
         {/if}

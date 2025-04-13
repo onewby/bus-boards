@@ -71,7 +71,12 @@ export type ServiceBranch = {
             speed: number
         },
         pct?: number,
-        on_previous: boolean
+        on_previous: boolean,
+        vehicle: {
+            license?: string,
+            name?: string,
+            occupancy_pct?: number
+        }
     },
     route: string,
     connections: Connections
