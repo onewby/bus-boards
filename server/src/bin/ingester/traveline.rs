@@ -230,10 +230,13 @@ pub fn download_noc(conn: &mut Connection) -> Result<(), Box<dyn Error>> {
         let overrides: HashMap<String, String> = serde_json::from_reader(BufReader::new(File::open("agency_mappings.json")?))?;
         let tx = conn.transaction()?;
         {
+            let mut gtfs_exists = tx.prepare("SELECT 1 FROM traveline WHERE agency_id=? LIMIT 1")?;
             let mut stmt = tx.prepare("INSERT OR IGNORE INTO traveline (code, agency_id) VALUES (?1, ?2)")?;
             for (traveline, gtfs) in overrides {
-                stmt.execute(params![traveline, gtfs])
-                    .inspect_err(|e| eprintln!("Override failed: {} - {}", traveline, gtfs))?;
+                if(gtfs_exists.exists(params![gtfs]).unwrap_or(false)) {
+                    stmt.execute(params![traveline, gtfs])
+                        .inspect_err(|e| eprintln!("Override failed: {} - {}", traveline, gtfs))?;
+                }
             }
         }
     }
