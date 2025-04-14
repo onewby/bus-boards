@@ -116,6 +116,10 @@ realtime data, and a Rust data ingester to populate the database.
 
 ## Next steps
 
+- [ ] The new BODS service has caused lots of issues with duplicated 
+  services and poor destination naming. Deduplication and likely a sooner 
+  transition to handling TransXChange + Traveline data directly is needed
+- [ ] Selective SSR for faster load times
 - [ ] Fix unmerged stances (e.g. for Seacroft and Wakefield Bus Stations)
 - [x] Delay prediction
   - [x] Show on departures board 
