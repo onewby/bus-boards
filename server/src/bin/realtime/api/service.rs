@@ -5,11 +5,19 @@ use std::ops::Add;
 use std::str;
 use std::sync::{Arc, RwLock};
 
+use crate::api::util;
+use crate::api::util::{cache_service_data, get_or_cache_all_service_data, ServiceError, INTERNAL_ERROR};
+use crate::db::{find_links, get_service_shape, get_stop_positions, query_service, query_service_operator, query_stops, Connections, OperatorsQuery, StopsQuery};
+use crate::transit_realtime::trip_descriptor::ScheduleRelationship::Canceled;
+use crate::transit_realtime::trip_update::stop_time_update::ScheduleRelationship::Skipped;
+use crate::transit_realtime::{FeedEntity, Position, TranslatedString, TripUpdate};
+use crate::util::{adjust_timestamp, haversine_closest_point};
+use crate::{uw, GTFSAlerts, GTFSState};
 use axum::extract::{Query, State};
 use axum::http::StatusCode;
-use axum::Json;
 use axum::response::ErrorResponse;
-use chrono::{Date, DateTime, NaiveDate, NaiveTime, TimeDelta, Timelike, Utc};
+use axum::Json;
+use chrono::{DateTime, NaiveDate, NaiveTime, TimeDelta, Timelike, Utc};
 use geo::{GeodesicDistance, GeodesicLength, HaversineClosestPoint, HaversineDistance, LineInterpolatePoint, LineLocatePoint};
 use geo_types::{coord, Line, Point};
 use itertools::Itertools;
@@ -17,14 +25,6 @@ use polars::export::arrow::temporal_conversions::MILLISECONDS_IN_DAY;
 use regex::Regex;
 use serde_nested_with::serde_nested;
 use util::find_realtime_trip_with_gtfs;
-use crate::{GTFSAlerts, GTFSState, uw};
-use crate::api::util;
-use crate::api::util::{cache_service_data, INTERNAL_ERROR, ServiceError, get_or_cache_service_data, get_or_cache_all_service_data};
-use crate::db::{get_service_shape, get_stop_positions, OperatorsQuery, query_service, query_service_operator, query_stops, StopsQuery, find_links, Connections};
-use crate::transit_realtime::{FeedEntity, Position, TranslatedString, TripDescriptor, TripUpdate};
-use crate::transit_realtime::trip_descriptor::ScheduleRelationship::Canceled;
-use crate::transit_realtime::trip_update::stop_time_update::ScheduleRelationship::Skipped;
-use crate::util::{adjust_timestamp, haversine_closest_point};
 
 pub async fn get_service(Query(params): Query<HashMap<String, String>>, State(state): State<Arc<GTFSState>>) -> Result<Json<ServiceData>, ErrorResponse> {
     let id = params.get("id").or_error((StatusCode::BAD_REQUEST, "ID not provided"))?;
@@ -49,7 +49,7 @@ pub fn get_service_data(state: &Arc<GTFSState>, id: &String) -> Result<ServiceDa
     simplify_tram_names(&mut stops, &operator, &state.operators);
 
     let route = shape.unwrap_or_else(|_| polyline::encode_coordinates(
-        stops.iter().map(|s| coord! {x: s.long, y: s.lat}), 5).unwrap());
+        stops.iter().filter_map(|s| Some(coord! {x: s.long?, y: s.lat?})), 5).unwrap());
 
     let mut cancelled = false;
     let find_realtime_trip = find_realtime_trip_with_gtfs(id, &state.vehicles);
@@ -253,7 +253,8 @@ fn realtime_from_position(state: &Arc<GTFSState>, id: &String, stops: &mut Vec<S
             // Apply delay to all stops past the current stop
             // (don't show 'Departed' if too close to the last stop - may be a GPS error)
             let evaluate_index = max(current_stop_index - 1, 0);
-            let include_last_stop = if Point::from(stops[evaluate_index].position()).geodesic_distance(&current_pos_point) <= 50.0 { 1 } else { 0 };
+            let evaluate_pos = stops[evaluate_index].position();
+            let include_last_stop = if evaluate_pos.is_some() && Point::from(evaluate_pos.unwrap()).geodesic_distance(&current_pos_point) <= 50.0 { 1 } else { 0 };
 
             // Only show Departed 5 mins before departure time
             for i in 0..stops.len() {

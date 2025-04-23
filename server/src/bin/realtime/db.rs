@@ -455,14 +455,14 @@ pub fn query_stops(db: &Arc<DBPool>, trip_id: &str) -> rusqlite::Result<Vec<Stop
                     departure_time as dep, l.name as loc, timepoint as major, drop_off_type as doo, pickup_type as puo,
                     stances.lat as lat, stances.long as long, stop_sequence as seq, stops.locality_name AS full_loc
                 FROM stop_times
-                    INNER JOIN stances on stances.code = stop_times.stop_id
-                    INNER JOIN stops on stops.id = stances.stop
-                    INNER JOIN localities l on l.code = stops.locality
+                    LEFT JOIN stances on stances.code = stop_times.stop_id
+                    LEFT JOIN stops on stops.id = stances.stop
+                    LEFT JOIN localities l on l.code = stops.locality
                 WHERE trip_id=? ORDER BY stop_sequence")?;
     let result = Ok(stmt.query_map([trip_id], |row| Ok(StopsQuery {
-        name: row.get(0)?,
-        display_name: row.get(1)?,
-        locality: row.get(2)?,
+        name: row.get(0).unwrap_or("Unknown".to_string()),
+        display_name: row.get(1).unwrap_or("Unknown".to_string()),
+        locality: row.get(2).ok(),
         ind: row.get(3).ok(),
         arr: TimeDelta::seconds(row.get(4)?),
         dep: TimeDelta::seconds(row.get(5)?),
@@ -470,10 +470,10 @@ pub fn query_stops(db: &Arc<DBPool>, trip_id: &str) -> rusqlite::Result<Vec<Stop
         major: row.get(7).unwrap_or(true),
         doo: row.get(8)?,
         puo: row.get(9)?,
-        lat: row.get(10)?,
-        long: row.get(11)?,
+        lat: row.get(10).ok(),
+        long: row.get(11).ok(),
         seq: row.get(12)?,
-        full_loc: row.get(13)?,
+        full_loc: row.get(13).unwrap_or("".to_string()),
         status: None
     }))?.filter_map(Result::ok).collect_vec());
     result
@@ -483,7 +483,7 @@ pub fn query_stops(db: &Arc<DBPool>, trip_id: &str) -> rusqlite::Result<Vec<Stop
 pub struct StopsQuery {
     pub name: String,
     pub display_name: String,
-    pub locality: String,
+    pub locality: Option<String>,
     pub ind: Option<String>,
     #[serde(deserialize_with = ":: serde_with :: As :: < DurationSeconds < i64 > > :: deserialize")]
     #[serde(serialize_with="duration_to_fmt")]
@@ -497,8 +497,8 @@ pub struct StopsQuery {
     pub puo: bool,
     #[serde(deserialize_with="bool_from_u8")]
     pub doo: bool,
-    pub long: f64,
-    pub lat: f64,
+    pub long: Option<f64>,
+    pub lat: Option<f64>,
     pub seq: u64,
     #[serde(skip_serializing)]
     pub full_loc: String,
@@ -506,8 +506,8 @@ pub struct StopsQuery {
 }
 
 impl StopsQuery {
-    pub(crate) fn position(&self) -> Coord {
-        coord! {x: self.lat, y: self.long }
+    pub(crate) fn position(&self) -> Option<Coord> {
+        Some(coord! {x: self.lat?, y: self.long? })
     }
 }
 
