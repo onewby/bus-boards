@@ -436,7 +436,7 @@ pub fn query_service(db: &Arc<DBPool>, trip_id: &str) -> rusqlite::Result<Servic
     stmt.query_row([trip_id], |row| Ok(ServiceQuery {
         route_id: row.get(0)?,
         code: row.get(1)?,
-        dest: row.get(2)?,
+        dest: row.get(2).unwrap_or("Unknown destination".to_string()),
         mss: row.get(3)?,
     }))
 }

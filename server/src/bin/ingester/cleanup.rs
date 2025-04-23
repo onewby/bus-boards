@@ -81,46 +81,33 @@ fn patch_bods(conn: &mut Connection) -> rusqlite::Result<usize> {
                     AND stop_id LIKE '6%'
                     AND trip_id LIKE 'V%'"#, []
     )?;
-    // fix route dests - both for special cases and non-special cases
     
-    // finds highest-level locality the origin/dest do not share (so intercity and metro routes both have appropriate dests)
-    // cop-outs for circular routes, airports
+    // fix route dests - both for special cases and non-special cases
+    // long-term fix will be using TxC
     conn.execute(
-       r#"UPDATE trips SET trip_headsign=final_loc FROM (SELECT trip.trip_id AS tid, coalesce(ideal_loc, trip.trip_headsign, trip.naive_dest) AS final_loc
-                FROM (SELECT (SELECT name FROM (
-                            WITH RECURSIVE
-                                find_parent_names(level, code) AS (
-                                    VALUES(0, dest_stop.locality)
-                                    UNION
-                                    SELECT level+1, parent FROM localities, find_parent_names
-                                    WHERE localities.code=find_parent_names.code
-                                )
-                            SELECT name FROM localities, find_parent_names
-                            WHERE localities.code = find_parent_names.code
-                            ORDER BY level desc
-                        ) WHERE name NOT IN (
-                            WITH RECURSIVE
-                                find_parent_names(level, code) AS (
-                                    VALUES(0, origin_stop.locality)
-                                    UNION
-                                    SELECT level+1, parent FROM localities, find_parent_names
-                                    WHERE localities.code=find_parent_names.code
-                                )
-                            SELECT name FROM localities, find_parent_names
-                            WHERE localities.code = find_parent_names.code
-                            ORDER BY level desc
-                        ) LIMIT 1) AS ideal_loc, trips.trip_id, trips.trip_headsign, dest_loc.name AS naive_dest FROM trips
-                         INNER JOIN routes r on trips.route_id = r.route_id
-                         INNER JOIN stop_times origin on origin.trip_id=trips.trip_id and origin.stop_sequence=trips.min_stop_seq
-                         INNER JOIN main.stances origin_stance on origin.stop_id = origin_stance.code
-                         INNER JOIN main.stops origin_stop on origin_stance.stop = origin_stop.id
-                         INNER JOIN stop_times dest on dest.trip_id=trips.trip_id and dest.stop_sequence=trips.max_stop_seq
-                         INNER JOIN main.stances dest_stance on dest.stop_id = dest_stance.code
-                         INNER JOIN main.stops dest_stop on dest_stance.stop = dest_stop.id
-                         INNER JOIN main.localities dest_loc on dest_loc.code = dest_stop.locality
-                WHERE r.agency_id LIKE 'OP%' AND r.agency_id NOT IN ('OP5050', 'OP564', 'OP5051', 'OP545', 'OP563')
-                  AND origin_stance.stop <> dest_stance.stop
-                  AND trip_headsign NOT LIKE '%Airport%') AS trip) WHERE trips.trip_id = tid"#, []
+       r#"UPDATE trips SET trip_headsign=(SELECT CASE
+               WHEN original = '' THEN new_name
+               WHEN original = dest_stop_name THEN new_name
+               WHEN original LIKE new_name || ' ' || new_name || ' Hospital%' THEN substr(original, length(new_name) + 2)
+               WHEN original LIKE '%Hospital%' THEN original
+               WHEN original LIKE new_name || '%' THEN new_name
+               ELSE original
+            END)
+             FROM (SELECT trips.trip_id, coalesce(trip_headsign, '') as original, dest_loc.name AS new_name, dest_loc.code AS dest_loc, dest_stop.name AS dest_stop_name, origin_loc.code AS origin_loc FROM trips
+                 INNER JOIN stop_times origin_st on trips.trip_id = origin_st.trip_id and origin_st.stop_sequence=trips.min_stop_seq
+                 INNER JOIN stances origin_stance on origin_stance.code = origin_st.stop_id
+                 INNER JOIN stops origin_stop on origin_stop.id = origin_stance.stop
+                 INNER JOIN localities origin_loc on origin_stop.locality = origin_loc.code
+                 INNER JOIN stop_times dest_st on trips.trip_id = dest_st.trip_id and dest_st.stop_sequence=trips.max_stop_seq
+                 INNER JOIN stances dest_stance on dest_stance.code = dest_st.stop_id
+                 INNER JOIN stops dest_stop on dest_stop.id = dest_stance.stop
+                 INNER JOIN localities dest_loc on dest_stop.locality = dest_loc.code
+                 INNER JOIN main.routes r on r.route_id = trips.route_id
+             WHERE r.agency_id LIKE 'OP%' AND r.agency_id NOT IN ('OP5050', 'OP564', 'OP5051', 'OP545', 'OP563')
+                 AND (origin_loc <> dest_loc OR original IS NULL)
+                 AND NOT (original LIKE '%Airport%' AND new_name NOT LIKE '%Airport')
+             ) AS trips_subquery
+             WHERE trips.trip_id = trips_subquery.trip_id"#, []
     )?;
     
     // patch some long distance coach names
@@ -194,13 +181,13 @@ fn clean_flix(conn: &mut Connection) -> rusqlite::Result<usize> {
 }
 
 pub fn cleanup(conn: &mut Connection) -> Result<(), Box<dyn Error>> {
-    // println!("Updating sequence numbers");
-    // conn.execute("UPDATE trips SET min_stop_seq=(SELECT min(stop_sequence) FROM stop_times WHERE stop_times.trip_id=trips.trip_id)", ())?;
-    // conn.execute("UPDATE trips SET max_stop_seq=(SELECT max(stop_sequence) FROM stop_times WHERE stop_times.trip_id=trips.trip_id)", ())?;
-    // clean_arrivals(conn).expect("Clean arrivals");
-    // clean_flix(conn).expect("Clean Flix");
-    // clean_stops(conn).expect("Clean stops");
-    // reset_polar().expect("Reset Polar");
+    println!("Updating sequence numbers");
+    conn.execute("UPDATE trips SET min_stop_seq=(SELECT min(stop_sequence) FROM stop_times WHERE stop_times.trip_id=trips.trip_id)", ())?;
+    conn.execute("UPDATE trips SET max_stop_seq=(SELECT max(stop_sequence) FROM stop_times WHERE stop_times.trip_id=trips.trip_id)", ())?;
+    clean_arrivals(conn).expect("Clean arrivals");
+    clean_flix(conn).expect("Clean Flix");
+    clean_stops(conn).expect("Clean stops");
+    reset_polar().expect("Reset Polar");
     patch_bods(conn).expect("Display name + timing point patching");
     remove_traveline_ember(conn).expect("Patch Ember");
     Ok(())
