@@ -45,7 +45,7 @@ use crate::coaches::coaches_listener;
 use BusBoardsServer::config::{BBConfig, load_config};
 use BusBoardsServer::GTFSResponder;
 use crate::api::service::{get_service, OperatorColours, ServiceData};
-use crate::api::stop::get_stop;
+use crate::api::stop::{get_basic_stop_info, get_stop};
 use crate::db::{DBPool, open_db};
 use crate::disruptions::{disruptions_listener};
 use crate::ember::ember_listener;
@@ -127,6 +127,7 @@ async fn main() {
         .route("/api/gtfsrt/json", get(gtfs_realtime_json))
         .route("/api/service", get(get_service))
         .route("/api/stop", get(get_stop))
+        .route("/api/stop/preload", get(get_basic_stop_info))
         .with_state(gtfs_state)
         .layer(CompressionLayer::new());
 

@@ -1,4 +1,5 @@
 use std::collections::{HashMap, HashSet};
+use std::hash::{DefaultHasher, Hash};
 use std::sync::{Arc, RwLock};
 
 use axum::extract::{Query, State};
@@ -22,7 +23,6 @@ use crate::api::darwin::{GetDepartureBoardRequest, GetDepartureBoardResponse, LD
 use crate::api::service::{find_best_match, StopAlert};
 use crate::api::util::{find_realtime_trip_with_gtfs, get_or_cache_service_data, INTERNAL_ERROR, ServiceError, get_or_cache_all_service_data};
 use crate::db::{get_services_between, get_stance_info, get_stop_info, StanceInfo, StopInfoQuery, StopService};
-use crate::transit_realtime::FeedEntity;
 use crate::util::adjust_timestamp;
 
 pub async fn get_stop(Query(params): Query<HashMap<String, String>>, State(state): State<Arc<GTFSState>>) -> Result<Json<StopResponse>, ErrorResponse> {
@@ -41,6 +41,28 @@ pub async fn get_stop(Query(params): Query<HashMap<String, String>>, State(state
     Ok(Json(data))
 }
 
+pub async fn get_basic_stop_info(Query(params): Query<HashMap<String, String>>, State(state): State<Arc<GTFSState>>) -> Result<Json<BasicStopResponse>, ErrorResponse> {
+    let locality = params.get("locality").or_error(INVALID_QUERY)?;
+    let name = params.get("name").or_error(INVALID_QUERY)?;
+    if name == "" || locality == "" { return Err(ErrorResponse::from(INVALID_QUERY.into_response())) }
+    
+    let stop_info = get_stop_info(&state.db, name, locality).or_error((StatusCode::NOT_FOUND, "Stop not found"))?;
+    let mut stance_info = get_stance_info(&state.db, stop_info.id).or_error(INTERNAL_ERROR)?;
+    
+    // Sort by indicator
+    stance_info.iter_mut().for_each(|stance| {
+        if let None = stance.indicator {
+            stance.indicator = Some("".to_string());
+        }
+    });
+    stance_info.sort_by(|a, b| a.indicator.as_ref().unwrap().to_ascii_lowercase().cmp(&b.indicator.as_ref().unwrap().to_ascii_lowercase()));
+    
+    Ok(Json(BasicStopResponse {
+        stop: stop_info,
+        stances: stance_info
+    }))
+}
+
 pub async fn get_stop_data(state: &Arc<GTFSState>, locality: &String, name: &String, date: &DateTime<Utc>, filter_loc: Option<&String>, filter_name: Option<&String>) -> Result<StopResponse, ErrorResponse> {
     let filter = filter_loc.is_some() && filter_name.is_some();
 
@@ -52,8 +74,10 @@ pub async fn get_stop_data(state: &Arc<GTFSState>, locality: &String, name: &Str
     let mut stance_info = get_stance_info(&state.db, stop_info.id).or_error(INTERNAL_ERROR)?;
 
     // Get stop alerts
+    let mut hasher = DefaultHasher::new();
     let alerts = stance_info.iter()
         .flat_map(|stance| get_stop_alerts(&state.alerts, stance.code.as_str()))
+        .unique_by(|alert| alert.hash(&mut hasher))
         .collect_vec();
     
     // Sort by indicator
@@ -252,6 +276,12 @@ pub struct StopResponse {
     stances: Vec<StanceInfo>,
     times: Vec<StopService>,
     alerts: Vec<StopAlert>
+}
+
+#[derive(Serialize)]
+pub struct BasicStopResponse {
+    stop: StopInfoQuery,
+    stances: Vec<StanceInfo>
 }
 
 lazy_static! {

@@ -22,20 +22,30 @@ export type StopAlert = {
     url?: string
 }
 
+export type StopInfo = {
+    id: number,
+    name: string,
+    locality_name: string,
+    locality_code: string
+}
+
+export type StanceInfo = {
+    code: string,
+    street: string,
+    indicator: string,
+    lat: number,
+    long: number
+}
+
+export type BasicStopData = {
+    stop: StopInfo,
+    stances: StanceInfo[],
+    filter: SearchResult | undefined
+}
+
 export type StopData = {
-    stop: {
-        id: number,
-        name: string,
-        locality_name: string,
-        locality_code: string
-    },
-    stances: {
-        code: string,
-        street: string,
-        indicator: string,
-        lat: number,
-        long: number
-    }[],
+    stop: StopInfo,
+    stances: StanceInfo[],
     times: StopDeparture[],
     alerts: StopAlert[],
     filter: SearchResult | undefined

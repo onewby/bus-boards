@@ -4,8 +4,8 @@
     import { page } from '$app/stores';
 
     import Fa from "svelte-fa";
-    import type {SearchResult, StopData} from "../../../../api.type";
-    import {faExclamationTriangle, faMap, faXmark} from "@fortawesome/free-solid-svg-icons";
+    import type {SearchResult, StopData, StopDeparture} from "../../../../api.type";
+    import {faExclamationTriangle, faMap, faXmark, faSpinner} from "@fortawesome/free-solid-svg-icons";
     import {slide} from "svelte/transition";
 
     import Map from "../../../../map/Map.svelte";
@@ -18,23 +18,23 @@
     import {createFloatingActions} from "svelte-floating-ui";
     import {size} from "@floating-ui/core";
     import Alert from "../../../Alert.svelte";
+    import type {GeoJsonObject} from "geojson";
+    import debounce from "debounce";
 
     // let departures = true
-    export let data: StopData;
+    export let data;
 
+    // Current time
     let ct = new Date(Date.now())
+    // Format day/month as two-digit number (pad with 0 if needed)
     const dateNum = (num: number) => num.toString().padStart(2, "0")
+    // Get date from search params, or use current time as a default
     let time = $page.url.searchParams.get("date") ?? `${ct.getFullYear()}-${dateNum(ct.getMonth() + 1)}-${dateNum(ct.getDate())}T${dateNum(ct.getHours())}:${dateNum(ct.getMinutes())}`
 
-    let operators: Record<string, Set<string>> = {}
-    $: {
-        operators = {}
-        data.times.forEach(time => {
-            if(operators[time.operator_name] === undefined) operators[time.operator_name] = new Set()
-            operators[time.operator_name].add(time.operator_id)
-        })
-    }
+    // For time formatting
     let collator = new Intl.Collator([], {numeric: true, sensitivity: 'base'})
+
+    // Filtering
 
     let operatorFilter = $page.url.searchParams.get("operator") ?? ""
     let stanceFilter = $page.url.searchParams.get("stance") ?? ""
@@ -45,16 +45,29 @@
         params.set("date", time)
         if(operatorFilter !== "") params.set("operator", operatorFilter)
         if(stanceFilter !== "") params.set("stance", stanceFilter)
-        if(data.filter) {
-            params.set("filterLoc", data.filter.locality)
-            params.set("filterName", data.filter.name)
+        if(data?.filter) {
+            params.set("filterLoc", data?.filter.locality)
+            params.set("filterName", data?.filter.name)
         }
         filterURL = `/stop/${$page.params.locality}/${$page.params.name}?${params.toString()}`
     }
 
-    $: filteredTimes = data.times.filter(stop =>
-        (operatorFilter === "" || (operators[operatorFilter] !== undefined && operators[operatorFilter].has(stop.operator_id)))
-        && (stanceFilter === "" || stop.indicator.find(ind => ind === stanceFilter) !== undefined))
+    function getOperators(times: StopDeparture[]) {
+        let operators: Record<string, Set<string>> = {}
+        times.forEach(time => {
+            if(operators[time.operator_name] === undefined) operators[time.operator_name] = new Set()
+            operators[time.operator_name].add(time.operator_id)
+        })
+        return operators
+    }
+
+    function getFilteredTimes(times: StopDeparture[], operators: Record<string, Set<string>>) {
+        return times.filter(stop =>
+            (operatorFilter === "" || (operators[operatorFilter] !== undefined && operators[operatorFilter].has(stop.operator_id)))
+            && (stanceFilter === "" || stop.indicator.find(ind => ind === stanceFilter) !== undefined))
+    }
+
+    // Stance map
 
     let showMap = false;
     let zoom = 20
@@ -72,7 +85,7 @@
                 "type": "Point"
             }
         }))
-    }
+    } as GeoJsonObject
 
     const popupOptions = {
         maxWidth: 108,
@@ -97,6 +110,9 @@
         }
     }
 
+    // Filtering by destination - stop search
+
+    // Floating menu
     const [ floatingRef, floatingContent ] = createFloatingActions({
         strategy: "absolute",
         placement: "bottom-start",
@@ -114,9 +130,14 @@
     let destInput = ""
     let results: SearchResult[] = []
 
-    async function onDestSearch(e) {
-        if(e.target.value !== "") {
-            let resp = await fetch(`/api/search?query=${encodeURIComponent(e.target.value.trim())}`)
+    type OnInputEvent = (Event & {
+        currentTarget: EventTarget & HTMLInputElement;
+    }) | {target: {value: string}}
+
+    async function onDestSearch(e: OnInputEvent) {
+        let target = e.target as HTMLInputElement | undefined
+        if(target?.value !== "") {
+            let resp = await fetch(`/api/search?query=${encodeURIComponent(target!.value.trim())}`)
             results = await resp.json()
         } else {
             results = []
@@ -159,34 +180,47 @@
         </div>
     {/if}
 
+    {#await data.full}
+
+    <!-- Loading -->
+    <div class="panel w-full mt-2 flex flex-col p-8 justify-center items-center">
+        <Fa icon={faSpinner} size="lg" spin pulse />
+    </div>
+
+    {:then fullData}
+
+    {@const operators = getOperators(fullData.times)}
+    {@const filteredTimes = getFilteredTimes(fullData.times, operators)}
+
+    <!-- Filter menu -->
     <div class="panel w-full mt-2 pl-4 pr-4 pt-4 pb-4 flex flex-row flex-wrap items-center justify-evenly gap-x-2 gap-y-2">
         <!--<div class="flex flex-row items-center">
             <div>Arrivals</div>
             <div class="w-fit inline-block ml-4 mr-4"><Toggle hideLabel label="Toggle arrivals/departures" toggledColor="#f59e0b"></Toggle></div>
             <div>Departures</div>
         </div>-->
-        {#if data}
-            <div class="flex flex-col sm:flex-row gap-x-4 w-full">
-                <div class="flex flex-row items-center w-full">
-                    <label for="operator">Operator</label>
-                    <select id="operator" class="ml-4 dark:bg-gray-800 w-full" bind:value={operatorFilter}>
-                        <option name=""></option>
-                        {#each Object.keys(operators) as operator}
-                            <option value={operator}>{operator}</option>
-                        {/each}
-                    </select>
-                </div>
-                <div class="flex flex-row items-center w-full">
-                    <label for="stance">Stance</label>
-                    <select id="stance" class="ml-4 dark:bg-gray-800 w-full" bind:value={stanceFilter}>
-                        <option name=""></option>
-                        {#each [...new Set(data.stances.filter(st => st.indicator !== null).map(st => st.indicator))].sort(collator.compare) as stance}
-                            <option value={stance}>{stance}</option>
-                        {/each}
-                    </select>
-                </div>
+        <!-- Filter by operator and stance -->
+        <div class="flex flex-col sm:flex-row gap-x-4 w-full">
+            <div class="flex flex-row items-center w-full">
+                <label for="operator">Operator</label>
+                <select id="operator" class="ml-4 dark:bg-gray-800 w-full" bind:value={operatorFilter}>
+                    <option value=""></option>
+                    {#each Object.keys(operators) as operator}
+                        <option value={operator}>{operator}</option>
+                    {/each}
+                </select>
             </div>
-        {/if}
+            <div class="flex flex-row items-center w-full">
+                <label for="stance">Stance</label>
+                <select id="stance" class="ml-4 dark:bg-gray-800 w-full" bind:value={stanceFilter}>
+                    <option value=""></option>
+                    {#each [...new Set(data.stances.filter(st => st.indicator !== null).map(st => st.indicator))].sort(collator.compare) as stance}
+                        <option value={stance}>{stance}</option>
+                    {/each}
+                </select>
+            </div>
+        </div>
+        <!-- Filter by stop -->
         <div class="flex flex-col sm:flex-row gap-x-4 w-full">
             <div class="flex flex-row items-center w-full gap-x-4">
                 <label for="stop" class="whitespace-nowrap">Stops at</label>
@@ -199,9 +233,10 @@
                         <Fa icon={faXmark} class="inline-block" />
                     </div>
                 {:else}
-                    <input id="stop" class="bg-white dark:bg-gray-800 w-full" use:floatingRef on:input={onDestSearch} bind:value={destInput}>
+                    <input id="stop" class="bg-white dark:bg-gray-800 w-full" use:floatingRef on:input={debounce(onDestSearch, 200)} bind:value={destInput}>
                 {/if}
             </div>
+            <!-- Submit filter choice -->
             <div class="flex flex-row items-start w-fit">
                 <input type="datetime-local" bind:value={time} class="dark:bg-gray-800">
                 <a href={filterURL}>
@@ -212,20 +247,22 @@
     </div>
 
     {#if results.length > 0}
-    <div class="flex flex-col w-full absolute z-50" use:floatingContent>
-        {#each results as result}
-            <div class="flex flex-col items-start px-2 py-1 w-full cursor-pointer border dark:border-gray-500 bg-white dark:bg-slate-800 hover:bg-gray-50 dark:hover:bg-slate-900" on:click={() => bindDestination(result)}>
-                <div>{result.name}</div>
-                <div class="text-xs">{result.parent}</div>
-            </div>
-        {/each}
-    </div>
+        <div class="flex flex-col w-full absolute z-50" use:floatingContent>
+            {#each results as result}
+                <div class="flex flex-col items-start px-2 py-1 w-full cursor-pointer border dark:border-gray-500 bg-white dark:bg-slate-800 hover:bg-gray-50 dark:hover:bg-slate-900" on:click={() => bindDestination(result)}>
+                    <div>{result.name}</div>
+                    <div class="text-xs">{result.parent}</div>
+                </div>
+            {/each}
+        </div>
     {/if}
 
-    {#each data.alerts as alert}
+    <!-- Alerts -->
+    {#each fullData.alerts as alert}
         <Alert alert={alert} />
     {/each}
 
+    <!-- Stop listings -->
     <div class="panel w-full mt-2 flex flex-col">
         {#if filteredTimes.length === 0}
             <div class="p-4">No services available at this stop.</div>
@@ -237,6 +274,8 @@
             <Service service={filteredTimes[filteredTimes.length - 1]} />
         {/if}
     </div>
+
+    {/await}
 </div>
 
 <svelte:head>

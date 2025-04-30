@@ -6,6 +6,7 @@
     import {starredStops} from "../stores";
     import {browser} from "$app/environment";
     import {goto} from "$app/navigation";
+    import debounce from "debounce";
 
     let input = ""
     let results: SearchResult[] = []
@@ -54,7 +55,7 @@
         <form on:submit|preventDefault={onSubmit}>
             <label class="lead dark:text-gray-100 w-full" for="input-from">Where are you travelling from?</label>
             <div class="relative mt-4">
-                <input required bind:value={input} on:input={onInput} type="text" autocomplete="street-address" spellcheck="false" class="w-full p-4 bg-gray-50/75 dark:bg-slate-900/75" placeholder="Search for a location..." id="input-from">
+                <input required bind:value={input} on:input={debounce(onInput, 200)} type="text" autocomplete="street-address" spellcheck="false" class="w-full p-4 bg-gray-50/75 dark:bg-slate-900/75" placeholder="Search for a location..." id="input-from">
                 <button class="absolute right-4 top-[calc(1rem+1px)]" class:hidden={!browser || !navigator?.geolocation}
                         on:click={onGeolocate} title="Search by current location">
                     <Fa icon={faLocationCrosshairs} size="lg" class="hover:text-amber-500" style="font-size: 1.5em;"></Fa>

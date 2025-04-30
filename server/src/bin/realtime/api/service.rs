@@ -437,7 +437,7 @@ pub struct ScheduledTime {
     dep: DateTime<Utc>
 }
 
-#[derive(Serialize, Clone)]
+#[derive(Serialize, Clone, Eq, PartialEq, Hash)]
 pub struct StopAlert {
     pub(crate) header: Option<String>,
     pub(crate) description: Option<String>,
