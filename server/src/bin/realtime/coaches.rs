@@ -10,6 +10,7 @@ use tokio::sync::mpsc::Sender;
 use tokio::time;
 use regex::Regex;
 use serde::{Deserialize};
+use log::{debug, info, error};
 use BusBoardsServer::config::BBConfig;
 use crate::db::{CoachRoute, DBPool, get_coach_routes, get_coach_trip, get_line_segments};
 use crate::GTFSResponder::{COACHES};
@@ -23,7 +24,7 @@ pub async fn coaches_listener(tx: Sender<GTFSResponse>, config: Arc<BBConfig>, d
     // Get API info
     let api_option = get_api_info().await;
     if api_option.is_none() {
-        eprintln!("Could not either download or parse coach API data.");
+        error!("Could not either download or parse coach API data.");
         return;
     }
     let (api_url, api_key) = api_option.unwrap();
@@ -42,7 +43,7 @@ pub async fn coaches_listener(tx: Sender<GTFSResponse>, config: Arc<BBConfig>, d
             .collect::<Vec<FeedEntity>>().await;
 
         // Publish to main feed
-        tx.send((COACHES, routes, vec![])).await.unwrap_or_else(|err| eprintln!("{}", err));
+        tx.send((COACHES, routes, vec![])).await.unwrap_or_else(|err| error!("Could not publish to main feed: {}", err));
 
         // Wait for next loop
         time::sleep(time::Duration::from_secs(60)).await
@@ -53,9 +54,12 @@ pub async fn coaches_listener(tx: Sender<GTFSResponse>, config: Arc<BBConfig>, d
 async fn get_routes(db: &Arc<DBPool>, route: CoachRoute, api_url: &str, api_key: &str, time_from: i64, time_to: i64) -> Vec<FeedEntity> {
     match get_url::<MegabusVehicles, _, _>(format!("{api_url}/public-origin-departures-by-route-v1/{}/{time_from}/{time_to}?api_key={api_key}", route.route_short_name), reqwest::Response::json).await {
         Ok(vehicles) => {
+            if vehicles.routes.len() == 0 {
+                return vec![]
+            }
             // Get each stance's coordinates on the route
             let points = get_line_segments(db, route.route_id.to_string());
-            return vehicles.routes[0].chronological_departures.iter()
+            vehicles.routes[0].chronological_departures.iter()
                 .filter_map(|dep| {
                     // Filter out inactive journeys - S/E implies a positioning run (not an in-service journey)
                     return if dep.trip.id.ends_with('S') || dep.trip.id.ends_with('E')
@@ -114,10 +118,10 @@ async fn get_routes(db: &Arc<DBPool>, route: CoachRoute, api_url: &str, api_key:
                 .collect_vec()
         }
         Err(err) => {
-            eprintln!("{}", err);
+            error!("Error parsing route {} from {time_from} to {time_to}: {}", route.route_short_name, err);
+            vec![]
         }
     }
-    vec![]
 }
 
 /// Get API url/key from configuration
@@ -140,6 +144,7 @@ async fn get_api_info() -> Option<(String, String)> {
 pub struct MegabusVehicles {
     code:    usize,
     message: String,
+    #[serde(default)]
     routes:  Vec<MegabusRoute>,
 }
 

@@ -19,7 +19,7 @@ use reqwest::{IntoUrl, StatusCode};
 use serde::de;
 use serde::de::{SeqAccess, Visitor};
 use tokio::time::sleep;
-use rand::{random, Rng, thread_rng};
+use rand::{Rng, thread_rng};
 
 use crate::util::URLParseError::{DownloadError, ParsingError, StatusCodeError};
 
@@ -39,7 +39,7 @@ pub enum URLParseError {
 
 impl Display for URLParseError {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        return match self {
+        match self {
             DownloadError(err) => {f.write_fmt(format_args!("Download error: {err}"))}
             StatusCodeError(code) => {f.write_fmt(format_args!("Status code not success: {code}"))}
             ParsingError(err) => {f.write_fmt(format_args!("Parsing error: {err}"))}
@@ -78,11 +78,11 @@ pub async fn get_url<T, U: IntoUrl, Fn: Future<Output=reqwest::Result<T>>+Sized>
 }
 
 pub fn gtfs_time(time: &DateTime<Utc>) -> String {
-    return time.format("%H:%M:%S").to_string();
+    time.format("%H:%M:%S").to_string()
 }
 
 pub fn gtfs_date(date: &DateTime<Utc>) -> String {
-    return date.format("%Y%m%d").to_string();
+    date.format("%Y%m%d").to_string()
 }
 
 pub fn relative_to(date: &DateTime<Utc>, time: &DateTime<Utc>) -> DateTime<Utc> {

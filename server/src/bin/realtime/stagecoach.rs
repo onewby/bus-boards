@@ -23,7 +23,7 @@ pub async fn stagecoach_listener(tx: Sender<GTFSResponse>, config: Arc<BBConfig>
             .then(|(c, gtfs)| get_region(c.as_str(), gtfs.as_str(), &db)).collect::<Vec<Vec<FeedEntity>>>().await.concat();
 
         // Send to main feed
-        tx.send((STAGECOACH, entities, vec![])).await.unwrap_or_else(|err| eprintln!("{}", err));
+        tx.send((STAGECOACH, entities, vec![])).await.unwrap_or_else(|err| error!("Could not publish to main feed: {}", err));
         // Wait for next loop
         time::sleep(time::Duration::from_secs(60)).await
     }
@@ -90,13 +90,13 @@ pub async fn get_region(region: &str, gtfs: &str, db: &Arc<DBPool>) -> Vec<FeedE
                             }).collect_vec()
                     }
                     Err(err) => {
-                        eprintln!("Could not decode Stagecoach data for {region}. {err}");
+                        error!("Could not decode Stagecoach data for {region}. {err}");
                     }
                 }
             }
         }
         Err(err) => {
-            eprintln!("Could not fetch Stagecoach data for {region}. {err}");
+            error!("Could not fetch Stagecoach data for {region}. {err}");
         }
     }
     vec![]

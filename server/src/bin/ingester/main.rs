@@ -5,27 +5,24 @@ mod traveline;
 mod localities;
 mod grouping;
 mod locality_changes;
-mod flix;
+mod gtfs_stops;
 mod linking;
+
 
 use std::collections::HashMap;
 use std::error::Error;
-
-
 use std::string::ToString;
 use std::fs::remove_file;
 
-
 use rusqlite::Connection;
 
-
 use crate::cleanup::cleanup;
-use crate::flix::map_flix_stops;
+use crate::gtfs_stops::map_external_gtfs_stops;
 use crate::grouping::group_stances;
 use crate::gtfs::process_source;
 use crate::linking::link_trips;
 use crate::localities::{insert_localities, insert_stops};
-use crate::sources::{FLIX_SOURCE, SOURCES};
+use crate::sources::{StopAddType, SOURCES};
 use crate::traveline::download_noc;
 
 const DEFAULT_DB_PATH: &str = "stops.sqlite";
@@ -37,7 +34,7 @@ fn main() {
     let _ = remove_file(db_path.as_str());
     let _ = remove_file(format!("{db_path}-shm"));
     let _ = remove_file(format!("{db_path}-wal"));
-
+    
     group_stances().expect("Stance grouping error");
 
     println!("Opening database");
@@ -49,11 +46,14 @@ fn main() {
     
     let no_overrides = HashMap::new();
     for source in SOURCES {
-        process_source(&mut connection, &source, &no_overrides).expect("Download error");
+        if source.add_stops == StopAddType::None {
+            process_source(&mut connection, &source, &no_overrides).expect("Download error");
+        } else {
+            let mut stop_overrides = HashMap::new();
+            stop_overrides.insert("stop_id".to_string(), map_external_gtfs_stops(&mut connection, db_path.as_str(), source).expect("Stop mapping error"));
+            process_source(&mut connection, &source, &stop_overrides).expect("Download error");
+        }
     }
-    let mut flix_overrides = HashMap::new();
-    flix_overrides.insert("stop_id".to_string(), map_flix_stops(&mut connection, db_path.as_str()).expect("Flix mapping error"));
-    process_source(&mut connection, &FLIX_SOURCE, &flix_overrides).expect("Download error");
     
     create_indexes(&mut connection).expect("Index creation error");
     cleanup(&mut connection).expect("Cleanup error");

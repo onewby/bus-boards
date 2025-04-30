@@ -11,7 +11,7 @@ pub const LOCALITY_CHANGES: [(&str, &str, &str, Option<&str>); 10] = [
     ("E0057149", "Rail Station", "N0077769", Some("Bournemouth"))
 ];
 
-pub const MANUAL_RENAMES: [(&str, &str, &str); 66] = [
+pub const MANUAL_RENAMES: [(&str, &str, &str); 67] = [
     ("N0078622", "^Edinburgh Airport \\(Edinburgh Trams\\)$", "Airport"),
     ("ES001737", "^Haymarket \\(Edinburgh Trams\\)$", "Rail Station"),
     ("ES001737", "^Haymarket Station$", "Rail Station"),
@@ -42,6 +42,7 @@ pub const MANUAL_RENAMES: [(&str, &str, &str); 66] = [
     ("E0030375", "^Meadowhall Interchange \\(S Yorks Supertram\\)$", "Meadowhall Interchange"),
     ("N0077854", "^Metrocentre Rail Station$", "Metrocentre Interchange"),
     ("N0077039", "^Leeds BS Ent Real Time Tracking$", "Bus Station"),
+    ("N0077039", "^Leeds Bus Station Entrance$", "Bus Station"),
     ("N0077039", "^Station A$", "Rail Station A"),
     ("N0077039", "^Station B$", "Rail Station B"),
     ("N0077039", "^Station C$", "Rail Station C"),
@@ -50,7 +51,7 @@ pub const MANUAL_RENAMES: [(&str, &str, &str); 66] = [
     ("N0077039", "^Station F$", "Rail Station F"),
     ("N0077039", "^Leeds Station Interchange$", "Rail Station"),
     ("E0039258", "^Bus Station Express Lounge$", "Bus Station"),
-    ("E0033527", "^Bus Station stand D$", "Seacroft Bus Station"),
+    ("E0033527", "^Bus Station stand D$", "Bus Station"),
     ("N0075057", "^Rail Station$", "Manchester Airport Rail Station"),
     ("N0075057", "^Manchester Airport The Station$", "Manchester Airport Rail Station"),
     ("N0075057", "Manchester Airport The Station", "Rail Station"),

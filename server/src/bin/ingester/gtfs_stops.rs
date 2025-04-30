@@ -18,12 +18,13 @@ use serde::{Deserialize, Serialize};
 
 use BusBoardsServer::download_if_old;
 use crate::open_db;
+use crate::sources::{Source, StopAddType};
 
-pub fn map_flix_stops(db: &mut Connection, db_path: &str) -> Result<HashMap<String, String>, Box<dyn Error>> {
-    println!("Mapping Flix stops");
-    download_if_old("http://gtfs.gis.flix.tech/gtfs_generic_eu.zip", "gtfs/flix.zip")?;
+pub fn map_external_gtfs_stops(db: &mut Connection, db_path: &str, source: &Source) -> Result<HashMap<String, String>, Box<dyn Error>> {
+    println!("Mapping stops for {}", source.name);
+    download_if_old(source.url, source.path)?;
 
-    let zip_file = File::open("gtfs/flix.zip")?;
+    let zip_file = File::open(source.path)?;
     let mapping = unsafe { Mmap::map(&zip_file)? };
     let archive = ZipArchive::new(&mapping)?;
     let dir = as_tree(archive.entries())?;
@@ -35,11 +36,15 @@ pub fn map_flix_stops(db: &mut Connection, db_path: &str) -> Result<HashMap<Stri
     let map_mutex = Mutex::new(map);
     db.execute("INSERT OR IGNORE INTO localities (code, name, qualifier, parent, lat, long) VALUES ('Europe', 'Europe', NULL, NULL, 50.0, 9.0)", [])?;
 
-    let stops = rdr.deserialize().map(|r: Result<FlixGTFSStop, _>| r.unwrap()).collect_vec();
+    let stops = rdr.deserialize().map(|r: Result<GTFSStop, _>| r.unwrap()).collect_vec();
     stops.par_iter().for_each(|record| {
         let mut db = open_db(db_path).unwrap();
         add_distance_function(&mut db).expect("Error adding distance function");
-        if let Ok((stop, stance, indicator)) = get_nearest_stop(&mut db, record.stop_lat, record.stop_lon, record.stop_name.as_str()) {
+        if stance_exists(&mut db, record.stop_id.as_str()) {
+            return;
+        }
+        
+        if let (StopAddType::MatchStopBeforeAdd, Ok((stop, stance, indicator))) = (&source.add_stops, get_nearest_stop(&mut db, record.stop_lat, record.stop_lon)) {
             let indicator = indicator.unwrap_or("".to_string());
             if indicator.eq_ignore_ascii_case("at") {
                 // if this stop is called at - use this stop
@@ -103,12 +108,16 @@ pub fn map_flix_stops(db: &mut Connection, db_path: &str) -> Result<HashMap<Stri
 // https://gist.github.com/graydon/11198540
 const UK_LAT_LON: (f64, f64, f64, f64) = (-7.57216793459, 49.959999905, 1.68153079591, 58.6350001085);
 
-fn get_nearest_stop(db: &mut Connection, lat: f64, lon: f64, stop_name: &str) -> rusqlite::Result<(u64, String, Option<String>)> {
+fn get_nearest_stop(db: &mut Connection, lat: f64, lon: f64) -> rusqlite::Result<(u64, String, Option<String>)> {
     if lat <= UK_LAT_LON.1 || lat >= UK_LAT_LON.3 || lon <= UK_LAT_LON.0 || lon >= UK_LAT_LON.2 {
         return Err(QueryReturnedNoRows);
     }
     db.query_row("SELECT stop,code,indicator,min(geo_distance(lat, long, ?, ?)) as dist FROM stances GROUP BY stop HAVING dist < 50 ORDER BY dist LIMIT 1",
    [lat, lon], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
+}
+
+fn stance_exists(db: &mut Connection, stop_id: &str) -> bool {
+    db.query_row("SELECT 1 FROM stances WHERE code=?", [stop_id], |row| row.get::<_, u64>(0)).is_ok()
 }
 
 fn add_distance_function(db: &mut Connection) -> rusqlite::Result<()> {
@@ -118,15 +127,9 @@ fn add_distance_function(db: &mut Connection) -> rusqlite::Result<()> {
 }
 
 #[derive(Serialize, Deserialize)]
-struct FlixGTFSStop {
+struct GTFSStop {
     stop_id: String,
     stop_name: String,
     stop_lat: f64,
-    stop_lon: f64,
-    stop_timezone: String
-}
-
-struct StopResult {
-    stop: String,
-    distance: String
+    stop_lon: f64
 }

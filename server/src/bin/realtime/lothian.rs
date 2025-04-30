@@ -57,7 +57,7 @@ pub async fn lothian_listener(tx: Sender<GTFSResponse>, config: Arc<BBConfig>, d
             .collect::<Vec<FeedEntity>>().await;
 
         // Publish to main feed
-        tx.send((LOTHIAN, entities, vec![])).await.unwrap_or_else(|err| eprintln!("{}", err));
+        tx.send((LOTHIAN, entities, vec![])).await.unwrap_or_else(|err| error!("Could not publish to main feed: {}", err));
 
         // Wait for next fetch
         time::sleep(Duration::from_secs(60)).await
@@ -127,7 +127,7 @@ async fn process_pattern(route: String, pattern: String, http: &Client, db: &Arc
             }
         }
         Err(err) => {
-            error!("{}", err);
+            error!("Lothian processing error for pattern {pattern}: {}", err);
             vec![]
         }
     };
@@ -183,7 +183,7 @@ pub async fn update_route_data(db: &Arc<DBPool>, config: &Arc<BBConfig>) {
                 routes.groups.iter().map(|group| process_group(db, config, group))
             ).await;
         }
-        Err(e) => { error!("{}", e) }
+        Err(e) => { error!("Could not get Lothian routes: {}", e) }
     };
 }
 
@@ -207,7 +207,7 @@ pub async fn process_route(db: &Arc<DBPool>, (route, gtfs_route_id): (&LothianRo
                 }
             }
         }
-        Err(e) => { error!("{}", e); }
+        Err(e) => { error!("Could not process Lothian route {}: {}", route.name, e); }
     };
 }
 
@@ -219,7 +219,7 @@ pub async fn process_route_pattern(db: &Arc<DBPool>, gtfs_route_id: &str, patter
         .then(|date| get_url_with_date(pattern, date))
         .filter_map(|r| async move {
             if r.is_err() {
-                error!("{gtfs_route_id}, {pattern} - {}", r.as_ref().unwrap_err());
+                error!("Error processing Lothian route pattern {gtfs_route_id}, {pattern} - {}", r.as_ref().unwrap_err());
             }
             r.map(|(date, timetables)| {
                 let gtfs_trips = get_lothian_timetabled_trips(db, &date, gtfs_route_id);

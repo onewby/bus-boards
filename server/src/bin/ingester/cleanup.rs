@@ -91,6 +91,7 @@ fn patch_bods(conn: &mut Connection) -> rusqlite::Result<usize> {
                WHEN original LIKE new_name || ' ' || new_name || ' Hospital%' THEN substr(original, length(new_name) + 2)
                WHEN original LIKE '%Hospital%' THEN original
                WHEN original LIKE new_name || '%' THEN new_name
+               WHEN original LIKE 'Bus Stn%' OR original LIKE 'Bus Station%' OR original LIKE 'Railway Station%' THEN new_name
                ELSE original
             END)
              FROM (SELECT trips.trip_id, coalesce(trip_headsign, '') as original, dest_loc.name AS new_name, dest_loc.code AS dest_loc, dest_stop.name AS dest_stop_name, origin_loc.code AS origin_loc FROM trips

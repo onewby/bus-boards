@@ -49,7 +49,7 @@ pub async fn passenger_listener(tx: Sender<GTFSResponse>, config: Arc<BBConfig>,
         let entities = entities_stream.collect::<Vec<Vec<FeedEntity>>>().await.concat();
 
         // Publish to main feed
-        tx.send((PASSENGER, entities, vec![])).await.unwrap_or_else(|err| error!("{}", err));
+        tx.send((PASSENGER, entities, vec![])).await.unwrap_or_else(|err| error!("Could not publish to main feed: {}", err));
 
         // Wait for next loop
         time::sleep(time::Duration::from_secs(60)).await
@@ -76,7 +76,7 @@ pub async fn get_source_vehicles((url, operators): (&SourceURL, &Map<OperatorNam
                 .flat_map(|source| process_line_vehicles(db, operators, source.0, source.1))
                 .collect()
         } else {
-            error!("{}", vehicles_result.err().unwrap());
+            error!("Error getting vehicles for {url}: {}", vehicles_result.err().unwrap());
         }
     }
     vec![]
@@ -139,7 +139,7 @@ fn to_feed_entity(trip: &TripInfo, vehicle: &VehiclesFeature, candidates: &[Trip
                 VehicleDescriptor {
                     id: Some(vehicle.properties.vehicle.clone()),
                     label: meta.name.clone(),
-                    license_plate: Some(meta.number_plate.clone()),
+                    license_plate: meta.number_plate.clone(),
                     wheelchair_accessible: meta.wheelchair_capacity.map(|num| num.max(1) as i32),
                 }
             }),
@@ -167,7 +167,7 @@ fn to_feed_entity(trip: &TripInfo, vehicle: &VehiclesFeature, candidates: &[Trip
 /// Get disruptions for a given operator feed
 pub async fn get_source_alerts((url, operators): (&SourceURL, &Map<OperatorName, PassengerSource>), alerts_cache: &Mutex<HashMap<SourceURL, Vec<Alert>>>, db: &Arc<DBPool>) -> Vec<Alert> {
     if let Ok(disruptions_resp) = reqwest::get(format!("{url}/network/disruptions")).await && disruptions_resp.status().is_success() {
-        let disruptions: PassengerDisruptions = disruptions_resp.json().await.expect(format!("{url} disruptions").as_str());
+        let disruptions: PassengerDisruptions = disruptions_resp.json().await.expect(format!("{url} disruptions error").as_str());
         let alerts = disruptions.embedded.alert.iter().map(|alert| {
             Alert {
                 active_period: alert.active_periods.iter().map(|active_period| {
@@ -409,12 +409,12 @@ pub struct VehiclesProperties {
 
 #[derive(Serialize, Deserialize)]
 pub struct VehiclesMeta {
-    fleet_number: String,
+    fleet_number: Option<String>,
     low_emission_engine: Option<bool>,
     low_floor: Option<bool>,
-    make: String,
-    model: String,
-    number_plate: String,
+    make: Option<String>,
+    model: Option<String>,
+    number_plate: Option<String>,
     payments_contactless: Option<bool>,
     tenant: Option<String>,
     #[serde(rename = "type")]
