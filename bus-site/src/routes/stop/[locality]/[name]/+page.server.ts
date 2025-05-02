@@ -8,8 +8,8 @@ export const ssr = false;
 export const load: PageServerLoad = async (req) => {
     // Loads stop/locality name and stance info, streams full stop info after
     return {
-        ...await getBasicStopInfo(req.params.locality, req.params.name),
-        full: getFullData(req)
+        full: getFullData(req).catch(() => ({} as StopData)),
+        ...await getBasicStopInfo(req.params.locality, req.params.name).catch(() => ({} as BasicStopData))
     }
 }
 

@@ -275,6 +275,9 @@
         {/if}
     </div>
 
+    {:catch error}
+        <p>There's been an error. Please refresh your page and try again!</p>
+        <p class="text-sm">{error.message}</p>
     {/await}
 </div>
 
