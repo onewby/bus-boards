@@ -4,8 +4,12 @@
     import L, {GeoJSONOptions, Map} from 'leaflet';
     import {GeoJsonObject} from 'geojson';
 
-    export let data: GeoJsonObject = {type: "FeatureCollection"}
-    export let options: GeoJSONOptions = {}
+    interface Props {
+        data?: GeoJsonObject;
+        options?: GeoJSONOptions;
+    }
+
+    let { data = {type: "FeatureCollection"}, options = {} }: Props = $props();
 
     const { getMap } = getContext<{ getMap: () => L.Map }>('leaflet_map')
     const map: Map = getMap()

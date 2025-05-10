@@ -48,7 +48,7 @@ env_logger = "0.11.3"
 rustls = { version = "0.21.12", features = ["dangerous_configuration"] }
 spex = "0.2.1"
 tempfile = "3.10.1"
-polars = { version = "0.41.3", features = ["lazy", "strings", "object", "dtype-struct", "regex", "performant", "is_in", "is_unique", "partition_by"] }
+polars = { version = "0.41.3", features = ["lazy", "strings", "object", "dtype-struct", "regex", "performant", "is_in", "is_unique", "partition_by", "cse"] }
 prost = "0.12.3"
 lonlat_bng = { version = "0.6.33", git = "https://github.com/urschrei/lonlat_bng.git" }
 rand = "0.8.5"
@@ -65,6 +65,9 @@ serde_path_to_error = "0.1.17"
 iso8601-duration = { version = "0.2.0", features = ["chrono", "serde"] }
 quick-xml = { version = "0.37.4", features = ["async-tokio", "serialize"] }
 
+[features]
+nightly = ["polars/nightly"]
+
 [build-dependencies]
 #prost-build = "0.12.3"
 
@@ -74,3 +77,7 @@ codegen-units = 1
 lto = "fat"
 panic = "abort"
 #debug = true
+
+[profile.profiling]
+inherits = "release"
+debug = true

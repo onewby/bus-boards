@@ -1,20 +1,20 @@
 <script lang="ts">
     import Header from "../header.svelte";
-    import {page} from "$app/stores";
-    import InfiniteLoading from "svelte-infinite-loading";
+    import { page } from '$app/state';
+    import InfiniteLoading, {type InfiniteEvent} from "svelte-infinite-loading";
     import type {SearchResult} from "../../api.type";
     import SearchSuggestion from "../search_suggestion.svelte";
 
-    let results: SearchResult[] = []
+    let results: SearchResult[] = $state([])
     let pageNum = 0
     enum QueryType { NONE, QUERY, LOCATION }
-    let queryType = $page.url.searchParams.get("query") ? QueryType.QUERY :
-        $page.url.searchParams.get("lat") && $page.url.searchParams.get("lon") ? QueryType.LOCATION : QueryType.NONE
+    let queryType = page.url.searchParams.get("query") ? QueryType.QUERY :
+        page.url.searchParams.get("lat") && page.url.searchParams.get("lon") ? QueryType.LOCATION : QueryType.NONE
 
-    async function handle({detail: {loaded, complete, error}}) {
-        const query = $page.url.searchParams.get("query")
-        const lat = $page.url.searchParams.get("lat")
-        const lon = $page.url.searchParams.get("lon")
+    async function handle({detail: {loaded, complete, error}}: InfiniteEvent) {
+        const query = page.url.searchParams.get("query")
+        const lat = page.url.searchParams.get("lat")
+        const lon = page.url.searchParams.get("lon")
         const resp = await fetch(
             queryType === QueryType.QUERY ? `/api/search?query=${query}&page=${pageNum}`
                 : `/api/search?lat=${lat}&lon=${lon}&page=${pageNum}`)
@@ -33,7 +33,7 @@
         }
     }
 
-    function infiniteHandler(event) {
+    function infiniteHandler(event: InfiniteEvent) {
         handle(event)
     }
 </script>
@@ -41,8 +41,8 @@
 <div class="w-full h-fit flex flex-col justify-start items-center max-w-full pt-4 pb-8 dark:text-white">
     <Header>
         <div class="text-2xl">
-            Search {#if queryType === QueryType.QUERY} for <span class="font-semibold">{$page.url.searchParams.get("query")}</span>
-            {:else if queryType === QueryType.LOCATION} for location <span class="font-semibold">{$page.url.searchParams.get("lat")}, {$page.url.searchParams.get("lon")}</span>{/if}
+            Search {#if queryType === QueryType.QUERY} for <span class="font-semibold">{page.url.searchParams.get("query")}</span>
+            {:else if queryType === QueryType.LOCATION} for location <span class="font-semibold">{page.url.searchParams.get("lat")}, {page.url.searchParams.get("lon")}</span>{/if}
         </div>
     </Header>
 

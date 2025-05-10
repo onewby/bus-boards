@@ -3,8 +3,12 @@
     import Fa from "svelte-fa";
     import type {StopAlert} from "../api.type.ts";
 
-    export let alert: StopAlert
-    export let major = false
+    interface Props {
+        alert: StopAlert;
+        major?: boolean;
+    }
+
+    let { alert, major = false }: Props = $props();
 </script>
 
 <a class="panel w-full pl-8 pr-8 pt-4 pb-4 flex flex-row items-center mt-2 text-left" href={alert.url}>

@@ -3,9 +3,13 @@
 
     type ConnectionType = "from" | "to"
 
-    export let service: LinkedService
-    export let type: ConnectionType
-    export let on_previous = false;
+    interface Props {
+        service: LinkedService;
+        type: ConnectionType;
+        on_previous?: boolean;
+    }
+
+    let { service, type, on_previous = false }: Props = $props();
 </script>
 
 <a data-sveltekit-reload href="/service/bus/{service.trip_id}" class="w-full relative">

@@ -82,7 +82,7 @@ export type ServiceBranch = {
         },
         pct?: number,
         on_previous: boolean,
-        vehicle: {
+        vehicle?: {
             license?: string,
             name?: string,
             occupancy_pct?: number

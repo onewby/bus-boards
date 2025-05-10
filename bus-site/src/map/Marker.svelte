@@ -2,9 +2,13 @@
   import { getContext } from 'svelte'
   import L from 'leaflet'
 
-  export let lat: number = 0
-  export let lon: number = 0
-  export let popup: string | undefined = undefined
+  interface Props {
+    lat?: number;
+    lon?: number;
+    popup?: string | undefined;
+  }
+
+  let { lat = 0, lon = 0, popup = undefined }: Props = $props();
 
   const { getMap } = getContext<{ getMap: () => L.Map }>('leaflet_map')
   const map = getMap()

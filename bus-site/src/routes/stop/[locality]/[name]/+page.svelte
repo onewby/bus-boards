@@ -1,11 +1,11 @@
 <script lang="ts">
     import Header from "../../../header.svelte";
     import Service from "./service.svelte";
-    import { page } from '$app/stores';
+    import { page } from '$app/state';
 
     import Fa from "svelte-fa";
-    import type {SearchResult, StopData, StopDeparture} from "../../../../api.type";
-    import {faExclamationTriangle, faMap, faXmark, faSpinner} from "@fortawesome/free-solid-svg-icons";
+    import type {SearchResult, StopDeparture} from "../../../../api.type";
+    import {faMap, faXmark, faSpinner} from "@fortawesome/free-solid-svg-icons";
     import {slide} from "svelte/transition";
 
     import Map from "../../../../map/Map.svelte";
@@ -21,26 +21,25 @@
     import type {GeoJsonObject} from "geojson";
     import debounce from "debounce";
 
-    // let departures = true
-    export let data;
+
+    let { data } = $props();
 
     // Current time
     let ct = new Date(Date.now())
     // Format day/month as two-digit number (pad with 0 if needed)
     const dateNum = (num: number) => num.toString().padStart(2, "0")
     // Get date from search params, or use current time as a default
-    let time = $page.url.searchParams.get("date") ?? `${ct.getFullYear()}-${dateNum(ct.getMonth() + 1)}-${dateNum(ct.getDate())}T${dateNum(ct.getHours())}:${dateNum(ct.getMinutes())}`
+    let time = $state(page.url.searchParams.get("date") ?? `${ct.getFullYear()}-${dateNum(ct.getMonth() + 1)}-${dateNum(ct.getDate())}T${dateNum(ct.getHours())}:${dateNum(ct.getMinutes())}`)
 
     // For time formatting
     let collator = new Intl.Collator([], {numeric: true, sensitivity: 'base'})
 
     // Filtering
 
-    let operatorFilter = $page.url.searchParams.get("operator") ?? ""
-    let stanceFilter = $page.url.searchParams.get("stance") ?? ""
+    let operatorFilter = $state(page.url.searchParams.get("operator") ?? "")
+    let stanceFilter = $state(page.url.searchParams.get("stance") ?? "")
 
-    let filterURL = ""
-    $: {
+    let filterURL = $derived.by(() => {
         let params = new URLSearchParams()
         params.set("date", time)
         if(operatorFilter !== "") params.set("operator", operatorFilter)
@@ -49,8 +48,8 @@
             params.set("filterLoc", data?.filter.locality)
             params.set("filterName", data?.filter.name)
         }
-        filterURL = `/stop/${$page.params.locality}/${$page.params.name}?${params.toString()}`
-    }
+        return `/stop/${page.params.locality}/${page.params.name}?${params.toString()}`
+    });
 
     function getOperators(times: StopDeparture[]) {
         let operators: Record<string, Set<string>> = {}
@@ -69,12 +68,12 @@
 
     // Stance map
 
-    let showMap = false;
-    let zoom = 20
+    let showMap = $state(false);
+    let zoom = $state(20)
 
-    $: geoData = {
+    let geoData = $derived({
         "type": "FeatureCollection",
-        "features": data?.stances.map(stance => ({
+        "features": data?.stances?.map(stance => ({
             "type": "Feature",
             "properties": {
                 "street": stance.street,
@@ -84,8 +83,8 @@
                 "coordinates": [stance.long, stance.lat],
                 "type": "Point"
             }
-        }))
-    } as GeoJsonObject
+        })) ?? []
+    } as GeoJsonObject)
 
     const popupOptions = {
         maxWidth: 108,
@@ -127,8 +126,8 @@
         ]
     });
 
-    let destInput = ""
-    let results: SearchResult[] = []
+    let destInput = $state("")
+    let results: SearchResult[] = $state([])
 
     type OnInputEvent = (Event & {
         currentTarget: EventTarget & HTMLInputElement;
@@ -159,14 +158,21 @@
     }
 </script>
 
+{#snippet errorMessage(err: Error)}
+    <div class="panel w-full mt-2 flex flex-col p-4">
+        <p>There's been an error. Please refresh your page and try again!</p>
+        <p class="text-sm">{err.message}</p>
+    </div>
+{/snippet}
+
 <div class="w-full h-fit flex flex-col justify-start items-center text-center max-w-full pt-4 pb-8 dark:text-white">
     <Header>
-        <div>{#if data.stop.locality_name}<a href="/locality/{data.stop.locality_code}" class="hover:underline">{data.stop.locality_name}</a> › {/if}<span class="font-semibold">{data.stop.name}</span></div>
-        <slot slot="buttons">
-            <div class="border-l-black border-l cursor-pointer pl-4 pr-4 pt-2 pb-2 hover:bg-amber-700/5 dark:hover:bg-gray-500/20" on:click={() => showMap = !showMap}>
+        <div>{#if data.stop?.locality_name}<a href="/locality/{data.stop?.locality_code}" class="hover:underline">{data.stop.locality_name}</a> ›{" "}{/if}<span class="font-semibold">{data.stop?.name}</span></div>
+        {#snippet buttons()}
+            <div role="button" tabindex="0" class="border-l-black border-l cursor-pointer pl-4 pr-4 pt-2 pb-2 hover:bg-amber-700/5 dark:hover:bg-gray-500/20" onclick={() => showMap = !showMap}>
                 <Fa icon={faMap} class="inline-block" />
             </div>
-        </slot>
+        {/snippet}
     </Header>
 
     {#if browser && showMap && data}
@@ -188,6 +194,8 @@
     </div>
 
     {:then fullData}
+
+    {#if fullData.times}
 
     {@const operators = getOperators(fullData.times)}
     {@const filteredTimes = getFilteredTimes(fullData.times, operators)}
@@ -225,7 +233,7 @@
             <div class="flex flex-row items-center w-full gap-x-4">
                 <label for="stop" class="whitespace-nowrap">Stops at</label>
                 {#if data.filter}
-                    <div class="flex flex-row items-center px-2 py-1 w-full cursor-pointer border border-gray-500 bg-white dark:bg-slate-800 hover:bg-gray-50 dark:hover:bg-slate-900" on:click={clearDestination}>
+                    <div class="flex flex-row items-center px-2 py-1 w-full cursor-pointer border border-gray-500 bg-white dark:bg-slate-800 hover:bg-gray-50 dark:hover:bg-slate-900" onclick={clearDestination}>
                         <div class="flex flex-col w-full items-start">
                             <div>{data.filter.name}</div>
                             <div class="text-xs">{data.filter.parent}</div>
@@ -233,7 +241,7 @@
                         <Fa icon={faXmark} class="inline-block" />
                     </div>
                 {:else}
-                    <input id="stop" class="bg-white dark:bg-gray-800 w-full" use:floatingRef on:input={debounce(onDestSearch, 200)} bind:value={destInput}>
+                    <input id="stop" class="bg-white dark:bg-gray-800 w-full" use:floatingRef oninput={debounce(onDestSearch, 200)} bind:value={destInput}>
                 {/if}
             </div>
             <!-- Submit filter choice -->
@@ -249,7 +257,7 @@
     {#if results.length > 0}
         <div class="flex flex-col w-full absolute z-50" use:floatingContent>
             {#each results as result}
-                <div class="flex flex-col items-start px-2 py-1 w-full cursor-pointer border dark:border-gray-500 bg-white dark:bg-slate-800 hover:bg-gray-50 dark:hover:bg-slate-900" on:click={() => bindDestination(result)}>
+                <div class="flex flex-col items-start px-2 py-1 w-full cursor-pointer border dark:border-gray-500 bg-white dark:bg-slate-800 hover:bg-gray-50 dark:hover:bg-slate-900" onclick={() => bindDestination(result)}>
                     <div>{result.name}</div>
                     <div class="text-xs">{result.parent}</div>
                 </div>
@@ -275,12 +283,15 @@
         {/if}
     </div>
 
+    {:else}
+        {@render errorMessage({name: "", message: "Timeout whilst fetching stop data"})}
+    {/if}
+
     {:catch error}
-        <p>There's been an error. Please refresh your page and try again!</p>
-        <p class="text-sm">{error.message}</p>
+        {@render errorMessage(error)}
     {/await}
 </div>
 
 <svelte:head>
-    <title>{data?.stop.name ?? "Stop"} - Bus Boards</title>
+    <title>{data.stop?.name ?? "Stop"} - Bus Boards</title>
 </svelte:head>

@@ -8,17 +8,18 @@
     import Tiles from "../../../map/Tiles.svelte";
     import 'leaflet/dist/leaflet.css';
     import GeoJSON from "../../../map/GeoJSON.svelte";
-    import L from "leaflet";
+    import L, {type GeoJSONOptions} from "leaflet";
     import {browser} from "$app/environment";
 
     import type {PageData} from "./$types";
+    import type {GeoJsonObject} from "geojson";
 
-    export let data: PageData
+    let { data } = $props();
 
-    let showMap = false
-    let zoom = 15
+    let showMap = $state(false)
+    let zoom = $state(15)
 
-    function childToGeoJSON(child, type) {
+    function childToGeoJSON(child: any, type: string) {
         return {
             "type": "Feature",
             "properties": {
@@ -33,11 +34,11 @@
         };
     }
 
-    $: geoData = {
+    let geoData = $derived({
         "type": "FeatureCollection",
         "features": data?.children.map(child => childToGeoJSON(child, "locality")).concat(
             data.results.map(child => childToGeoJSON(child, "stop")))
-    }
+    } as GeoJsonObject)
 
     const popupOptions = {
         maxWidth: 108,
@@ -60,21 +61,21 @@
             marker.bindPopup(`${feature.properties.type === "stop" ? "Stop" : "Locality"}<br><b><a href="/${feature.properties.type}/${feature.properties.id}">${feature.properties.name}</a></b>`, popupOptions)
             return marker
         }
-    }
+    } as GeoJSONOptions
 </script>
 
 <div class="w-full h-fit flex flex-col justify-start items-center max-w-full pt-4 pb-8 dark:text-white">
     <Header>
         <div class="text-2xl">
-            {#if data.parent.id}<a href="/locality/{data.parent.id}" class="hover:underline">{data.parent.name}</a> › {/if}<span class="font-semibold">{data.name}</span>
+            {#if data.parent.id}<a href="/locality/{data.parent.id}" class="hover:underline">{data.parent.name}</a> ›{" "}{/if}<span class="font-semibold">{data.name}</span>
         </div>
-        <slot slot="buttons">
+        {#snippet buttons()}
             {#if data.results || data.children}
-            <div class="border-l-black border-l cursor-pointer pl-4 pr-4 pt-2 pb-2 hover:bg-amber-700/5 dark:hover:bg-gray-500/20" on:click={() => showMap = !showMap}>
-                <Fa icon={faMap} class="inline-block" />
-            </div>
+                <div role="button" tabindex="0" class="border-l-black border-l cursor-pointer pl-4 pr-4 pt-2 pb-2 hover:bg-amber-700/5 dark:hover:bg-gray-500/20" onclick={() => showMap = !showMap}>
+                    <Fa icon={faMap} class="inline-block" />
+                </div>
             {/if}
-        </slot>
+        {/snippet}
     </Header>
 
     {#key data}

@@ -111,7 +111,9 @@ fn import_shapes(archive: &ZipArchive, prefix: Option<String>, db: &mut Connecti
         // add prefix to ID and encode polyline
         .map(move |(shape_id, rows)| (
             prefix.as_ref().map_or(shape_id.clone(), |prefix| format!("{}{}", prefix, shape_id)),
-            polyline::encode_coordinates(rows.map(|row| Coord {y: row.shape_pt_lat, x: row.shape_pt_lon }), 5).unwrap()
+            polyline::encode_coordinates(
+                rows.sorted_by(|r1, r2| r1.shape_pt_sequence.cmp(&r2.shape_pt_sequence))
+                    .map(|row| Coord {y: row.shape_pt_lat, x: row.shape_pt_lon }), 5).unwrap()
         ))
         .chunks(1000).into_iter()
         .for_each(|shapes_to_write| { write_shapes_to_db(db, shapes_to_write) });

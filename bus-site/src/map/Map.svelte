@@ -6,16 +6,28 @@
     getMap: () => map
   });
 
-  export let lat: number = 0
-  export let lon: number = 0
-  export let zoom: number = 5
-  export let width: string = '100%'
-  export let height: string = '100px'
+  interface Props {
+    lat?: number;
+    lon?: number;
+    zoom?: number;
+    width?: string;
+    height?: string;
+    children?: import('svelte').Snippet;
+  }
 
-  $: style = `width:${width};height:${height};`
+  let {
+    lat = 0,
+    lon = 0,
+    zoom = $bindable(5),
+    width = '100%',
+    height = '100px',
+    children
+  }: Props = $props();
 
-  let container: HTMLDivElement
-  let map: L.Map
+  let style = $derived(`width:${width};height:${height};`)
+
+  let container: HTMLDivElement = $state()
+  let map: L.Map = $state()
 
   onMount(() => {
     map = L.map(container).setView([lat, lon], zoom)
@@ -28,6 +40,6 @@
 
 <div bind:this={container} style={style}>
   {#if map}
-    <slot></slot>
+    {@render children?.()}
   {/if}
 </div>

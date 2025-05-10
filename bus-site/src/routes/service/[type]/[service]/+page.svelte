@@ -5,12 +5,12 @@
     import Connection from "./connection.svelte";
 
     import Fa from "svelte-fa";
-    import {faBus, faChevronRight, faExclamationCircle, faExclamationTriangle} from "@fortawesome/free-solid-svg-icons";
+    import {faBus, faChevronRight} from "@fortawesome/free-solid-svg-icons";
 
     import Map from "../../../../map/Map.svelte";
     import Tiles from "../../../../map/Tiles.svelte";
     import 'leaflet/dist/leaflet.css';
-    import {page} from "$app/stores";
+    import {page} from "$app/state";
     import {onDestroy, onMount} from "svelte";
     import type {GeoJSONOptions} from "leaflet";
     import GeoJSON from "../../../../map/GeoJSON.svelte";
@@ -21,28 +21,35 @@
     import Alert from "../../../Alert.svelte";
     import polyline from "google-polyline";
     import {invalidateAll} from "$app/navigation";
+    import type {GeoJsonObject} from "geojson";
 
-    export let data: PageData
-    let expand = false
-    let zoom = 15
-    
-    let b = 0
-    $: branch = data.branches[b]
-    
-    $: lon = branch.realtime?.pos?.longitude ?? branch.stops[Math.floor(branch.stops.length / 2)].long
-    $: lat = branch.realtime?.pos?.latitude ?? branch.stops[Math.floor(branch.stops.length / 2)].lat
-    $: rotation = branch.realtime?.pos ? (branch.realtime.pos.bearing + 270) % 360 : 0
-    $: flip = rotation >= 90 && rotation <= 270 ? 'scaleY(-1)' : ''
+    let { data } = $props();
 
-    $: {
-        if(branch.stops.length < 20) branch.stops.forEach(stop => stop.major = true)
-    }
+    // map controls
+    let expand = $state(false)
+    let zoom = $state(15)
+    // branch index
+    let b = $state(0)
 
-    let realtimeData: any
-    $: expand, branch.realtime, realtimeData = getRealtimePct()
+    // branch (for splitting trains)
+    let branch = $derived(data.branches[b])
+    // map positioning
+    let lon = $derived(branch.realtime?.pos?.longitude ?? branch.stops[Math.floor(branch.stops.length / 2)].long)
+    let lat = $derived(branch.realtime?.pos?.latitude ?? branch.stops[Math.floor(branch.stops.length / 2)].lat)
+    // vehicle positioning
+    let rotation = $derived(branch.realtime?.pos ? (branch.realtime.pos.bearing + 270) % 360 : 0)
+    let flip = $derived(rotation >= 90 && rotation <= 270 ? 'scaleY(-1)' : '')
+    // position the realtime dot
+    let realtimeData = $derived.by(() => {
+        branch.realtime; expand;
+        let rtp = getRealtimePct()
+        console.log(rtp)
+        return rtp
+    })
 
-    let train = $page.params.type === "train"
+    let train = page.params.type === "train"
 
+    // refresh every 30s if realtime data exists
     let tickerNumber: ReturnType<typeof setInterval>
     onMount(() => {
         if(branch.realtime) {
@@ -56,18 +63,7 @@
         if(tickerNumber) clearInterval(tickerNumber)
     })
 
-    $: geoData = {
-        "type": "FeatureCollection",
-        "features": data.branches.map(branch => ({
-            "type": "Feature",
-            "properties": {},
-            "geometry": {
-                "coordinates": polyline.decode(branch.route).map(([lat, lng]) => [lng, lat]),
-                "type": "LineString"
-            }
-        }))
-    }
-
+    // Map (Leaflet) config
     const popupOptions = {
         maxWidth: 108,
         className: "mapPopup"
@@ -91,13 +87,29 @@
         }
     }
 
+    let geoData = $derived({
+        "type": "FeatureCollection",
+        "features": data.branches.map(branch => ({
+            "type": "Feature",
+            "properties": {},
+            "geometry": {
+                "coordinates": polyline.decode(branch.route).map(([lat, lng]) => [lng, lat]),
+                "type": "LineString"
+            }
+        }))
+    } as GeoJsonObject)
+
+    // Position the realtime dot
     function getRealtimePct() {
         let realtimePct = branch.realtime?.pct
         if(branch.realtime && !expand) {
+            // calculate position when minor stops are hidden
             const stopIndex = branch.realtime.stop
-            const previousMajorStop = branch.stops.slice(0, stopIndex).findLastIndex(stop => stop.major) ?? 0
-            const nextMajorStop = branch.stops.slice(stopIndex).findIndex(stop => stop.major) + stopIndex ?? branch.stops.length - 1
+            const previousMajorStop = Math.max(branch.stops.slice(0, stopIndex).findLastIndex(stop => stop.major), 0)
+            let nextMajorStop = branch.stops.slice(stopIndex).findIndex(stop => stop.major) + stopIndex
+            if(nextMajorStop === stopIndex - 1) nextMajorStop = branch.stops.length - 1
 
+            // interpolate between the two major stops between the next stop
             if(stopIndex > 0 && branch.stops.slice(previousMajorStop, nextMajorStop).some(stop => !stop.major)) {
                 const stopTime = toLuxon(branch.stops[stopIndex].dep)
                 const prevStopTime = toLuxon(branch.stops[stopIndex - 1].dep)
@@ -114,11 +126,14 @@
                 return {pct: realtimePct, stop: nextMajorStop}
             }
         }
+
         return {pct: realtimePct, stop: branch.realtime?.stop}
     }
 
+    // Some times may be >24h, format properly
     const timeFmt = (time: string) => (Number(time.substring(0, 2)) % 24).toString().padStart(2, "0") + time.substring(2, 5)
 
+    // Convert string time to luxon DateTime
     function toLuxon(time: string) {
         let addDays = Math.floor(Number(time.substring(0, 2)) / 24)
         let timestamp = timeFmt(time)
@@ -141,7 +156,7 @@
         <div class="panel w-full pl-8 pr-8 pt-4 pb-4 flex flex-row items-center">
             <Fa icon={faBus} size="lg" class="mr-4" />
             <div class="flex-grow">Operated by {data.operator.name}</div>
-            <Fa icon={faChevronRight} size="md" />
+            <Fa icon={faChevronRight} size="1x" />
         </div>
     </a>
 
@@ -157,7 +172,7 @@
             <div class="w-full mb-2 flex flex-row items-center justify-between text-center border-b border-b-amber-900/20 dark:border-b-gray-200/20">
                 {#each data.branches as branch, i}
                     <a href="#" class="w-full px-8 py-4 hover:bg-amber-700/5 dark:hover:bg-gray-500/20 border-r-amber-900/20 dark:border-r-gray-200/20"
-                       class:border-r={i !== data.branches.length - 1} class:selected={i === b} on:click={() => b = i}>{branch.dest}</a>
+                       class:border-r={i !== data.branches.length - 1} class:selected={i === b} onclick={() => b = i}>{branch.dest}</a>
                 {/each}
             </div>
         {/if}
@@ -166,7 +181,7 @@
                 <Connection service={branch.connections.from} type="from" on_previous={branch.realtime?.on_previous ?? false}></Connection>
             {/if}
             {#each branch.stops as stop, i}
-                {#if expand || stop.major || i === 0 || i === branch.stops.length - 1}
+                {#if expand || stop.major || branch.stops.length < 20 || i === 0 || i === branch.stops.length - 1 || i === realtimeData.stop}
                     <Stop type={i === 0 && !branch.connections.from ? "origin" : i === branch.stops.length - 1 && !branch.connections.to ? "destination" : "stop"} stop={stop}
                           realtime={i === realtimeData.stop && branch.realtime ? realtimeData.pct : undefined}
                           divider={i !== 0 && train}  />
@@ -191,10 +206,10 @@
                     <HTMLMarker lon={lon} lat={lat} divIcon={{
                             html: `<div class='bg-white border border-black h-full w-full rounded-tr-full' style='transform: rotate(${rotation}deg) ${flip}'></div>`,
                             className: "", iconSize: [20, 12] }}
-                            popup="{branch.realtime.vehicle.license ? '<b>' + branch.realtime.vehicle.license + '</b><br>' : ''}
-                                   {branch.realtime.vehicle.name ? '<i>' + branch.realtime.vehicle.name + '</i><br>' : ''}
-                                   {(!branch.realtime.vehicle.license && !branch.realtime.vehicle.name && !branch.realtime.vehicle.occupancy_pct) ? 'No vehicle information available' : ''}
-                                   {branch.realtime.vehicle.occupancy_pct ? 'Occupancy: ' + branch.realtime.vehicle.occupancy_pct + '%' : ''}" />
+                            popup="{branch.realtime.vehicle?.license ? '<b>' + branch.realtime.vehicle.license + '</b><br>' : ''}
+                                   {branch.realtime.vehicle?.name ? '<i>' + branch.realtime.vehicle.name + '</i><br>' : ''}
+                                   {(!branch.realtime.vehicle?.license && !branch.realtime.vehicle?.name && !branch.realtime.vehicle?.occupancy_pct) ? 'No vehicle information available' : ''}
+                                   {branch.realtime.vehicle?.occupancy_pct ? 'Occupancy: ' + branch.realtime.vehicle.occupancy_pct + '%' : ''}" />
                 {/if}
             </Map>
         {/if}

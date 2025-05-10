@@ -1,15 +1,25 @@
 <!-- Adapted from @svelte-parts/map -->
 <script lang="ts">
     import { getContext } from 'svelte'
-    import L, {DivIconOptions} from 'leaflet'
+    import L, {type DivIconOptions} from 'leaflet'
 
-    export let lat = 0
-    export let lon = 0
-    export let popup = "";
-    export let divIcon: DivIconOptions = {};
-    export let zIndex: number | undefined = undefined;
+    interface Props {
+        lat?: number;
+        lon?: number;
+        popup?: string;
+        divIcon?: DivIconOptions;
+        zIndex?: number | undefined;
+    }
 
-    const { getMap } = getContext('leaflet_map')
+    let {
+        lat = 0,
+        lon = 0,
+        popup = "",
+        divIcon = {},
+        zIndex = undefined
+    }: Props = $props();
+
+    const { getMap } = getContext<{getMap: () => L.Map}>('leaflet_map')
     const map = getMap()
     const popupOptions = {
         maxWidth: 108,
@@ -21,5 +31,9 @@
     if (popup) { d.bindPopup(popup, popupOptions) }
     if (map) { d.addTo(map) }
 
-    $: lat, lon, d.setLatLng({lat: lat, lng: lon})
+    $effect.pre(() => {
+        lat;
+        lon;
+        d.setLatLng({lat: lat, lng: lon})
+    });
 </script>

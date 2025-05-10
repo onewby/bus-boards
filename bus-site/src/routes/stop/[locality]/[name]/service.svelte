@@ -3,7 +3,11 @@
     import Fa from "svelte-fa";
     import {faTrain} from "@fortawesome/free-solid-svg-icons";
 
-    export let service: StopDeparture
+    interface Props {
+        service: StopDeparture;
+    }
+
+    let { service }: Props = $props();
 </script>
 
 <a href="/service/{service.type}/{service.trip_id}">
