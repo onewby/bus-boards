@@ -95,9 +95,9 @@ create table if not exists trips
     route_id      TEXT,
     service_id    TEXT,
     trip_headsign TEXT,
-    max_stop_seq  integer,
-    min_stop_seq  integer,
     shape_id      TEXT,
+    direction_id  INTEGER DEFAULT 0,
+    block_id      TEXT,
     constraint trips_pk
         primary key (trip_id),
     constraint trips_routes_route_id_source_fk

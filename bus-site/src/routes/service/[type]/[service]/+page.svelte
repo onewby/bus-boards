@@ -102,7 +102,7 @@
     // Position the realtime dot
     function getRealtimePct() {
         let realtimePct = branch.realtime?.pct
-        if(branch.realtime && !expand) {
+        if(branch.realtime && !(expand || branch.stops.length < 20)) {
             // calculate position when minor stops are hidden
             const stopIndex = branch.realtime.stop
             const previousMajorStop = Math.max(branch.stops.slice(0, stopIndex).findLastIndex(stop => stop.major), 0)
@@ -160,7 +160,7 @@
         </div>
     </a>
 
-    {#if branch.stops.some((stop) => !stop.major)}
+    {#if branch.stops.some((stop) => !stop.major) && branch.stops.length >= 20}
         <div class="panel w-full mt-2 pl-8 pr-8 pt-4 pb-4 flex flex-row items-center justify-center">
             <label for="expand">Show minor stops</label>
             <input id="expand" type="checkbox" class="ml-2" bind:checked={expand}>

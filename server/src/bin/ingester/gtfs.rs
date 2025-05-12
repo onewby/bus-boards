@@ -29,6 +29,7 @@ pub fn process_source(db: &mut Connection, source: &Source, overrides: &Override
 fn import_zip(db: &mut Connection, source: &Source, overrides: &Overrides) -> Result<(), Box<dyn Error>> {
     let path = Path::new(source.path);
     let timer = Instant::now();
+    // each entry: file name, SQL insert stmt, each field ordered by index, map of defaults to use, bool for if prefix should be added to field
     let imports: Imports = [
         ("agency.txt", "REPLACE INTO agency (agency_id, agency_name, agency_url, agency_timezone, agency_lang) VALUES (?, ?, ?, ?, ?)",
          vec!["agency_id", "agency_name", "agency_url", "agency_timezone", "agency_lang"], phf_map! {}, false),
@@ -38,8 +39,8 @@ fn import_zip(db: &mut Connection, source: &Source, overrides: &Overrides) -> Re
          vec!["service_id", "start_date", "end_date", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"], phf_map! {}, true),
         ("calendar_dates.txt", "REPLACE INTO calendar_dates (service_id, date, exception_type) VALUES (?4||?1, ?2, ?3)",
          vec!["service_id", "date", "exception_type"], phf_map! {}, true),
-        ("trips.txt", "REPLACE INTO trips (route_id, service_id, trip_id, trip_headsign, shape_id) VALUES (?6||?1, ?6||?2, ?6||?3, ?4, ?6||?5)",
-         vec!["route_id", "service_id", "trip_id", "trip_headsign", "shape_id"], phf_map! {}, true),
+        ("trips.txt", "REPLACE INTO trips (route_id, service_id, trip_id, trip_headsign, shape_id, direction_id, block_id) VALUES (?8||?1, ?8||?2, ?8||?3, ?4, ?8||?5, ?6, ?8||?7)",
+         vec!["route_id", "service_id", "trip_id", "trip_headsign", "shape_id", "direction_id", "block_id"], phf_map! {}, true),
         ("stop_times.txt", "REPLACE INTO stop_times (trip_id, arrival_time, departure_time, stop_id, stop_sequence, timepoint, stop_headsign, pickup_type, drop_off_type) VALUES (?10||?1, substr(?2, 1, 2)*3600+substr(?2, 4, 2)*60+substr(?2, 7, 2), substr(?3, 1, 2)*3600+substr(?3, 4, 2)*60+substr(?3, 7, 2), ?4, ?5, ?6, NULLIF(?7, ''), ?8, ?9)",
          vec!["trip_id", "arrival_time", "departure_time", "stop_id", "stop_sequence", "timepoint", "stop_headsign", "pickup_type", "drop_off_type"], phf_map! {}, true)
     ];

@@ -115,6 +115,7 @@ export type Connections = {
 
 export type LinkedService = {
     trip_id: string,
+    service_name: string,
     location: string,
     dep_time: string
 }

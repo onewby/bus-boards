@@ -104,12 +104,12 @@ pub fn passenger_trip_query(db: &Arc<DBPool>, date: &DateTime<Utc>, start_before
                 (SELECT group_concat(departure_time) FROM (SELECT departure_time FROM stop_times WHERE trip_id=trips.trip_id ORDER BY stop_sequence)) as times,
                 (SELECT group_concat(stop_sequence) FROM (SELECT stop_sequence FROM stop_times WHERE trip_id=trips.trip_id ORDER BY stop_sequence)) as seqs
                  FROM trips
-                          INNER JOIN main.routes r on r.route_id = trips.route_id
-                          LEFT OUTER JOIN main.calendar c on c.service_id = trips.service_id
-                          LEFT OUTER JOIN main.calendar_dates d on (d.service_id = c.service_id AND d.date=:date)
-                          LEFT OUTER JOIN main.polar p on trips.trip_id = p.gtfs
-                          INNER JOIN main.stop_times start on (start.trip_id=trips.trip_id AND start.stop_sequence=trips.min_stop_seq)
-                          INNER JOIN main.stop_times finish on (finish.trip_id=trips.trip_id AND finish.stop_sequence=trips.max_stop_seq)
+                          INNER JOIN routes r on r.route_id = trips.route_id
+                          LEFT OUTER JOIN calendar c on c.service_id = trips.service_id
+                          LEFT OUTER JOIN calendar_dates d on (d.service_id = c.service_id AND d.date=:date)
+                          LEFT OUTER JOIN polar p on trips.trip_id = p.gtfs
+                          INNER JOIN stop_times start on (start.trip_id=trips.trip_id AND start.stop_sequence=(SELECT min(stop_sequence) FROM stop_times WHERE trip_id=trips.trip_id))
+                          INNER JOIN stop_times finish on (finish.trip_id=trips.trip_id AND finish.stop_sequence=(SELECT max(stop_sequence) FROM stop_times WHERE trip_id=trips.trip_id))
                  WHERE r.route_id=:specifier
                    AND ((start_date <= :date AND end_date >= :date AND (validity & (1 << :day)) <> 0) OR exception_type=1)
                    AND NOT (exception_type IS NOT NULL AND exception_type = 2)
@@ -127,8 +127,8 @@ pub fn lothian_trip_query(db: &Arc<DBPool>, date: &DateTime<Utc>, start_before: 
                    INNER JOIN main.trips trips on polar.gtfs = trips.trip_id
                    LEFT OUTER JOIN main.calendar c on c.service_id = trips.service_id
                    LEFT OUTER JOIN main.calendar_dates d on (d.service_id = c.service_id AND d.date=:date)
-                   INNER JOIN main.stop_times start on (start.trip_id=trips.trip_id AND start.stop_sequence=trips.min_stop_seq)
-                   INNER JOIN main.stop_times finish on (finish.trip_id=trips.trip_id AND finish.stop_sequence=trips.max_stop_seq)
+                   INNER JOIN stop_times start on (start.trip_id=trips.trip_id AND start.stop_sequence=(SELECT min(stop_sequence) FROM stop_times WHERE trip_id=trips.trip_id))
+                   INNER JOIN stop_times finish on (finish.trip_id=trips.trip_id AND finish.stop_sequence=(SELECT max(stop_sequence) FROM stop_times WHERE trip_id=trips.trip_id))
                  WHERE direction IS NULL AND polar=:specifier
                    AND ((start_date <= :date AND end_date >= :date AND (validity & (1 << :day)) <> 0) OR exception_type=1)
                    AND NOT (exception_type IS NOT NULL AND exception_type = 2)
@@ -188,7 +188,7 @@ pub fn get_stagecoach_trip(db: &Arc<DBPool>, agency_id: &str, route_name: &str, 
         FROM stop_times
             INNER JOIN trips t on t.trip_id = stop_times.trip_id
             INNER JOIN main.routes r on t.route_id = r.route_id
-            INNER JOIN stop_times origin on (origin.trip_id=t.trip_id AND origin.stop_sequence=t.min_stop_seq)
+            INNER JOIN stop_times origin on (origin.trip_id=t.trip_id AND origin.stop_sequence=(SELECT min(stop_sequence) FROM stop_times WHERE trip_id=t.trip_id))
             LEFT OUTER JOIN main.calendar c on c.service_id = t.service_id
             LEFT OUTER JOIN main.calendar_dates d on (d.service_id = c.service_id AND d.date=:date)
         WHERE agency_id = :agency_id AND route_short_name = :route_name AND stop_times.stop_id=:next_stop
@@ -208,6 +208,30 @@ pub fn get_stagecoach_trip(db: &Arc<DBPool>, agency_id: &str, route_name: &str, 
             route_id: row.get("route_id")?,
             stop_seq: row.get("stop_seq")?,
             stop_id: row.get("stop_id")?,
+            trip_route: row.get::<&str, String>("route")?.split(',').map(|s| s.to_string()).collect(),
+            trip_seqs: row.get::<&str, String>("seqs")?.split(',').map(|s| u32::from_str(s).unwrap()).collect()
+        })
+    }).ok()
+}
+
+#[derive(Clone)]
+pub struct BODSRouteInfo {
+    pub route_id: String,
+    pub trip_route: Vec<String>,
+    pub trip_seqs: Vec<u32>
+}
+
+/// Get trip stop sequence info for BODS stop sequence numbering
+pub fn get_bods_trip(db: &Arc<DBPool>, trip_id: &str) -> Option<BODSRouteInfo> {
+    get_pool(db).prepare_cached(r#"
+        SELECT route_id,
+            (SELECT group_concat(stop_id) FROM (SELECT stop_id FROM stop_times WHERE trip_id=trips.trip_id ORDER BY stop_sequence)) as route,
+            (SELECT group_concat(stop_sequence) FROM (SELECT stop_sequence FROM stop_times WHERE trip_id=trips.trip_id ORDER BY stop_sequence)) as seqs
+        FROM trips
+        WHERE trips.trip_id=?
+    "#).unwrap().query_row(params![trip_id], |row| {
+        Ok(BODSRouteInfo {
+            route_id: row.get("route_id")?,
             trip_route: row.get::<&str, String>("route")?.split(',').map(|s| s.to_string()).collect(),
             trip_seqs: row.get::<&str, String>("seqs")?.split(',').map(|s| u32::from_str(s).unwrap()).collect()
         })
@@ -256,8 +280,8 @@ pub fn get_coach_trip(db: &Arc<DBPool>, route: &str, origin: &str, dest: &str, s
             (SELECT locality_name FROM stances INNER JOIN main.stops s on s.id = stances.stop WHERE code=std.stop_id) as stdLoc,
             (SELECT locality_name FROM stances INNER JOIN main.stops s on s.id = stances.stop WHERE code=sta.stop_id) as staLoc
             FROM trips
-                INNER JOIN main.stop_times std on (trips.trip_id = std.trip_id AND std.stop_sequence=min_stop_seq)
-                INNER JOIN main.stop_times sta on (trips.trip_id = sta.trip_id AND sta.stop_sequence=max_stop_seq)
+                INNER JOIN main.stop_times std on (trips.trip_id = std.trip_id AND std.stop_sequence=(SELECT min(stop_sequence) FROM stop_times WHERE trip_id=trips.trip_id))
+                INNER JOIN main.stop_times sta on (trips.trip_id = sta.trip_id AND sta.stop_sequence=(SELECT max(stop_sequence) FROM stop_times WHERE trip_id=trips.trip_id))
                 LEFT OUTER JOIN main.calendar c on c.service_id = trips.service_id
                 LEFT OUTER JOIN main.calendar_dates d on (d.service_id = c.service_id AND d.date=:date)
             WHERE route_id=:route AND +std.departure_time=:startTime AND +sta.departure_time=:endTime
@@ -293,7 +317,7 @@ pub fn get_first_trip(db: &Arc<DBPool>, route: &str, agency_id: &str, start_stop
     get_pool(db).prepare_cached(
         r#"SELECT trips.trip_id FROM trips
                 INNER JOIN main.routes r on r.route_id = trips.route_id
-                INNER JOIN main.stop_times st on (trips.trip_id = st.trip_id AND stop_sequence=min_stop_seq)
+                INNER JOIN main.stop_times st on (trips.trip_id = st.trip_id AND stop_sequence=(SELECT min(stop_sequence) FROM stop_times WHERE trip_id=trips.trip_id))
                 LEFT OUTER JOIN main.calendar c on c.service_id = trips.service_id
                 LEFT OUTER JOIN main.calendar_dates d on (d.service_id = c.service_id AND d.date=:date)
             WHERE route_short_name=:route AND agency_id=:op AND st.stop_id=:startStop AND st.departure_time=:startTime
@@ -342,8 +366,8 @@ pub fn get_lothian_timetabled_trips(db: &Arc<DBPool>, date: &DateTime<Utc>, rout
             FROM trips
                 LEFT OUTER JOIN main.calendar c on trips.service_id = c.service_id
                 LEFT OUTER JOIN main.calendar_dates d on (c.service_id = d.service_id AND d.date=:date)
-                INNER JOIN main.stop_times start on (start.trip_id=trips.trip_id AND start.stop_sequence=trips.min_stop_seq)
-                INNER JOIN main.stop_times finish on (finish.trip_id=trips.trip_id AND finish.stop_sequence=trips.max_stop_seq)
+                INNER JOIN main.stop_times start on (start.trip_id=trips.trip_id AND start.stop_sequence=(SELECT min(stop_sequence) FROM stop_times WHERE trip_id=trips.trip_id))
+                INNER JOIN main.stop_times finish on (finish.trip_id=trips.trip_id AND finish.stop_sequence=(SELECT max(stop_sequence) FROM stop_times WHERE trip_id=trips.trip_id))
             WHERE route_id=:route
               AND ((start_date <= :date AND end_date >= :date AND (validity & (1 << :day)) <> 0) OR exception_type=1)
               AND NOT (exception_type IS NOT NULL AND exception_type = 2)"#).unwrap()
@@ -396,8 +420,8 @@ pub fn get_passenger_route_trips(db: &Arc<DBPool>, date: &DateTime<Utc>, route_i
             FROM trips
                 LEFT OUTER JOIN main.calendar c on trips.service_id = c.service_id
                 LEFT OUTER JOIN main.calendar_dates d on (c.service_id = d.service_id AND d.date=:date)
-                INNER JOIN main.stop_times start on (start.trip_id=trips.trip_id AND start.stop_sequence=trips.min_stop_seq)
-                INNER JOIN main.stop_times finish on (finish.trip_id=trips.trip_id AND finish.stop_sequence=trips.max_stop_seq)
+                INNER JOIN main.stop_times start on (start.trip_id=trips.trip_id AND start.stop_sequence=(SELECT min(stop_sequence) FROM stop_times WHERE trip_id=trips.trip_id))
+                INNER JOIN main.stop_times finish on (finish.trip_id=trips.trip_id AND finish.stop_sequence=(SELECT max(stop_sequence) FROM stop_times WHERE trip_id=trips.trip_id))
             WHERE route_id=:route
               AND ((start_date <= :date AND end_date >= :date AND (validity & (1 << :day)) <> 0) OR exception_type=1)
               AND NOT (exception_type IS NOT NULL AND exception_type = 2)"#).unwrap()
@@ -430,9 +454,9 @@ pub fn save_passenger_trip_allocations(db: &Arc<DBPool>, trips: &Vec<PassengerDi
 pub fn query_service(db: &Arc<DBPool>, trip_id: &str) -> rusqlite::Result<ServiceQuery> {
     let db = get_pool(db);
     let mut stmt = db.prepare_cached(
-        "SELECT r.route_id as route_id, route_short_name as code, trip_headsign as dest, max_stop_seq as mss FROM trips
+        "SELECT r.route_id as route_id, route_short_name as code, trip_headsign as dest, (SELECT max(stop_sequence) FROM stop_times WHERE trip_id=?1) as mss FROM trips
                 INNER JOIN main.routes r on r.route_id = trips.route_id
-                WHERE trip_id=?")?;
+                WHERE trip_id=?1")?;
     stmt.query_row([trip_id], |row| Ok(ServiceQuery {
         route_id: row.get(0)?,
         code: row.get(1)?,
@@ -650,7 +674,7 @@ fn _get_services_between(db: &Arc<DBPool>, day: &DateTime<Utc>, from: &DateTime<
                     LEFT OUTER JOIN main.trips tto on tto.trip_id = l."to"
                 WHERE
                     s.stop=?1 AND
-                    stop_times.stop_sequence <> t.max_stop_seq AND
+                    stop_times.stop_sequence <> (SELECT max(stop_sequence) FROM stop_times WHERE trip_id=t.trip_id) AND
                     departure_time IS NOT NULL
                     AND ((start_date <= ?2 AND end_date >= ?2 AND (validity & (1 << ?3)) <> 0) OR exception_type=1)
                     AND NOT (exception_type IS NOT NULL AND exception_type = 2)
@@ -721,18 +745,20 @@ fn serialize_as_hhmm<S>(date: &DateTime<Utc>, serializer: S) -> Result<S::Ok, S:
 pub fn find_links(db: &Arc<DBPool>, trip_id: &str) -> Result<Connections, Box<dyn Error>> {
     let db = get_pool(db);
     let from = db.prepare_cached(r#"
-        SELECT t.trip_id, l.name, st.departure_time FROM links
+        SELECT t.trip_id, r.route_short_name, l.name, st.departure_time FROM links
             INNER JOIN main.trips t on t.trip_id = links."from"
-            INNER JOIN stop_times st on st.trip_id=t.trip_id AND st.stop_sequence=t.min_stop_seq
+            INNER JOIN stop_times st on st.trip_id=t.trip_id AND st.stop_sequence=(SELECT min(stop_sequence) FROM stop_times WHERE trip_id=t.trip_id)
             INNER JOIN stances stance on stance.code=st.stop_id
             INNER JOIN main.stops s on stance.stop = s.id
             INNER JOIN main.localities l on s.locality = l.code
+            INNER JOIN main.routes r on t.route_id = r.route_id
         WHERE "to"=?
     "#)?.get_linked_service(trip_id).ok();
     let to = db.prepare_cached(r#"
-        SELECT t.trip_id, t.trip_headsign, st.departure_time FROM links
+        SELECT t.trip_id, r.route_short_name, t.trip_headsign, st.departure_time FROM links
             INNER JOIN main.trips t on t.trip_id = links."to"
-            INNER JOIN stop_times st on st.trip_id=t.trip_id AND st.stop_sequence=t.min_stop_seq
+            INNER JOIN main.routes r on t.route_id = r.route_id
+            INNER JOIN stop_times st on st.trip_id=t.trip_id AND st.stop_sequence=(SELECT min(stop_sequence) FROM stop_times WHERE trip_id=t.trip_id)
         WHERE "from"=?
     "#)?.get_linked_service(trip_id).ok();
     
@@ -749,8 +775,9 @@ impl <'t> GetLinkedService for CachedStatement<'t> {
             [trip_id],
             |row| Ok(LinkedService {
                 trip_id: row.get(0)?,
-                location: row.get(1)?,
-                dep_time: DateTime::from_timestamp(row.get(2)?, 0).unwrap(),
+                service_name: row.get(1)?,
+                location: row.get(2)?,
+                dep_time: DateTime::from_timestamp(row.get(3)?, 0).unwrap(),
             }))
     }
 }
@@ -758,6 +785,7 @@ impl <'t> GetLinkedService for CachedStatement<'t> {
 #[derive(Serialize, Deserialize, Clone)]
 pub struct LinkedService {
     pub trip_id: String,
+    pub service_name: String,
     pub location: String,
     #[serde(serialize_with = "serialize_as_hhmm")]
     pub dep_time: DateTime<Utc>

@@ -95,11 +95,11 @@ fn patch_bods(conn: &mut Connection) -> rusqlite::Result<usize> {
                ELSE original
             END)
              FROM (SELECT trips.trip_id, coalesce(trip_headsign, '') as original, dest_loc.name AS new_name, dest_loc.code AS dest_loc, dest_stop.name AS dest_stop_name, origin_loc.code AS origin_loc FROM trips
-                 INNER JOIN stop_times origin_st on trips.trip_id = origin_st.trip_id and origin_st.stop_sequence=trips.min_stop_seq
+                 INNER JOIN stop_times origin_st on trips.trip_id = origin_st.trip_id and origin_st.stop_sequence=(SELECT min(stop_sequence) FROM stop_times WHERE trip_id=trips.trip_id)
                  INNER JOIN stances origin_stance on origin_stance.code = origin_st.stop_id
                  INNER JOIN stops origin_stop on origin_stop.id = origin_stance.stop
                  INNER JOIN localities origin_loc on origin_stop.locality = origin_loc.code
-                 INNER JOIN stop_times dest_st on trips.trip_id = dest_st.trip_id and dest_st.stop_sequence=trips.max_stop_seq
+                 INNER JOIN stop_times dest_st on trips.trip_id = dest_st.trip_id and dest_st.stop_sequence=(SELECT max(stop_sequence) FROM stop_times WHERE trip_id=trips.trip_id)
                  INNER JOIN stances dest_stance on dest_stance.code = dest_st.stop_id
                  INNER JOIN stops dest_stop on dest_stop.id = dest_stance.stop
                  INNER JOIN localities dest_loc on dest_stop.locality = dest_loc.code
@@ -128,8 +128,8 @@ fn patch_bods(conn: &mut Connection) -> rusqlite::Result<usize> {
                             FROM stances INNER JOIN main.stops s on s.id = stances.stop WHERE code=origin.stop_id) as origin_loc,
                           trip_headsign AS original FROM trips
                   INNER JOIN main.routes r on r.route_id = trips.route_id
-                  INNER JOIN main.stop_times origin on (trips.trip_id = origin.trip_id AND trips.min_stop_seq=origin.stop_sequence)
-                  INNER JOIN main.stop_times dest on (trips.trip_id = dest.trip_id AND trips.max_stop_seq=dest.stop_sequence)
+                  INNER JOIN main.stop_times origin on (trips.trip_id = origin.trip_id AND (SELECT min(stop_sequence) FROM stop_times WHERE trip_id=trips.trip_id)=origin.stop_sequence)
+                  INNER JOIN main.stop_times dest on (trips.trip_id = dest.trip_id AND (SELECT max(stop_sequence) FROM stop_times WHERE trip_id=trips.trip_id)=dest.stop_sequence)
                 WHERE agency_id IN ('OP5050', 'OP564', 'OP5051', 'OP545', 'OP563') AND NOT instr(trip_headsign, 'Airport')) AS trip_subquery
                 WHERE trips.trip_id=trip_subquery.trip_id"#, [])
 }
@@ -154,10 +154,10 @@ fn clean_flix(conn: &mut Connection) -> rusqlite::Result<usize> {
     conn.execute(r#"
         DELETE FROM routes WHERE routes.agency_id='FLIXBUS-eu' AND routes.route_id NOT IN (SELECT trips.route_id FROM trips
            INNER JOIN routes r on trips.route_id = r.route_id
-           INNER JOIN stop_times origin on trips.trip_id = origin.trip_id AND origin.stop_sequence=trips.min_stop_seq
+           INNER JOIN stop_times origin on trips.trip_id = origin.trip_id AND origin.stop_sequence=(SELECT min(stop_sequence) FROM stop_times WHERE trip_id=trips.trip_id)
            INNER JOIN stances origin_stance on origin_stance.code = origin.stop_id
            INNER JOIN stops origin_stop on origin_stop.id = origin_stance.stop
-           INNER JOIN stop_times dest on trips.trip_id = dest.trip_id AND dest.stop_sequence=trips.max_stop_seq
+           INNER JOIN stop_times dest on trips.trip_id = dest.trip_id AND dest.stop_sequence=(SELECT max(stop_sequence) FROM stop_times WHERE trip_id=trips.trip_id)
            INNER JOIN stances dest_stance on dest_stance.code = dest.stop_id
            INNER JOIN stops dest_stop on dest_stop.id = dest_stance.stop
         WHERE r.agency_id='FLIXBUS-eu' AND (origin_stop.locality<>'Europe' OR dest_stop.locality<>'Europe'));
@@ -170,7 +170,7 @@ fn clean_flix(conn: &mut Connection) -> rusqlite::Result<usize> {
         ELSE (SELECT IFNULL(substr(s.locality_name, 0, NULLIF(instr(s.locality_name, '›') - 1, -1)), s.locality_name)
               FROM stances INNER JOIN main.stops s on s.id = stances.stop WHERE code=dest_stop_id) END
         FROM (SELECT trips.trip_id, dest_stop.locality_name AS dest_loc_name, dest_stop.name AS dest_name, dest.stop_id AS dest_stop_id FROM trips
-                                INNER JOIN main.stop_times dest on (trips.trip_id = dest.trip_id AND trips.max_stop_seq=dest.stop_sequence)
+                                INNER JOIN main.stop_times dest on (trips.trip_id = dest.trip_id AND (SELECT max(stop_sequence) FROM stop_times WHERE trip_id=trips.trip_id)=dest.stop_sequence)
                                 INNER JOIN main.stances st on st.code=dest.stop_id
                                 INNER JOIN main.stops dest_stop on dest_stop.id = st.stop
              ) AS trip_subquery
@@ -182,9 +182,6 @@ fn clean_flix(conn: &mut Connection) -> rusqlite::Result<usize> {
 }
 
 pub fn cleanup(conn: &mut Connection) -> Result<(), Box<dyn Error>> {
-    println!("Updating sequence numbers");
-    conn.execute("UPDATE trips SET min_stop_seq=(SELECT min(stop_sequence) FROM stop_times WHERE stop_times.trip_id=trips.trip_id)", ())?;
-    conn.execute("UPDATE trips SET max_stop_seq=(SELECT max(stop_sequence) FROM stop_times WHERE stop_times.trip_id=trips.trip_id)", ())?;
     clean_arrivals(conn).expect("Clean arrivals");
     clean_flix(conn).expect("Clean Flix");
     clean_stops(conn).expect("Clean stops");

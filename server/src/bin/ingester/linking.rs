@@ -1,5 +1,4 @@
 use std::error::Error;
-use std::rc::Rc;
 use std::thread::sleep;
 use std::time::Duration;
 use chrono::{Utc};
@@ -10,7 +9,7 @@ use r2d2::{ManageConnection, Pool, PooledConnection};
 use r2d2_sqlite::SqliteConnectionManager;
 use rand::Rng;
 use rusqlite::{params, CachedStatement};
-use rusqlite::types::Value;
+use thread_local::ThreadLocal;
 
 pub fn link_trips(db_path: &str) -> Result<(), Box<dyn Error>> {
     println!("Linking trips");
@@ -25,63 +24,44 @@ pub fn link_trips(db_path: &str) -> Result<(), Box<dyn Error>> {
     get_pool(&db_pool).execute("pragma optimize", []).unwrap();
     get_pool(&db_pool).execute_batch("ANALYZE trips; ANALYZE stop_times; ANALYZE stances; ANALYZE trips_route_id_index; ANALYZE stop_times_trip_id_stop_sequence_index;").unwrap();
 
-    println!("Finding routes");
-    let routes = get_pool(&db_pool).prepare("SELECT route_id, origin.stop_id, postorigin_stance.stop, predest_stance.stop, dest.stop_id, group_concat(trips.trip_id,',')
-        FROM trips
-            INNER JOIN stop_times AS origin ON origin.trip_id=trips.trip_id AND origin.stop_sequence=trips.min_stop_seq
-            INNER JOIN stop_times AS postorigin ON postorigin.trip_id=trips.trip_id AND postorigin.stop_sequence=trips.min_stop_seq+1
-            INNER JOIN stop_times AS predest ON predest.trip_id=trips.trip_id AND predest.stop_sequence=trips.max_stop_seq-1
-            INNER JOIN stop_times AS dest ON dest.trip_id=trips.trip_id AND dest.stop_sequence=trips.max_stop_seq
-            INNER JOIN stances AS postorigin_stance ON postorigin.stop_id=postorigin_stance.code
-            INNER JOIN stances AS predest_stance ON predest.stop_id=predest_stance.code
-        GROUP BY route_id, origin.stop_id, postorigin_stance.stop, predest_stance.stop, dest.stop_id")?
+    println!("Linking using block ID");
+    get_pool(&db_pool).execute(r#"INSERT INTO links SELECT * FROM (SELECT lag(trips.trip_id) over (PARTITION BY block_id ORDER BY departure_time) AS "from", trips.trip_id AS "to", 0 FROM trips
+         INNER JOIN stop_times AS departure ON departure.trip_id=trips.trip_id AND departure.stop_sequence=(SELECT max(stop_sequence) FROM stop_times WHERE trip_id=trips.trip_id)
+         WHERE block_id IS NOT NULL)
+         WHERE "from" IS NOT NULL"#, [])?;
+    
+    println!("Finding routes to link manually");
+    let routes = get_pool(&db_pool).prepare(
+        "SELECT route_id AS rid, service_id
+                   FROM trips
+                   WHERE route_id NOT IN (SELECT route_id FROM trips WHERE block_id IS NOT NULL)
+                   GROUP BY rid, service_id
+                   HAVING count(trips.trip_id) > 1")?
         .query_map([], |row| Ok(RouteInfo {
             route_id: row.get(0)?,
-            origin_stop: row.get(1)?,
-            postorigin_stance: row.get(2)?,
-            predest_stance: row.get(3)?,
-            dest_stop: row.get(4)?,
-            trips: row.get(5)?,
+            service_id: row.get(1)?
         }))?
-        .filter_map(|o| o.ok())
+        .filter_map(Result::ok)
         .collect_vec();
 
     println!("Found {} different routes", routes.len());
 
     let start = Utc::now();
-
-    let groups = routes.iter()
-        .group_by(|r| r.route_id.clone())
-        .into_iter()
-        .map(|(route_id, group)| (route_id, group.collect_vec()))
-        .collect_vec();
-
-    let results: Vec<TripsResult> = groups.par_iter()
-        .map(|(route_id, group)| {
-            let db = get_pool(&db_pool);
-            let mut trips_stmt = get_trips_stmt(&db);
-            group.iter().map(|r1| {
-                let t1_values = Rc::new(r1.trips.split(',').map(|s| Value::from(s.to_string())).collect::<Vec<Value>>());
-                let t2_values = Rc::new(group.iter()
-                    .filter(|r2| r1.dest_stop == r2.origin_stop && r1.predest_stance != r2.postorigin_stance)
-                    .flat_map(|r2| {
-                        r2.trips.split(',').map(|s| Value::from(s.to_string()))
-                    }).collect_vec());
-                trips_stmt.query_map(params![t1_values, t2_values], |row| {
-                    Ok(TripsResult {
-                        trip1: row.get(0)?,
-                        trip2: row.get(1)?,
-                        diff: row.get(2)?,
-                        show_then: row.get(3)?
-                    })
-                }).unwrap().filter_map(Result::ok)
-                    .group_by(|r| r.trip1.clone())
-                    .into_iter()
-                    .map(|(t1, group)| {
-                        group.min_by_key(|row| row.diff).unwrap()
-                    }).collect_vec()
-            }).collect_vec()
-        }).flatten().flatten().collect();
+    
+    let results: Vec<TripsResult> = {
+        let tl_conn = ThreadLocal::new();
+        routes.par_iter()
+            .map(|route| {
+                let conn = tl_conn.get_or(|| get_pool(&db_pool));
+                let mut trips_stmt = get_trips_stmt(conn);
+                trips_stmt.query_map(params![route.route_id, route.service_id], |row| Ok(TripsResult {
+                    trip1: row.get(0)?,
+                    trip2: row.get(1)?,
+                    diff: row.get(2)?,
+                    show_then: row.get(3)?,
+                })).unwrap().filter_map(Result::ok).collect_vec()
+            }).flatten().collect()
+    };
     
     let end = Utc::now();
     
@@ -106,6 +86,7 @@ pub fn get_pool(db: &Pool<SqliteConnectionManager>) -> PooledConnection<SqliteCo
     while {
         conn = db.get();
         if conn.is_err() {
+            eprintln!("note: db pool get fail, retrying");
             sleep(Duration::from_millis(rand::thread_rng().gen_range(500..1500)))
         }
         conn.is_err()
@@ -115,39 +96,31 @@ pub fn get_pool(db: &Pool<SqliteConnectionManager>) -> PooledConnection<SqliteCo
 
 pub fn get_trips_stmt(db: &PooledConnection<SqliteConnectionManager>) -> CachedStatement<'_> {
     db.prepare_cached(r#"
-            SELECT t1id, t2id, dep_diff, (t2_dest_lstop.locality NOT IN
+            SELECT t1.trip_id AS t1id, t2.trip_id AS t2id, min(t2_origin.departure_time - t1_dest.arrival_time) AS dep_diff,
+              (t2_dest_stop.locality NOT IN
                (SELECT locality FROM stop_times
                                          INNER JOIN stances ON stances.code=stop_times.stop_id
                                          INNER JOIN stops ON stops.id=stances.stop
-                WHERE stop_times.trip_id=t1id)) AS show_then
-            FROM (SELECT ROW_NUMBER() OVER (PARTITION BY t1id ORDER BY dep_diff) as RowNum, *
-                  FROM (SELECT t1.trip_id                                                    AS t1id,
-                               t2.trip_id                                                    AS t2id,
-                               t2.max_stop_seq                                               AS t2mss,
-                               (t2_origin_stop.departure_time - t1_dest_stop.departure_time) AS dep_diff
-                        FROM trips AS t1
-                             CROSS JOIN trips as t2
-                             INNER JOIN stop_times AS t1_dest_stop
-                                        ON t1_dest_stop.trip_id = t1.trip_id AND t1.max_stop_seq = t1_dest_stop.stop_sequence
-                             INNER JOIN stop_times AS t2_origin_stop ON t2_origin_stop.trip_id = t2.trip_id AND
-                                                                        t2.min_stop_seq = t2_origin_stop.stop_sequence
-                             LEFT OUTER JOIN calendar AS t1_calendar ON t1_calendar.service_id = t1.service_id
-                             LEFT OUTER JOIN calendar AS t2_calendar ON t2_calendar.service_id = t2.service_id AND (t1_calendar.validity & t2_calendar.validity) <> 0 AND (
-                                 (t1_calendar.start_date <= t2_calendar.start_date AND t1_calendar.end_date >= t2_calendar.start_date)
-                                     OR (t1_calendar.start_date > t2_calendar.start_date AND t2_calendar.end_date >= t1_calendar.start_date))
-                        WHERE t1.trip_id IN rarray(?1)
-                          AND t2.trip_id IN rarray(?2)
-                          AND (t2_calendar.validity IS NOT NULL
-                              OR EXISTS(SELECT * FROM
-                                (SELECT * FROM calendar_dates WHERE service_id=t1.service_id AND exception_type=1
-                                 UNION SELECT * FROM calendar_dates WHERE service_id=t2.service_id AND exception_type=1)
-                                         GROUP BY date HAVING count(*) >= 2))
-                          AND dep_diff BETWEEN 0 AND 600)) X
-                INNER JOIN stop_times AS t2_dest_stop
-                        ON t2_dest_stop.trip_id = t2id AND t2mss = t2_dest_stop.stop_sequence
-                INNER JOIN stances AS t2_dest_stance ON t2_dest_stance.code = t2_dest_stop.stop_id
-                INNER JOIN stops AS t2_dest_lstop ON t2_dest_lstop.id = t2_dest_stance.stop
-            WHERE RowNum = 1
+                WHERE stop_times.trip_id=t1.trip_id)) AS show_then
+            FROM trips AS t1
+              INNER JOIN trips AS t2
+              INNER JOIN stop_times AS t1_dest ON t1_dest.trip_id=t1.trip_id AND t1_dest.stop_sequence=(SELECT max(stop_sequence) FROM stop_times WHERE trip_id=t1.trip_id)
+              INNER JOIN stop_times AS t1_predest ON t1_predest.trip_id=t1.trip_id AND t1_predest.stop_sequence=t1_dest.stop_sequence-1
+              INNER JOIN stop_times AS t2_origin ON t2_origin.trip_id=t2.trip_id AND t2_origin.stop_sequence=(SELECT min(stop_sequence) FROM stop_times WHERE trip_id=t2.trip_id)
+              INNER JOIN stop_times AS t2_postorigin ON t2_postorigin.trip_id=t2.trip_id AND t2_postorigin.stop_sequence=t2_origin.stop_sequence+1
+              INNER JOIN stop_times AS t2_dest ON t2_dest.trip_id=t2.trip_id AND t2_dest.stop_sequence=(SELECT max(stop_sequence) FROM stop_times WHERE trip_id=t2.trip_id)
+              INNER JOIN stances AS t2_dest_stance ON t2_dest_stance.code = t2_dest.stop_id
+              INNER JOIN stops AS t2_dest_stop ON t2_dest_stance.stop = t2_dest_stop.id
+              INNER JOIN stances AS postorigin_stance ON t2_postorigin.stop_id=postorigin_stance.code
+              INNER JOIN stances AS predest_stance ON t1_predest.stop_id=predest_stance.code
+        WHERE t1.trip_id <> t2.trip_id
+            AND t1.route_id=?1 AND t1.service_id=?2
+            AND t1.route_id=t2.route_id AND t1.service_id=t2.service_id
+            AND t1.direction_id <> t2.direction_id
+            AND t1_dest.stop_id=t2_origin.stop_id
+            AND postorigin_stance.stop <> predest_stance.stop
+            AND t2_origin.departure_time - t1_dest.arrival_time BETWEEN 0 AND 600
+        GROUP BY t1.trip_id
         "#).unwrap()
 }
 
@@ -160,9 +133,5 @@ struct TripsResult {
 
 pub struct RouteInfo {
     route_id: String,
-    origin_stop: String,
-    postorigin_stance: u64,
-    predest_stance: u64,
-    dest_stop: String,
-    trips: String
+    service_id: String
 }

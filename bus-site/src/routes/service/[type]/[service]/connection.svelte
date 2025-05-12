@@ -23,6 +23,7 @@
             <div>
                 Links {type} the
                 <span class="font-medium">{service.dep_time}</span>
+                 service <span class="font-medium">{service.service_name}</span>
                  {type}
                 <span class="font-medium">{service.location}</span>
                 {#if on_previous} (vehicle currently on this service){/if}

@@ -112,7 +112,7 @@ async fn main() {
     let arc_db = Arc::new(db);
 
     // Spawn data retrievers for each provider on a separate thread
-    spawn_listener(&arc_cfg, BODS, &tx, bods_listener);
+    spawn_listener_db(&arc_cfg, BODS, &tx, &arc_db.clone(), bods_listener);
     spawn_listener(&arc_cfg, EMBER, &tx, ember_listener);
     spawn_listener_db(&arc_cfg, PASSENGER, &tx, &arc_db.clone(), passenger_listener);
     spawn_listener_db(&arc_cfg, DISRUPTIONS, &tx, &arc_db.clone(), disruptions_listener);
