@@ -241,21 +241,23 @@ async fn get_station_departures(offset: f32, crs: Vec<String>) -> Vec<StationBoa
     }
 }
 
-fn get_stop_alerts(cache: &RwLock<GTFSAlerts>, code: &str) -> Vec<StopAlert> {
-    cache.read().unwrap().values().flatten()
-        .filter(|alert| alert.informed_entity.iter().any(|entity| {
-            match entity.stop_id.as_ref() {
-                None => false,
-                Some(stop_id) => stop_id == code
-            }
-        }))
-        .map(|alert| {
-            StopAlert {
-                header: find_best_match(&alert.header_text),
-                description: find_best_match(&alert.description_text),
-                url: find_best_match(&alert.url)
-            }
-        }).collect_vec()
+fn get_stop_alerts(cache: &GTFSAlerts, code: &str) -> Vec<StopAlert> {
+    cache.iter().flat_map(|c| {
+        c.value().iter()
+            .filter(|&alert| alert.informed_entity.iter().any(|entity| {
+                match entity.stop_id.as_ref() {
+                    None => false,
+                    Some(stop_id) => stop_id == code
+                }
+            }))
+            .map(|alert| {
+                StopAlert {
+                    header: find_best_match(&alert.header_text),
+                    description: find_best_match(&alert.description_text),
+                    url: find_best_match(&alert.url)
+                }
+            }).collect_vec()
+    }).collect_vec()
 }
 
 pub async fn get_station(crs: String, offset: i32) -> Result<GetDepartureBoardResponse, Option<SoapFault>> {

@@ -5,6 +5,7 @@ use tokio::time;
 use BusBoardsServer::config::BBConfig;
 use crate::GTFSResponder::EMBER;
 use crate::{GTFSResponse, uw};
+use crate::api::util::map_feed_entities;
 use crate::transit_realtime::{Alert, EntitySelector, FeedEntity, FeedMessage, TripDescriptor, TripUpdate, VehiclePosition};
 
 pub async fn ember_listener(tx: Sender<GTFSResponse>, _: Arc<BBConfig>) {
@@ -71,9 +72,9 @@ pub async fn ember_listener(tx: Sender<GTFSResponse>, _: Arc<BBConfig>) {
         });
 
         // Send to main feed
-        tx.send((EMBER, vehicles, alerts)).await.unwrap_or_else(|err| eprintln!("{}", err));
+        tx.send((EMBER, map_feed_entities(&vehicles), alerts)).await.unwrap_or_else(|err| eprintln!("{}", err));
 
         // Wait until next loop
-        time::sleep(time::Duration::from_secs(60)).await
+        time::sleep(time::Duration::from_secs(30)).await
     }
 }

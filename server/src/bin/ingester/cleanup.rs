@@ -74,14 +74,37 @@ fn patch_bods(conn: &mut Connection) -> rusqlite::Result<usize> {
     println!("Patching BODS route display + timepoint names");
     // patch Ember route short names - use E1/E3 etc. vs "Ember"
     conn.execute("UPDATE routes SET route_short_name=substr(route_id, 2) WHERE agency_id='Ember'", [])?;
-    // new BODS breaks timing points in Scotland - attempt to redefine some by looking at dwells
+    // new BODS breaks timing points in Scotland - attempt to redefine some
+    // create a timing point where a dwell occurs
     conn.execute(
         r#"UPDATE stop_times SET timepoint = 1
                   WHERE arrival_time <> departure_time
                     AND stop_id LIKE '6%'
                     AND trip_id LIKE 'V%'"#, []
     )?;
-    
+    // create a timing point at each change of locality (change min/max depending on direction to try and maintain consistency)
+    conn.execute(
+        r#"UPDATE stop_times SET timepoint=1 FROM 
+              (SELECT t.trip_id AS tid, CASE WHEN t.direction_id=0 THEN min(stop_sequence) ELSE max(stop_sequence) END AS mss
+                FROM stop_times
+                         INNER JOIN trips t ON stop_times.trip_id=t.trip_id
+                         INNER JOIN stances sta ON sta.code=stop_times.stop_id
+                         INNER JOIN stops stop ON sta.stop = stop.id
+                WHERE t.trip_id LIKE 'V%'
+                  AND stop_times.stop_id LIKE '6%'
+                GROUP BY t.trip_id, locality)
+            WHERE stop_times.trip_id=tid AND stop_sequence=mss"#, []
+    )?;
+    // create a timing point based on keywords in stop name
+    conn.execute(
+        r#"UPDATE stop_times SET timepoint=1 FROM
+                (SELECT st.trip_id AS tid, st.stop_sequence AS mss FROM stops
+                    INNER JOIN stances s on stops.id = s.stop
+                    INNER JOIN stop_times st ON s.code = st.stop_id
+                WHERE (stops.name='Rail Station' OR stops.name='Bus Station'
+                    OR stops.name LIKE '%Hospital%' OR stops.name LIKE '%Infirmary%') AND stop_id LIKE '6%' AND trip_id LIKE 'V%')
+                WHERE stop_times.trip_id=tid AND stop_sequence=mss"#, []
+    )?;
     // fix route dests - both for special cases and non-special cases
     // long-term fix will be using TxC
     conn.execute(
@@ -89,7 +112,9 @@ fn patch_bods(conn: &mut Connection) -> rusqlite::Result<usize> {
                WHEN original = '' THEN new_name
                WHEN original = dest_stop_name THEN new_name
                WHEN original LIKE new_name || ' ' || new_name || ' Hospital%' THEN substr(original, length(new_name) + 2)
+               WHEN original LIKE new_name || ' ' || new_name || ' University%' THEN substr(original, length(new_name) + 2)
                WHEN original LIKE '%Hospital%' THEN original
+               WHEN original LIKE '%University%' THEN original
                WHEN original LIKE new_name || '%' THEN new_name
                WHEN original LIKE 'Bus Stn%' OR original LIKE 'Bus Station%' OR original LIKE 'Railway Station%' THEN new_name
                ELSE original

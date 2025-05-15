@@ -20,6 +20,7 @@ use bus_prediction::{assign_vehicles, get_trip_candidates};
 use BusBoardsServer::config::{BBConfig, OperatorName, PassengerSource, SourceURL};
 
 use crate::{bus_prediction, GTFSResponse};
+use crate::api::util::map_feed_entities;
 use crate::bus_prediction::{TripCandidate, TripCandidateList, TripInfo};
 use crate::db::{DBPool, get_line_segments, get_operator_routes, get_passenger_route_trips, get_route_id, passenger_trip_query, PassengerRouteTrip, reset_passenger, RouteID, RouteName, save_passenger_trip_allocations};
 use crate::GTFSResponder::PASSENGER;
@@ -49,7 +50,7 @@ pub async fn passenger_listener(tx: Sender<GTFSResponse>, config: Arc<BBConfig>,
         let entities = entities_stream.collect::<Vec<Vec<FeedEntity>>>().await.concat();
 
         // Publish to main feed
-        tx.send((PASSENGER, entities, vec![])).await.unwrap_or_else(|err| error!("Could not publish to main feed: {}", err));
+        tx.send((PASSENGER, map_feed_entities(&entities), vec![])).await.unwrap_or_else(|err| error!("Could not publish to main feed: {}", err));
 
         // Wait for next loop
         time::sleep(time::Duration::from_secs(60)).await

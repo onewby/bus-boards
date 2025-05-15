@@ -92,7 +92,22 @@ pub fn insert_stops(db: &mut Connection) -> Result<(), Box<dyn Error>> {
 
         for (locality, stops) in localities {
             for (stop, stances) in stops {
-                match insert_stop.query_row([&stop, &locality], |row| row.get::<_, u64>(0)) {
+                // try to insert stop, try inserting into Unknown locality if it fails
+                let insert_stop_result = match insert_stop.query_row([&stop, &locality], |row| row.get::<_, u64>(0)) {
+                    Ok(stop_id) => Ok(stop_id),
+                    Err(rusqlite::Error::SqliteFailure(err, msg)) => {
+                        if err.code == rusqlite::ErrorCode::ConstraintViolation {
+                            tx.execute("INSERT OR IGNORE INTO localities (code, name, qualifier, parent, lat, long) VALUES ('Unknown', 'Unknown', NULL, NULL, 53.870659, 1.200235)", [])?;
+                            insert_stop.query_row([&stop, "Unknown"], |row| row.get::<_, u64>(0))
+                        } else {
+                            Err(rusqlite::Error::SqliteFailure(err, msg))
+                        }
+                    }
+                    Err(e) => Err(e)
+                };
+                
+                // Add stances to the created stop
+                match insert_stop_result {
                     Ok(stop_id) => {
                         for stance in stances {
                             insert_stance.execute(params![
@@ -131,13 +146,6 @@ pub fn insert_stops(db: &mut Connection) -> Result<(), Box<dyn Error>> {
                 ORDER BY level desc
         ));
     ", [])?;
-
-    /* println!("Setting up stop search");
-    db.execute_batch(r"
-        DROP TABLE IF EXISTS stops_search;
-        CREATE VIRTUAL TABLE stops_search USING fts5(name, parent, qualifier, id UNINDEXED, locality UNINDEXED);
-        INSERT INTO stops_search(name, parent, qualifier, id, locality) SELECT stops.name, stops.locality_name, qualifier, stops.id, stops.locality FROM stops INNER JOIN localities l on l.code = stops.locality;
-    ")?; */
 
     Ok(())
 }

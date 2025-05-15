@@ -17,7 +17,7 @@ use tokio::sync::mpsc::Sender;
 use tokio::time;
 
 use BusBoardsServer::config::BBConfig;
-
+use crate::api::util::map_feed_entities;
 use crate::bus_prediction::{assign_vehicles, get_trip_candidates, get_trip_info, TripCandidate, TripCandidateList, TripInfo};
 use crate::db::{DBPool, get_line_segments, get_lothian_patterns_tuples, get_lothian_route, get_lothian_timetabled_trips, get_operator_routes, lothian_trip_query, LothianDBPattern, reset_lothian, save_lothian_pattern_allocations};
 use crate::GTFSResponder::LOTHIAN;
@@ -57,7 +57,7 @@ pub async fn lothian_listener(tx: Sender<GTFSResponse>, config: Arc<BBConfig>, d
             .collect::<Vec<FeedEntity>>().await;
 
         // Publish to main feed
-        tx.send((LOTHIAN, entities, vec![])).await.unwrap_or_else(|err| error!("Could not publish to main feed: {}", err));
+        tx.send((LOTHIAN, map_feed_entities(&entities), vec![])).await.unwrap_or_else(|err| error!("Could not publish to main feed: {}", err));
 
         // Wait for next fetch
         time::sleep(Duration::from_secs(60)).await

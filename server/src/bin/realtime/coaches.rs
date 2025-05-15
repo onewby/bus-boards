@@ -12,6 +12,7 @@ use regex::Regex;
 use serde::{Deserialize};
 use log::{debug, info, error};
 use BusBoardsServer::config::BBConfig;
+use crate::api::util::map_feed_entities;
 use crate::db::{CoachRoute, DBPool, get_coach_routes, get_coach_trip, get_line_segments};
 use crate::GTFSResponder::{COACHES};
 use crate::GTFSResponse;
@@ -43,7 +44,7 @@ pub async fn coaches_listener(tx: Sender<GTFSResponse>, config: Arc<BBConfig>, d
             .collect::<Vec<FeedEntity>>().await;
 
         // Publish to main feed
-        tx.send((COACHES, routes, vec![])).await.unwrap_or_else(|err| error!("Could not publish to main feed: {}", err));
+        tx.send((COACHES, map_feed_entities(&routes), vec![])).await.unwrap_or_else(|err| error!("Could not publish to main feed: {}", err));
 
         // Wait for next loop
         time::sleep(time::Duration::from_secs(60)).await

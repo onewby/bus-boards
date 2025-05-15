@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::str;
 use std::sync::{Arc, RwLock};
 
@@ -57,19 +58,16 @@ macro_rules! uw {
     };
 }
 
-pub fn find_realtime_trip(id: &str, vehicles: &RwLock<GTFSVehicles>) -> Option<FeedEntity> {
-    let vehicles = vehicles.read().unwrap();
-    vehicles.values().flatten().find_map(|entity| {
-        entity.vehicle.as_ref()?.trip.as_ref()?.trip_id.as_ref().filter(|tid| tid == &id).map(|_| entity.clone())
+pub fn find_realtime_trip(id: &str, vehicles: &GTFSVehicles) -> Option<FeedEntity> {
+    vehicles.iter().find_map(|v_resp| {
+        v_resp.value().get(id).cloned()
     })
 }
 
-pub fn find_realtime_trip_with_gtfs(id: &str, vehicles: &RwLock<GTFSVehicles>) -> Option<(GTFSResponder, FeedEntity)> {
-    let vehicles = vehicles.read().unwrap();
-    vehicles.iter().flat_map(|(resp, v)| v.iter().map(move |fe| (resp, fe)))
-        .find_map(|(resp, entity)| {
-            entity.vehicle.as_ref()?.trip.as_ref()?.trip_id.as_ref().filter(|tid| tid == &id).map(|_| (resp.clone(), entity.clone()))
-        })
+pub fn find_realtime_trip_with_gtfs(id: &str, vehicles: &GTFSVehicles) -> Option<(GTFSResponder, FeedEntity)> {
+    vehicles.iter().find_map(|v_resp| {
+        v_resp.value().get(id).map(|entity| (v_resp.key().clone(), entity.clone()))
+    })
 }
 
 pub fn get_or_cache_service_data<'a>(state: &Arc<GTFSState>, responder: GTFSResponder, trip_id: &str) -> Option<ServiceData> {
@@ -91,4 +89,18 @@ pub fn get_or_cache_all_service_data<'a>(state: &Arc<GTFSState>, trip_id: &str) 
 
 pub fn cache_service_data(cache: &Arc<RealtimeCache>, responder: GTFSResponder, trip_id: &str, service_data: &ServiceData) {
     cache.entry(responder).or_insert_with(|| DashMap::new()).insert(trip_id.to_string(), service_data.clone());
+}
+
+pub fn map_feed_entities(fe: &Vec<FeedEntity>) -> HashMap<String, FeedEntity> {
+    let mut map = HashMap::with_capacity(fe.len());
+    for entity in fe {
+        if let Some(vehicle) = &entity.vehicle {
+            if let Some(trip) = &vehicle.trip {
+                if let Some(trip_id) = &trip.trip_id {
+                    map.insert(trip_id.clone(), entity.clone());
+                }
+            }
+        }
+    }
+    map
 }

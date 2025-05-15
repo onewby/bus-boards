@@ -196,19 +196,21 @@ fn calculate_delay_status(delay: &mut TimeDelta, scheduled_time: &ScheduledTime,
     status
 }
 
-pub fn get_alerts(alerts: &RwLock<GTFSAlerts>, trip_id: Option<&String>, route_id: Option<&String>, agency_id: Option<&String>) -> Vec<StopAlert> {
-    alerts.read().unwrap().values().flatten().filter(|alert| {
-        alert.informed_entity.iter().any(|entity|
-            (entity.agency_id.as_ref() == agency_id && agency_id.is_some())
-            || (entity.route_id.as_ref() == route_id && route_id.is_some())
-            || (uw!(entity.trip.as_ref()?.trip_id.as_ref()) == trip_id && trip_id.is_some())
-        )
-    }).map(|alert| {
-        StopAlert {
-            header: find_best_match(&alert.header_text),
-            description: find_best_match(&alert.description_text),
-            url: find_best_match(&alert.url)
-        }
+pub fn get_alerts(alerts: &GTFSAlerts, trip_id: Option<&String>, route_id: Option<&String>, agency_id: Option<&String>) -> Vec<StopAlert> {
+    alerts.iter().flat_map(|a| {
+        a.value().iter().filter(|&alert| {
+            alert.informed_entity.iter().any(|entity|
+                (entity.agency_id.as_ref() == agency_id && agency_id.is_some())
+                    || (entity.route_id.as_ref() == route_id && route_id.is_some())
+                    || (uw!(entity.trip.as_ref()?.trip_id.as_ref()) == trip_id && trip_id.is_some())
+            )
+        }).map(|alert| {
+            StopAlert {
+                header: find_best_match(&alert.header_text),
+                description: find_best_match(&alert.description_text),
+                url: find_best_match(&alert.url)
+            }
+        }).collect_vec()
     }).collect_vec()
 }
 

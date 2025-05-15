@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::error::Error;
 use std::io::{Cursor, Read};
 use std::iter;
@@ -26,7 +27,7 @@ pub async fn tfl_listener(tx: Sender<GTFSResponse>, config: Arc<BBConfig>, db: A
             .unwrap_or(vec![]);
         
         // Send to main feed
-        tx.send((TFL, vec![], alerts)).await.unwrap_or_else(|err| eprintln!("{}", err));
+        tx.send((TFL, HashMap::new(), alerts)).await.unwrap_or_else(|err| eprintln!("{}", err));
         
         // Wait until next loop
         time::sleep(time::Duration::from_secs(60)).await

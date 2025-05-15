@@ -31,7 +31,7 @@ pub async fn disruptions_listener(tx: Sender<GTFSResponse>, config: Arc<BBConfig
         alerts.extend(passenger_alerts);
 
         // Publish to main feed
-        tx.send((DISRUPTIONS, vec![], alerts)).await.unwrap_or_else(|err| eprintln!("{}", err));
+        tx.send((DISRUPTIONS, HashMap::new(), alerts)).await.unwrap_or_else(|err| eprintln!("{}", err));
 
         // Wait until next loop
         time::sleep(time::Duration::from_secs(60*15)).await

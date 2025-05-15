@@ -9,6 +9,7 @@ use serde::de;
 use tokio::sync::mpsc::Sender;
 use tokio::time;
 use BusBoardsServer::config::BBConfig;
+use crate::api::util::map_feed_entities;
 use crate::db::{DBPool, get_stagecoach_trip, get_line_segments};
 use crate::GTFSResponder::{STAGECOACH};
 use crate::GTFSResponse;
@@ -23,7 +24,7 @@ pub async fn stagecoach_listener(tx: Sender<GTFSResponse>, config: Arc<BBConfig>
             .then(|(c, gtfs)| get_region(c.as_str(), gtfs.as_str(), &db)).collect::<Vec<Vec<FeedEntity>>>().await.concat();
 
         // Send to main feed
-        tx.send((STAGECOACH, entities, vec![])).await.unwrap_or_else(|err| error!("Could not publish to main feed: {}", err));
+        tx.send((STAGECOACH, map_feed_entities(&entities), vec![])).await.unwrap_or_else(|err| error!("Could not publish to main feed: {}", err));
         // Wait for next loop
         time::sleep(time::Duration::from_secs(60)).await
     }

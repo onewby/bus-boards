@@ -65,6 +65,10 @@ serde_path_to_error = "0.1.17"
 iso8601-duration = { version = "0.2.0", features = ["chrono", "serde"] }
 quick-xml = { version = "0.37.4", features = ["async-tokio", "serialize"] }
 thread_local = "1.1.8"
+arc-swap = "1.7.1"
+
+[target.'cfg(not(target_env = "msvc"))'.dependencies]
+tikv-jemallocator = "0.6.0"
 
 [features]
 nightly = ["polars/nightly"]

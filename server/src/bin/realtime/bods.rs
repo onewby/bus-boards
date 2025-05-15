@@ -11,6 +11,7 @@ use BusBoardsServer::config::BBConfig;
 use crate::db::{get_bods_trip, get_line_segments, DBPool};
 use crate::GTFSResponder::BODS;
 use crate::{uw, GTFSResponse};
+use crate::api::util::map_feed_entities;
 use crate::transit_realtime::{FeedEntity, FeedMessage, VehiclePosition};
 use crate::util::{f64_cmp, get_geo_linepoint_distance};
 
@@ -64,7 +65,7 @@ pub async fn bods_listener(tx: Sender<GTFSResponse>, _: Arc<BBConfig>, db: Arc<D
                     }
                 }).collect();
             // Send to main feed
-            tx.send((BODS, filtered_entities, vec![])).await.unwrap_or_else(|err| error!("{}", err));
+            tx.send((BODS, map_feed_entities(&filtered_entities), vec![])).await.unwrap_or_else(|err| error!("{}", err));
         }
         // Wait for next loop
         time::sleep(time::Duration::from_secs(60)).await

@@ -29,7 +29,7 @@ use uuid::Uuid;
 
 use BusBoardsServer::config::BBConfig;
 use BusBoardsServer::RPCConfiguration;
-
+use crate::api::util::map_feed_entities;
 use crate::db::{DBPool, get_first_trip};
 use crate::GTFSResponder::FIRST;
 use crate::GTFSResponse;
@@ -63,7 +63,7 @@ pub async fn first_listener(tx: Sender<GTFSResponse>, config: Arc<BBConfig>, db:
         }
 
         // Get vehicles and publish to main feed
-        tx.send((FIRST, get_vehicles(&mut ws, &db, &config, &mut regions).await.unwrap_or(vec![]), vec![])).await.unwrap_or_else(|err| eprintln!("{}", err));
+        tx.send((FIRST, map_feed_entities(&get_vehicles(&mut ws, &db, &config, &mut regions).await.unwrap_or(vec![])), vec![])).await.unwrap_or_else(|err| eprintln!("{}", err));
         // Wait until next loop
         time::sleep(Duration::from_secs(60)).await;
     }
