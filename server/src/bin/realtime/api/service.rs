@@ -197,8 +197,8 @@ fn calculate_delay_status(delay: &mut TimeDelta, scheduled_time: &ScheduledTime,
 }
 
 pub fn get_alerts(alerts: &GTFSAlerts, trip_id: Option<&String>, route_id: Option<&String>, agency_id: Option<&String>) -> Vec<StopAlert> {
-    alerts.iter().flat_map(|a| {
-        a.value().iter().filter(|&alert| {
+    alerts.pin().iter().flat_map(|(_, a)| {
+        a.iter().filter(|&alert| {
             alert.informed_entity.iter().any(|entity|
                 (entity.agency_id.as_ref() == agency_id && agency_id.is_some())
                     || (entity.route_id.as_ref() == route_id && route_id.is_some())

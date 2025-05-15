@@ -242,8 +242,8 @@ async fn get_station_departures(offset: f32, crs: Vec<String>) -> Vec<StationBoa
 }
 
 fn get_stop_alerts(cache: &GTFSAlerts, code: &str) -> Vec<StopAlert> {
-    cache.iter().flat_map(|c| {
-        c.value().iter()
+    cache.pin().iter().flat_map(|(_, c)| {
+        c.iter()
             .filter(|&alert| alert.informed_entity.iter().any(|entity| {
                 match entity.stop_id.as_ref() {
                     None => false,

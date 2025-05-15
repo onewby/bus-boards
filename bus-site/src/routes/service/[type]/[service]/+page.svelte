@@ -199,8 +199,10 @@
                 <Tiles />
                 <GeoJSON data={geoData} options={geoOptions} />
                 {#each data.branches.flatMap(br => br.stops) as stop}
-                    <HTMLMarker lon={stop.long} lat={stop.lat} popup="{timeFmt(stop.dep)}<br><b>{stop.display_name}{stop.ind ? ` (${stop.ind})` : ''}</b><br>{stop.loc ? stop.loc : ''}"
+                    {#if stop.long && stop.lat}
+                    <HTMLMarker lon={stop.long ?? 0} lat={stop.lat ?? 0} popup="{timeFmt(stop.dep)}<br><b>{stop.display_name}{stop.ind ? ` (${stop.ind})` : ''}</b><br>{stop.loc ? stop.loc : ''}"
                                 divIcon={{ className: "bg-amber-400 rounded border border-black" }} zIndex={-1000}/>
+                    {/if}
                 {/each}
                 {#if branch.realtime?.pos}
                     <HTMLMarker lon={lon} lat={lat} divIcon={{

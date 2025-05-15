@@ -9,6 +9,7 @@ use std::thread::sleep;
 use chrono::{Datelike, DateTime, Duration, DurationRound, TimeDelta, Utc};
 use geo_types::{Coord, coord, Point};
 use itertools::Itertools;
+use log::{debug, info};
 use memoize::memoize;
 use r2d2::{Pool, PooledConnection};
 use r2d2_sqlite::SqliteConnectionManager;
@@ -41,6 +42,7 @@ pub fn get_pool(db: &Arc<DBPool>) -> PooledConn {
     while {
         conn = db.get();
         if conn.is_err() {
+            info!("Full database pool, waiting for connection");
             sleep(std::time::Duration::from_millis(rand::thread_rng().gen_range(500..1500)))
         }
         conn.is_err()

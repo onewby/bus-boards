@@ -30,13 +30,11 @@ use std::future::Future;
 use std::io::BufReader;
 use std::sync::{Arc, RwLock};
 use std::time::{SystemTime};
-use arc_swap::ArcSwap;
 use axum::extract::State;
 use axum::Router;
 use axum::routing::{get};
-use dashmap::DashMap;
 use itertools::Itertools;
-use log::{debug, info};
+use log::{debug, error, info};
 use nu_ansi_term::Color::{Green, Red};
 use prost::Message;
 use tokio::sync::{mpsc};
@@ -73,9 +71,9 @@ pub mod transit_realtime {
 }
 
 type GTFSResponse = (GTFSResponder, HashMap<String, FeedEntity>, Vec<Alert>);
-type GTFSVehicles = DashMap<GTFSResponder, HashMap<String, FeedEntity>>;
-type GTFSAlerts = DashMap<GTFSResponder, Vec<Alert>>;
-type RealtimeCache = DashMap<GTFSResponder, DashMap<String, ServiceData>>;
+type GTFSVehicles = papaya::HashMap<GTFSResponder, HashMap<String, FeedEntity>>;
+type GTFSAlerts = papaya::HashMap<GTFSResponder, Vec<Alert>>;
+type RealtimeCache = papaya::HashMap<GTFSResponder, papaya::HashMap<String, ServiceData>>;
 
 struct GTFSState {
     vehicles: Arc<GTFSVehicles>,
@@ -109,9 +107,9 @@ async fn main() {
     tokio::spawn(async move {
         while let Some(response) = rx.recv().await {
             debug!("Received from {}", response.0);
-            gtfs_ref.vehicles.insert(response.0, response.1);
-            gtfs_ref.alerts.insert(response.0, response.2);
-            gtfs_ref.realtime_cache.insert(response.0, DashMap::new());
+            gtfs_ref.vehicles.pin().insert(response.0, response.1);
+            gtfs_ref.alerts.pin().insert(response.0, response.2);
+            gtfs_ref.realtime_cache.pin().insert(response.0, papaya::HashMap::new());
         }
     });
 
@@ -179,8 +177,8 @@ fn generate_gtfs_message(state_lock: &Arc<GTFSState>) -> FeedMessage {
     feed_msg.header.gtfs_realtime_version = "2.0".parse().unwrap();
     feed_msg.header.timestamp = Some(SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs());
     {
-        let alert_entities: Vec<Vec<FeedEntity>> = state_lock.alerts.iter().map(|alerts| {
-           return alerts.get(1).iter().map(|&alert| {
+        let alert_entities: Vec<Vec<FeedEntity>> = state_lock.alerts.pin().iter().map(|(_, alerts)| {
+           return alerts.iter().map(|alert| {
                FeedEntity {
                    id: "".to_string(),
                    is_deleted: None,
@@ -192,8 +190,8 @@ fn generate_gtfs_message(state_lock: &Arc<GTFSState>) -> FeedMessage {
            }).collect()
         }).collect();
         // Send combined feed with vehicles and alert entities
-        feed_msg.entity = state_lock.vehicles.iter()
-            .flat_map(|vehicles| vehicles.values().cloned().collect_vec())
+        feed_msg.entity = state_lock.vehicles.pin().iter()
+            .flat_map(|(_, vehicles)| vehicles.values().cloned().collect_vec())
             .chain(alert_entities.iter().cloned().flatten()).collect();
     }
 
